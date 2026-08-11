@@ -101,6 +101,10 @@ Tailwind CSS v4 · Vitest · Playwright.
   other (both must agree) → completed + locked, with **reopen** for corrections.
   Only players with login accounts can be challenged. New **Challenges** page +
   dashboard action card, reusing the badminton scoring engine + score modal.
+  Supports **singles and doubles** — for doubles the challenger picks both pairs,
+  the opposing captain accepts on behalf of their pair, and all four players must
+  have accounts (partners are watch-only participants; only the two captains
+  accept/report/confirm).
 - **Match lifecycle + close/lock** (tournament matches): explicit **Start** /
   **Cancel** controls (status was only changing implicitly via scoring), and a
   **Close** action that finalizes a completed result — a new `Match.closedAt`

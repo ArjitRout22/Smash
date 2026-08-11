@@ -20,21 +20,39 @@ import type {
  * confirms) before it is marked completed.
  */
 
+const playerSelect = { select: { id: true, displayName: true, fullName: true } } as const;
 const withPlayers = {
-  challengerPlayer: { select: { id: true, displayName: true, fullName: true } },
-  opponentPlayer: { select: { id: true, displayName: true, fullName: true } },
+  challengerPlayer: playerSelect,
+  opponentPlayer: playerSelect,
+  challengerPartnerPlayer: playerSelect,
+  opponentPartnerPlayer: playerSelect,
 } as const;
 
 type RawCasualMatch = Prisma.CasualMatchGetPayload<{ include: typeof withPlayers }>;
 
+type PartyPlayer = { id: string; displayName: string; fullName: string } | null;
+function partyPlayer(p: PartyPlayer) {
+  return p ? { playerId: p.id, name: p.displayName, fullName: p.fullName } : null;
+}
+
+/** All userIds tied to a match (both captains + both partners). */
+function participantUserIds(m: RawCasualMatch): (string | null)[] {
+  return [m.challengerUserId, m.opponentUserId, m.challengerPartnerUserId, m.opponentPartnerUserId];
+}
+
 /** Serialize a casual match FROM THE PERSPECTIVE of the current user. */
 function serialize(m: RawCasualMatch, actor: AuthUser) {
-  const isChallenger = m.challengerUserId === actor.id;
+  // Only the two captains drive the flow; partners are participants who watch.
+  const isChallengerCaptain = m.challengerUserId === actor.id;
+  const isOpponentCaptain = m.opponentUserId === actor.id;
+  const isCaptain = isChallengerCaptain || isOpponentCaptain;
+  const onChallengerSide = isChallengerCaptain || m.challengerPartnerUserId === actor.id;
   const isReporter = m.reportedByUserId === actor.id;
   const games = (m.games as GameScore[] | null) ?? [];
 
   return {
     id: m.id,
+    matchType: m.matchType,
     status: m.status,
     bestOf: m.bestOf,
     scheduledAt: m.scheduledAt,
@@ -51,21 +69,25 @@ function serialize(m: RawCasualMatch, actor: AuthUser) {
       name: m.opponentPlayer.displayName,
       fullName: m.opponentPlayer.fullName,
     },
+    challengerPartner: partyPlayer(m.challengerPartnerPlayer),
+    opponentPartner: partyPlayer(m.opponentPartnerPlayer),
     games,
     winnerSide: m.winnerSide as Side | null,
     winnerPlayerId: m.winnerPlayerId,
     reportedByUserId: m.reportedByUserId,
     // The viewer's relationship + what they can do right now.
-    role: isChallenger ? ("challenger" as const) : ("opponent" as const),
-    isChallenger,
+    role: onChallengerSide ? ("challenger" as const) : ("opponent" as const),
+    isChallenger: onChallengerSide,
+    isCaptain,
     // Action hints so the UI never shows a control the server would reject.
-    canRespond: !isChallenger && m.status === "pending",
+    // Only captains act; the challenged captain is the one who accepts/declines.
+    canRespond: isOpponentCaptain && m.status === "pending",
     canReport:
-      m.status === "accepted" ||
-      (m.status === "awaiting_confirmation" && isReporter),
-    canConfirm: m.status === "awaiting_confirmation" && !isReporter,
-    canCancel: ["pending", "accepted", "awaiting_confirmation"].includes(m.status),
-    canReopen: m.status === "completed",
+      isCaptain &&
+      (m.status === "accepted" || (m.status === "awaiting_confirmation" && isReporter)),
+    canConfirm: isCaptain && m.status === "awaiting_confirmation" && !isReporter,
+    canCancel: isCaptain && ["pending", "accepted", "awaiting_confirmation"].includes(m.status),
+    canReopen: isCaptain && m.status === "completed",
     version: m.version,
     createdAt: m.createdAt,
     respondedAt: m.respondedAt,
@@ -101,8 +123,8 @@ export async function listCasualOpponents(actor: AuthUser, search?: string) {
 async function loadParticipantMatch(actor: AuthUser, id: string): Promise<RawCasualMatch> {
   const m = await prisma.casualMatch.findUnique({ where: { id }, include: withPlayers });
   if (!m) throw Errors.notFound("Match");
-  if (m.challengerUserId !== actor.id && m.opponentUserId !== actor.id) {
-    // Don't reveal existence of matches the user isn't part of.
+  if (!participantUserIds(m).includes(actor.id)) {
+    // Don't reveal existence of matches the user isn't part of (any of 4 players).
     throw Errors.notFound("Match");
   }
   return m;
@@ -118,7 +140,13 @@ export async function listMyCasualMatches(
 ) {
   const matches = await prisma.casualMatch.findMany({
     where: {
-      OR: [{ challengerUserId: actor.id }, { opponentUserId: actor.id }],
+      // Any of the four players (both captains + both partners) sees the match.
+      OR: [
+        { challengerUserId: actor.id },
+        { opponentUserId: actor.id },
+        { challengerPartnerUserId: actor.id },
+        { opponentPartnerUserId: actor.id },
+      ],
       ...(filters.status ? { status: filters.status } : {}),
     },
     include: withPlayers,
@@ -127,29 +155,56 @@ export async function listMyCasualMatches(
   return matches.map((m) => serialize(m, actor));
 }
 
+/** Resolve a player that must have an active login account, or throw. */
+async function resolveAccountPlayer(playerId: string, label: string) {
+  const p = await prisma.player.findFirst({
+    where: { id: playerId, deletedAt: null },
+    include: { user: { select: { id: true, isActive: true, deletedAt: true } } },
+  });
+  if (!p) throw Errors.notFound("Player");
+  if (!p.user || !p.user.isActive || p.user.deletedAt) {
+    throw Errors.validation(`${label} doesn't have an account yet, so they can't play a casual match.`);
+  }
+  return { playerId: p.id, userId: p.user.id };
+}
+
 export async function createCasualMatch(actor: AuthUser, input: CreateCasualMatchInput) {
   if (!actor.playerId) {
     throw Errors.validation("Your account isn't linked to a player profile, so you can't challenge anyone.");
   }
+  const isDoubles = input.matchType === "doubles";
 
-  const opponent = await prisma.player.findFirst({
-    where: { id: input.opponentPlayerId, deletedAt: null },
-    include: { user: { select: { id: true, isActive: true, deletedAt: true } } },
-  });
-  if (!opponent) throw Errors.notFound("Player");
-  if (!opponent.user || !opponent.user.isActive || opponent.user.deletedAt) {
-    throw Errors.validation("This player doesn't have an account yet, so they can't be challenged.");
-  }
-  if (opponent.user.id === actor.id) {
+  const opponent = await resolveAccountPlayer(input.opponentPlayerId, "The player you challenged");
+  if (opponent.userId === actor.id) {
     throw Errors.validation("You can't challenge yourself.");
+  }
+
+  let challengerPartner: { playerId: string; userId: string } | null = null;
+  let opponentPartner: { playerId: string; userId: string } | null = null;
+  if (isDoubles) {
+    if (!input.challengerPartnerPlayerId || !input.opponentPartnerPlayerId) {
+      throw Errors.validation("Doubles matches need a partner on each side.");
+    }
+    challengerPartner = await resolveAccountPlayer(input.challengerPartnerPlayerId, "Your partner");
+    opponentPartner = await resolveAccountPlayer(input.opponentPartnerPlayerId, "The opponent's partner");
+    // All four must be different people.
+    const players = [actor.playerId, opponent.playerId, challengerPartner.playerId, opponentPartner.playerId];
+    if (new Set(players).size !== 4) {
+      throw Errors.validation("Each of the four players must be a different person.");
+    }
   }
 
   const created = await prisma.casualMatch.create({
     data: {
+      matchType: input.matchType,
       challengerUserId: actor.id,
       challengerPlayerId: actor.playerId,
-      opponentUserId: opponent.user.id,
-      opponentPlayerId: opponent.id,
+      opponentUserId: opponent.userId,
+      opponentPlayerId: opponent.playerId,
+      challengerPartnerUserId: challengerPartner?.userId ?? null,
+      challengerPartnerPlayerId: challengerPartner?.playerId ?? null,
+      opponentPartnerUserId: opponentPartner?.userId ?? null,
+      opponentPartnerPlayerId: opponentPartner?.playerId ?? null,
       bestOf: input.bestOf,
       scheduledAt: input.scheduledAt,
       location: input.location,
@@ -162,7 +217,7 @@ export async function createCasualMatch(actor: AuthUser, input: CreateCasualMatc
     action: "casual_match.created",
     entityType: "CasualMatch",
     entityId: created.id,
-    newValue: { opponentPlayerId: opponent.id },
+    newValue: { matchType: input.matchType, opponentPlayerId: opponent.playerId },
   });
   return serialize(created, actor);
 }
@@ -180,6 +235,8 @@ export async function reportCasualScore(
 ) {
   const m = await loadParticipantMatch(actor, id);
   assertVersion(m, input.expectedVersion);
+  const isCaptain = m.challengerUserId === actor.id || m.opponentUserId === actor.id;
+  if (!isCaptain) throw Errors.forbidden("Only a team captain can enter the result.");
   const isReporter = m.reportedByUserId === actor.id;
   const canReport =
     m.status === "accepted" || (m.status === "awaiting_confirmation" && isReporter);
@@ -233,13 +290,16 @@ export async function actOnCasualMatch(
 ) {
   const m = await loadParticipantMatch(actor, id);
   assertVersion(m, input.expectedVersion);
-  const isChallenger = m.challengerUserId === actor.id;
+  // Only the two captains can drive state; partners are watch-only.
+  const isCaptain = m.challengerUserId === actor.id || m.opponentUserId === actor.id;
+  if (!isCaptain) throw Errors.forbidden("Only a team captain can do that.");
 
   let data: Prisma.CasualMatchUpdateInput;
   switch (input.action) {
     case "accept":
     case "decline": {
-      if (isChallenger) throw Errors.forbidden("Only the opponent can respond to a challenge.");
+      // Only the challenged captain (opponent) may accept/decline.
+      if (actor.id !== m.opponentUserId) throw Errors.forbidden("Only the challenged player can respond.");
       if (m.status !== "pending") throw Errors.invalidState("This challenge has already been answered.");
       data = {
         status: input.action === "accept" ? "accepted" : "declined",

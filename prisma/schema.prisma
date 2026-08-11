@@ -180,6 +180,8 @@ model Player {
   leaderboardEntries LeaderboardEntry[]
   casualAsChallenger CasualMatch[] @relation("CasualChallengerPlayer")
   casualAsOpponent   CasualMatch[] @relation("CasualOpponentPlayer")
+  casualAsChallengerPartner CasualMatch[] @relation("CasualChallengerPartner")
+  casualAsOpponentPartner   CasualMatch[] @relation("CasualOpponentPartner")
 
   @@index([organizationId])
   @@index([deletedAt])
@@ -448,10 +450,16 @@ model LeaderboardEntry {
 // the other confirms) before it is marked completed.
 model CasualMatch {
   id                 String    @id @default(uuid())
-  challengerUserId   String
+  matchType          String    @default("singles") // singles|doubles
+  challengerUserId   String    // side A captain (creator)
   challengerPlayerId String
-  opponentUserId     String
+  opponentUserId     String    // side B captain (accepts/confirms)
   opponentPlayerId   String
+  // Doubles partners (all four players must have accounts). Null for singles.
+  challengerPartnerUserId   String?
+  challengerPartnerPlayerId String?
+  opponentPartnerUserId     String?
+  opponentPartnerPlayerId   String?
   status             String    @default("pending") // pending|accepted|awaiting_confirmation|completed|declined|cancelled
   bestOf             Int       @default(3) // 1 or 3
   scheduledAt        DateTime?
@@ -470,6 +478,8 @@ model CasualMatch {
   opponentUser     User   @relation("CasualOpponent", fields: [opponentUserId], references: [id], onDelete: Cascade)
   challengerPlayer Player @relation("CasualChallengerPlayer", fields: [challengerPlayerId], references: [id], onDelete: Cascade)
   opponentPlayer   Player @relation("CasualOpponentPlayer", fields: [opponentPlayerId], references: [id], onDelete: Cascade)
+  challengerPartnerPlayer Player? @relation("CasualChallengerPartner", fields: [challengerPartnerPlayerId], references: [id], onDelete: SetNull)
+  opponentPartnerPlayer   Player? @relation("CasualOpponentPartner", fields: [opponentPartnerPlayerId], references: [id], onDelete: SetNull)
 
   @@index([challengerUserId])
   @@index([opponentUserId])

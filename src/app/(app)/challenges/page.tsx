@@ -13,20 +13,25 @@ import { ScoreEntryModal, type ScorableMatch } from "@/components/ScoreEntryModa
 import { formatDateTime } from "@/lib/client/format";
 
 type Party = { userId: string; playerId: string; name: string; fullName: string };
+type PartnerLite = { playerId: string; name: string; fullName: string } | null;
 type CasualMatch = {
   id: string;
+  matchType: "singles" | "doubles";
   status: "pending" | "accepted" | "awaiting_confirmation" | "completed" | "declined" | "cancelled";
   bestOf: number;
   scheduledAt: string | null;
   location: string | null;
   challenger: Party;
   opponent: Party;
+  challengerPartner: PartnerLite;
+  opponentPartner: PartnerLite;
   games: { scoreA: number; scoreB: number }[];
   winnerSide: "A" | "B" | null;
   winnerPlayerId: string | null;
   reportedByUserId: string | null;
   role: "challenger" | "opponent";
   isChallenger: boolean;
+  isCaptain: boolean;
   canRespond: boolean;
   canReport: boolean;
   canConfirm: boolean;
@@ -35,6 +40,11 @@ type CasualMatch = {
   version: number;
   completedAt: string | null;
 };
+
+// "Alice" (singles) or "Alice & Bob" (doubles).
+function sideLabel(captain: string, partner: PartnerLite): string {
+  return partner ? `${captain} & ${partner.name}` : captain;
+}
 
 const STATUS_LABEL: Record<CasualMatch["status"], { text: string; color: "slate" | "blue" | "amber" | "green" | "red" | "neutral" }> = {
   pending: { text: "Pending", color: "slate" },
@@ -181,8 +191,8 @@ function toScorable(m: CasualMatch): ScorableMatch {
     bestOf: m.bestOf,
     version: m.version,
     sides: [
-      { side: "A", label: m.challenger.name },
-      { side: "B", label: m.opponent.name },
+      { side: "A", label: sideLabel(m.challenger.name, m.challengerPartner) },
+      { side: "B", label: sideLabel(m.opponent.name, m.opponentPartner) },
     ],
     games: m.games,
   };
@@ -237,24 +247,28 @@ function ChallengeCard({
   onReopen: () => void;
 }) {
   const label = STATUS_LABEL[m.status];
-  const youWon = m.status === "completed" && m.winnerPlayerId === (m.isChallenger ? m.challenger.playerId : m.opponent.playerId);
-  const other = m.isChallenger ? m.opponent : m.challenger;
+  const mySide: "A" | "B" = m.isChallenger ? "A" : "B";
+  const youWon = m.status === "completed" && m.winnerSide === mySide;
+  const chalLabel = sideLabel(m.challenger.name, m.challengerPartner);
+  const oppLabel = sideLabel(m.opponent.name, m.opponentPartner);
+  const otherLabel = m.isChallenger ? oppLabel : chalLabel;
   const busyAny = busy?.startsWith(m.id) ?? false;
 
   return (
     <Card className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          <span className={m.winnerSide === "A" ? "font-bold" : "font-medium"}>{m.challenger.name}</span>
+          <span className={m.winnerSide === "A" ? "font-bold" : "font-medium"}>{chalLabel}</span>
           <span className="text-xs text-muted">vs</span>
-          <span className={m.winnerSide === "B" ? "font-bold" : "font-medium"}>{m.opponent.name}</span>
+          <span className={m.winnerSide === "B" ? "font-bold" : "font-medium"}>{oppLabel}</span>
+          <Badge color={m.matchType === "doubles" ? "blue" : "slate"}>{m.matchType === "doubles" ? "Doubles" : "Singles"}</Badge>
           <Badge color={label.color}>{label.text}</Badge>
           {m.status === "completed" && (
             <Badge color={youWon ? "green" : "red"}>{youWon ? "You won" : "You lost"}</Badge>
           )}
         </div>
         <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
-          <span>{m.isChallenger ? `You challenged ${other.name}` : `${other.name} challenged you`}</span>
+          <span>{m.isChallenger ? `You challenged ${otherLabel}` : `${otherLabel} challenged you`}</span>
           <span>· Best of {m.bestOf}</span>
           {m.location && <span>· {m.location}</span>}
           {m.scheduledAt && <span>· {formatDateTime(m.scheduledAt)}</span>}
@@ -263,7 +277,7 @@ function ChallengeCard({
         {m.status === "awaiting_confirmation" && (
           <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
             {m.canConfirm
-              ? `${other.name} reported this result — confirm it's correct.`
+              ? `${otherLabel} reported this result — confirm it's correct.`
               : "Reported — waiting for the other player to confirm."}
           </p>
         )}
@@ -304,26 +318,85 @@ function ChallengeCard({
 
 type Opponent = { id: string; displayName: string; fullName: string; city: string | null };
 
+// Searchable single-player picker (account-holders only, minus already-picked).
+function PlayerPicker({
+  label,
+  selected,
+  onSelect,
+  excludeIds,
+}: {
+  label: string;
+  selected: Opponent | null;
+  onSelect: (o: Opponent | null) => void;
+  excludeIds: string[];
+}) {
+  const [search, setSearch] = useState("");
+  const { data, isLoading } = useSWR<Opponent[]>(
+    `/api/casual-matches/opponents${search.trim() ? `?search=${encodeURIComponent(search.trim())}` : ""}`,
+    swrFetcher
+  );
+  const results = (data ?? []).filter((o) => !excludeIds.includes(o.id));
+
+  return (
+    <Field label={label} required>
+      {selected ? (
+        <div className="flex items-center justify-between rounded-lg border border-[var(--border)] px-3 py-2 text-sm">
+          <span><span className="font-medium">{selected.displayName}</span><span className="text-muted"> · {selected.fullName}</span></span>
+          <button type="button" className="text-xs font-medium text-primary hover:underline" onClick={() => onSelect(null)}>Change</button>
+        </div>
+      ) : (
+        <>
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+            <Input className="pl-9" placeholder="Search players with an account…" value={search} onChange={(e) => setSearch(e.target.value)} />
+          </div>
+          <div className="mt-2 max-h-40 overflow-y-auto rounded-lg border border-[var(--border)]">
+            {isLoading && <p className="px-3 py-3 text-sm text-muted">Searching…</p>}
+            {!isLoading && results.length === 0 && (
+              <p className="px-3 py-3 text-sm text-muted">No players found. Only players with an account can be added.</p>
+            )}
+            {results.map((o) => (
+              <button
+                key={o.id}
+                type="button"
+                onClick={() => onSelect(o)}
+                className="flex w-full items-center px-3 py-2 text-left text-sm hover:bg-surface-2"
+              >
+                <span className="font-medium">{o.displayName}</span>
+                <span className="text-muted"> · {o.fullName}{o.city ? ` · ${o.city}` : ""}</span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </Field>
+  );
+}
+
 function NewChallengeModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const toast = useToast();
-  const [search, setSearch] = useState("");
-  const [opponentId, setOpponentId] = useState("");
+  const [matchType, setMatchType] = useState<"singles" | "doubles">("singles");
+  const [opponent, setOpponent] = useState<Opponent | null>(null);
+  const [partner, setPartner] = useState<Opponent | null>(null);
+  const [oppPartner, setOppPartner] = useState<Opponent | null>(null);
   const [bestOf, setBestOf] = useState("3");
   const [location, setLocation] = useState("");
   const [scheduledAt, setScheduledAt] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const { data: opponents, isLoading } = useSWR<Opponent[]>(
-    `/api/casual-matches/opponents${search.trim() ? `?search=${encodeURIComponent(search.trim())}` : ""}`,
-    swrFetcher
-  );
+  const isDoubles = matchType === "doubles";
+  const ready = isDoubles ? Boolean(opponent && partner && oppPartner) : Boolean(opponent);
+  const picked = [opponent, partner, oppPartner].filter(Boolean).map((o) => o!.id);
 
   async function save() {
-    if (!opponentId) return;
+    if (!ready) return;
     setSaving(true);
     try {
       await api.post("/api/casual-matches", {
-        opponentPlayerId: opponentId,
+        matchType,
+        opponentPlayerId: opponent!.id,
+        challengerPartnerPlayerId: isDoubles ? partner!.id : undefined,
+        opponentPartnerPlayerId: isDoubles ? oppPartner!.id : undefined,
         bestOf: Number(bestOf),
         location: location || undefined,
         scheduledAt: scheduledAt || undefined,
@@ -346,42 +419,22 @@ function NewChallengeModal({ onClose, onCreated }: { onClose: () => void; onCrea
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button onClick={save} loading={saving} disabled={!opponentId}>Send challenge</Button>
+          <Button onClick={save} loading={saving} disabled={!ready}>Send challenge</Button>
         </>
       }
     >
       <div className="flex flex-col gap-4">
-        <Field label="Opponent" required>
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-            <Input
-              className="pl-9"
-              placeholder="Search players with an account…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-          <div className="mt-2 max-h-52 overflow-y-auto rounded-lg border border-[var(--border)]">
-            {isLoading && <p className="px-3 py-3 text-sm text-muted">Searching…</p>}
-            {opponents && opponents.length === 0 && (
-              <p className="px-3 py-3 text-sm text-muted">No players found. Only players with an account can be challenged.</p>
-            )}
-            {opponents?.map((o) => (
-              <button
-                key={o.id}
-                type="button"
-                onClick={() => setOpponentId(o.id)}
-                className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-surface-2 ${opponentId === o.id ? "bg-surface-2" : ""}`}
-              >
-                <span>
-                  <span className="font-medium">{o.displayName}</span>
-                  <span className="text-muted"> · {o.fullName}{o.city ? ` · ${o.city}` : ""}</span>
-                </span>
-                {opponentId === o.id && <span className="text-xs font-semibold text-primary">Selected</span>}
-              </button>
-            ))}
+        <Field label="Match type">
+          <div className="flex gap-2">
+            <Button type="button" size="sm" variant={matchType === "singles" ? "primary" : "outline"} onClick={() => setMatchType("singles")}>Singles</Button>
+            <Button type="button" size="sm" variant={matchType === "doubles" ? "primary" : "outline"} onClick={() => setMatchType("doubles")}>Doubles</Button>
           </div>
         </Field>
+
+        {isDoubles && <PlayerPicker label="Your partner" selected={partner} onSelect={setPartner} excludeIds={picked} />}
+        <PlayerPicker label={isDoubles ? "Opponent (accepts the challenge)" : "Opponent"} selected={opponent} onSelect={setOpponent} excludeIds={picked} />
+        {isDoubles && <PlayerPicker label="Opponent's partner" selected={oppPartner} onSelect={setOppPartner} excludeIds={picked} />}
+        {isDoubles && <p className="text-xs text-muted">All four players must have an account. The opponent you pick accepts on behalf of their pair.</p>}
 
         <div className="grid grid-cols-2 gap-4">
           <Field label="Format">

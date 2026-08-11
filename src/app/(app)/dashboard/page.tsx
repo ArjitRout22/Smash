@@ -245,10 +245,15 @@ type ChallengeLite = {
   version: number;
   challenger: { name: string };
   opponent: { name: string };
+  challengerPartner: { name: string } | null;
+  opponentPartner: { name: string } | null;
   isChallenger: boolean;
   canRespond: boolean;
   canConfirm: boolean;
 };
+
+const pairName = (name: string, partner: { name: string } | null) =>
+  partner ? `${name} & ${partner.name}` : name;
 
 // Surfaces only the casual matches that need THIS user to act right now
 // (a challenge to accept, or a reported result to confirm).
@@ -282,11 +287,13 @@ function ChallengesCard() {
       />
       <div className="divide-y divide-[var(--border)]">
         {actionable.map((m) => {
-          const other = m.isChallenger ? m.opponent.name : m.challenger.name;
+          const chal = pairName(m.challenger.name, m.challengerPartner);
+          const opp = pairName(m.opponent.name, m.opponentPartner);
+          const other = m.isChallenger ? opp : chal;
           return (
             <div key={m.id} className="flex flex-col gap-2 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-sm font-medium">{m.challenger.name} vs {m.opponent.name}</p>
+                <p className="text-sm font-medium">{chal} vs {opp}</p>
                 <p className="text-xs text-muted">
                   {m.canRespond ? `${other} challenged you to a match` : `${other} reported a result — confirm it`}
                 </p>

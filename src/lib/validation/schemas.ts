@@ -182,16 +182,27 @@ const casualGameScore = z.object({
   scoreB: z.number().int().min(0).max(99),
 });
 
-export const CreateCasualMatchSchema = z.object({
-  opponentPlayerId: z.string().uuid(),
-  bestOf: z
-    .number()
-    .int()
-    .refine((n) => n === 1 || n === 3, { message: "bestOf must be 1 or 3" })
-    .default(3),
-  scheduledAt: isoDate.optional(),
-  location: z.string().trim().max(120).optional(),
-});
+export const CreateCasualMatchSchema = z
+  .object({
+    matchType: z.enum(MATCH_TYPES).default("singles"),
+    opponentPlayerId: z.string().uuid(),
+    // Doubles only — the two partners (side A and side B). Required for doubles.
+    challengerPartnerPlayerId: z.string().uuid().optional(),
+    opponentPartnerPlayerId: z.string().uuid().optional(),
+    bestOf: z
+      .number()
+      .int()
+      .refine((n) => n === 1 || n === 3, { message: "bestOf must be 1 or 3" })
+      .default(3),
+    scheduledAt: isoDate.optional(),
+    location: z.string().trim().max(120).optional(),
+  })
+  .refine(
+    (v) =>
+      v.matchType !== "doubles" ||
+      (!!v.challengerPartnerPlayerId && !!v.opponentPartnerPlayerId),
+    { message: "Doubles matches need a partner on each side", path: ["challengerPartnerPlayerId"] }
+  );
 
 // State transitions the two participants can drive (see casual-match.service).
 export const CasualMatchActionSchema = z.object({
