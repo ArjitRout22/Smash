@@ -12,6 +12,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const initialUser: CurrentUser = {
     id: user.id,
     email: user.email,
+    emailVerified: user.emailVerified,
     phone: user.phone,
     name: user.name,
     role: user.role,

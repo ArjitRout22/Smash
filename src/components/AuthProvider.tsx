@@ -8,6 +8,7 @@ import { api, swrFetcher } from "@/lib/client/api";
 export type CurrentUser = {
   id: string;
   email: string | null;
+  emailVerified: boolean;
   phone: string | null;
   name: string | null;
   role: string;

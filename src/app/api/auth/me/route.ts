@@ -7,6 +7,7 @@ export const GET = route(async () => {
   return ok({
     id: user.id,
     email: user.email,
+    emailVerified: user.emailVerified,
     phone: user.phone,
     name: user.name,
     role: user.role,

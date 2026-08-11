@@ -9,6 +9,7 @@ import {
 export type AuthUser = {
   id: string;
   email: string | null;
+  emailVerified: boolean;
   phone: string | null;
   name: string | null;
   role: string;
@@ -34,6 +35,7 @@ export async function getAuthUser(): Promise<AuthUser | null> {
   return {
     id: user.id,
     email: user.email,
+    emailVerified: user.emailVerifiedAt != null,
     phone: user.phone,
     name: user.name,
     role: user.role.name,

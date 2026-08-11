@@ -35,6 +35,7 @@ d("scoring → leaderboard → correction (integration)", () => {
     actor = {
       id: user.id,
       email: user.email,
+      emailVerified: true,
       phone: user.phone,
       name: user.name,
       role: "ADMIN",

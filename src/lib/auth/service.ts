@@ -5,6 +5,7 @@ import { rateLimiter } from "@/lib/ratelimit";
 import { normalizePhone } from "@/lib/auth/phone";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { createSession } from "@/lib/auth/session";
+import { sendVerificationEmail } from "@/lib/auth/email-verification";
 
 function slugify(name: string): string {
   const base = name
@@ -71,6 +72,9 @@ export async function register(
       include: { role: true },
     });
   });
+
+  // Send the email-confirmation link (best-effort; never blocks signup).
+  await sendVerificationEmail(user.id, email);
 
   const { token, expiresAt } = await createSession({ id: user.id, role: user.role.name }, ctx);
   return { token, expiresAt, user: { id: user.id, email: user.email, name: user.name, role: user.role.name } };

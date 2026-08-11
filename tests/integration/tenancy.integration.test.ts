@@ -33,6 +33,7 @@ async function makeOrganizer(label: string): Promise<AuthUser> {
   return {
     id: user.id,
     email: user.email,
+    emailVerified: true,
     phone: null,
     name: user.name,
     role: "ORGANIZER",

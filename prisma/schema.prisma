@@ -75,12 +75,13 @@ model RolePermission {
 }
 
 model User {
-  id             String   @id @default(uuid())
-  email          String?  @unique // login identity
-  passwordHash   String? // scrypt: "salt:hash"
-  phone          String?  @unique // optional contact number (E.164)
-  name           String?
-  roleId         String
+  id              String    @id @default(uuid())
+  email           String?   @unique // login identity
+  emailVerifiedAt DateTime? // set once the address is confirmed
+  passwordHash    String? // scrypt: "salt:hash"
+  phone           String?   @unique // optional contact number (E.164)
+  name            String?
+  roleId          String
   organizationId String?
   playerId       String?  @unique // optional link to a Player profile
   isActive       Boolean  @default(true)
@@ -93,9 +94,10 @@ model User {
   organization Organization? @relation(fields: [organizationId], references: [id])
   player       Player?       @relation(fields: [playerId], references: [id])
 
-  sessions             Session[]
-  passwordResetTokens  PasswordResetToken[]
-  organizedTournaments Tournament[] @relation("TournamentOrganizer")
+  sessions                Session[]
+  passwordResetTokens     PasswordResetToken[]
+  emailVerificationTokens EmailVerificationToken[]
+  organizedTournaments    Tournament[] @relation("TournamentOrganizer")
   createdTournaments   Tournament[] @relation("TournamentCreatedBy")
   auditLogs            AuditLog[]
   pointTransactions    PointTransaction[]
@@ -132,6 +134,19 @@ model PasswordResetToken {
 
   @@index([userId])
   @@index([expiresAt])
+}
+
+model EmailVerificationToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 // ---------------------------------------------------------------------------

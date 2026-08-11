@@ -6,12 +6,16 @@ import { SESSION_COOKIE } from "@/lib/auth/cookie";
  * It does NOT trust the cookie's contents — full cryptographic + DB-backed
  * verification happens server-side (getAuthUser) in layouts and API routes.
  */
-const PUBLIC_PATHS = ["/login", "/forgot-password", "/reset-password"];
+const PUBLIC_PATHS = ["/login", "/forgot-password", "/reset-password", "/verify-email"];
+// Accessible whether or not signed in, and never redirected away (e.g. a
+// logged-in user clicking their email-confirmation link).
+const OPEN_PATHS = ["/verify-email"];
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const hasSession = Boolean(req.cookies.get(SESSION_COOKIE)?.value);
   const isPublic = PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+  const isOpen = OPEN_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 
   if (!hasSession && !isPublic) {
     const url = req.nextUrl.clone();
@@ -20,7 +24,7 @@ export function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (hasSession && isPublic) {
+  if (hasSession && isPublic && !isOpen) {
     const url = req.nextUrl.clone();
     url.pathname = "/dashboard";
     url.search = "";

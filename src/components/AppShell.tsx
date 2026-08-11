@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { Button } from "@/components/ui/primitives";
+import { api } from "@/lib/client/api";
 
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -72,7 +73,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         )}
 
-        <main className="mx-auto w-full max-w-6xl flex-1 p-4 sm:p-6">{children}</main>
+        <main className="mx-auto w-full max-w-6xl flex-1 p-4 sm:p-6">
+          {user && !user.emailVerified && <VerifyEmailBanner email={user.email} />}
+          {children}
+        </main>
       </div>
     </div>
   );
@@ -101,6 +105,31 @@ function NavLinks({ pathname, onNavigate }: { pathname: string; onNavigate?: () 
         );
       })}
     </nav>
+  );
+}
+
+function VerifyEmailBanner({ email }: { email: string | null }) {
+  const [sent, setSent] = useState(false);
+  const [loading, setLoading] = useState(false);
+  async function resend() {
+    setLoading(true);
+    await api.post("/api/auth/resend-verification").catch(() => undefined);
+    setLoading(false);
+    setSent(true);
+  }
+  return (
+    <div className="mb-4 flex flex-col gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+      <span className="text-amber-700 dark:text-amber-300">
+        Please confirm your email{email ? ` (${email})` : ""} to secure your account.
+      </span>
+      {sent ? (
+        <span className="text-xs text-muted">Verification link sent — check your inbox.</span>
+      ) : (
+        <button onClick={resend} disabled={loading} className="shrink-0 rounded-md bg-amber-500/20 px-3 py-1 text-xs font-medium text-amber-800 hover:bg-amber-500/30 disabled:opacity-50 dark:text-amber-200">
+          {loading ? "Sending…" : "Resend link"}
+        </button>
+      )}
+    </div>
   );
 }
 

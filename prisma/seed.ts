@@ -70,6 +70,7 @@ async function main() {
   const actor: AuthUser = {
     id: adminUser.id,
     email: adminUser.email,
+    emailVerified: true,
     phone: adminUser.phone,
     name: adminUser.name,
     role: "ADMIN",
