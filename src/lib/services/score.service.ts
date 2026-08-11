@@ -172,6 +172,9 @@ export async function submitScore(
     if (match.status === "cancelled") {
       throw Errors.invalidState("Cannot score a cancelled match");
     }
+    if (match.closedAt != null) {
+      throw Errors.invalidState("This match is closed. Reopen it to change the score.");
+    }
 
     const sideA = match.participants.find((p) => p.side === "A");
     const sideB = match.participants.find((p) => p.side === "B");

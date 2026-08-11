@@ -145,6 +145,8 @@ export const UpdateMatchSchema = z.object({
     .optional(),
   sideA: sideRef.optional(),
   sideB: sideRef.optional(),
+  // Finalize/lock a completed result (true) or reopen it for edits (false).
+  closed: z.boolean().optional(),
 });
 
 // --- Scores -----------------------------------------------------------------

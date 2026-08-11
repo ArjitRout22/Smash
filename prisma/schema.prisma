@@ -325,6 +325,7 @@ model Match {
   scheduledAt  DateTime?
   status       String    @default("scheduled") // scheduled|in_progress|completed|cancelled
   winnerSide   String? // "A" | "B"
+  closedAt     DateTime? // when the result was finalized/locked; blocks score edits until reopened
   round        Int? // ordering within a knockout stage
   slot         Int? // bracket slot within the round
   nextMatchId  String? // winner advances into this match

@@ -31,6 +31,8 @@ export type MatchDTO = {
   matchType: string;
   bestOf: number;
   status: string;
+  closedAt: string | null;
+  isClosed: boolean;
   courtNumber: string | null;
   scheduledAt: string | null;
   winnerSide: string | null;

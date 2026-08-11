@@ -47,6 +47,8 @@ export function serializeMatch(m: Awaited<ReturnType<typeof getMatchRaw>>) {
     matchType: m.matchType,
     bestOf: m.bestOf,
     status: m.status,
+    closedAt: m.closedAt,
+    isClosed: m.closedAt != null,
     courtNumber: m.courtNumber,
     scheduledAt: m.scheduledAt,
     winnerSide: m.winnerSide,
@@ -211,6 +213,28 @@ export async function updateMatch(id: string, input: UpdateInput, actor: AuthUse
   if (!existing) throw Errors.notFound("Match");
   assertOrgAccess(actor, existing.tournament.organizationId);
 
+  // Lock handling: a closed (finalized) match rejects every edit except the
+  // reopen action itself. Closing requires a completed result.
+  const editingFields =
+    input.status !== undefined ||
+    input.sideA !== undefined ||
+    input.sideB !== undefined ||
+    input.bestOf !== undefined ||
+    input.stageId !== undefined ||
+    input.courtNumber !== undefined ||
+    input.scheduledAt !== undefined;
+  if (existing.closedAt != null && input.closed !== false && editingFields) {
+    throw Errors.invalidState("This match is closed. Reopen it before making changes.");
+  }
+  let closedAt: Date | null | undefined;
+  if (input.closed === true) {
+    if (existing.status !== "completed")
+      throw Errors.invalidState("Only a completed match can be closed.");
+    closedAt = existing.closedAt ?? new Date();
+  } else if (input.closed === false) {
+    closedAt = null;
+  }
+
   if (input.status && input.status !== existing.status) {
     const allowed = MATCH_TRANSITIONS[existing.status as MatchStatus] ?? [];
     if (!allowed.includes(input.status))
@@ -246,11 +270,13 @@ export async function updateMatch(id: string, input: UpdateInput, actor: AuthUse
         scheduledAt: input.scheduledAt === undefined ? undefined : input.scheduledAt,
         status: input.status ?? undefined,
         bestOf: input.bestOf ?? undefined,
+        closedAt: closedAt === undefined ? undefined : closedAt,
       },
       include: matchInclude,
     });
   });
-  await audit({ actorUserId: actor.id, action: "match.updated", entityType: "Match", entityId: id, previousValue: { status: existing.status }, newValue: { status: updated.status } });
+  const action = input.closed === true ? "match.closed" : input.closed === false ? "match.reopened" : "match.updated";
+  await audit({ actorUserId: actor.id, action, entityType: "Match", entityId: id, previousValue: { status: existing.status, closed: existing.closedAt != null }, newValue: { status: updated.status, closed: updated.closedAt != null } });
   return serializeMatch(updated);
 }
 

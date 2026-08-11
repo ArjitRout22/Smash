@@ -101,6 +101,11 @@ Tailwind CSS v4 · Vitest · Playwright.
   other (both must agree) → completed + locked, with **reopen** for corrections.
   Only players with login accounts can be challenged. New **Challenges** page +
   dashboard action card, reusing the badminton scoring engine + score modal.
+- **Match lifecycle + close/lock** (tournament matches): explicit **Start** /
+  **Cancel** controls (status was only changing implicitly via scoring), and a
+  **Close** action that finalizes a completed result — a new `Match.closedAt`
+  locks the score so nobody can change it, with **Reopen** to correct. Scoring
+  and edits are rejected server-side while a match is closed.
 
 ---
 

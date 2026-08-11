@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import useSWR from "swr";
-import { Plus, Pencil } from "lucide-react";
+import { Plus, Pencil, Play, Ban, Lock, LockOpen } from "lucide-react";
 import { api, ApiClientError, swrFetcher, swrFetcherWithMeta } from "@/lib/client/api";
 import { Card, Button, Badge, statusColor, Select, Input, Field } from "@/components/ui/primitives";
 import { EmptyState, ErrorState, ListSkeleton } from "@/components/ui/states";
@@ -16,13 +16,28 @@ import type { MatchDTO, StageDTO, TournamentPlayerDTO, TeamDTO } from "./types";
 
 export function MatchesTab({ tournamentId, format }: { tournamentId: string; format: string }) {
   const { can } = useAuth();
+  const toast = useToast();
   const [creating, setCreating] = useState(false);
   const [scoreMatch, setScoreMatch] = useState<ScorableMatch | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   const { data, error, isLoading, mutate } = useSWR<{ data: MatchDTO[] }>(
     `/api/matches?tournamentId=${tournamentId}&pageSize=100`,
     swrFetcherWithMeta
   );
+
+  async function patchMatch(m: MatchDTO, body: Record<string, unknown>, successMsg: string) {
+    setBusyId(m.id);
+    try {
+      await api.put(`/api/matches/${m.id}`, body);
+      toast.success(successMsg);
+      mutate();
+    } catch (err) {
+      toast.error(err instanceof ApiClientError ? err.message : "Action failed");
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   return (
     <div>
@@ -54,13 +69,48 @@ export function MatchesTab({ tournamentId, format }: { tournamentId: string; for
                   {m.games.length > 0 && <span className="font-mono">· {m.games.map((g) => `${g.scoreA}-${g.scoreB}`).join(", ")}</span>}
                 </p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Badge color={statusColor(m.status)}>{titleCase(m.status)}</Badge>
-                {can(PERMS.SCORE_EDIT) && m.status !== "cancelled" && m.sides[0]?.label !== "TBD" && m.sides[1]?.label !== "TBD" && (
-                  <Button size="sm" variant="outline" onClick={() => setScoreMatch(m)}>
-                    <Pencil className="h-3.5 w-3.5" /> {m.status === "completed" ? "Edit score" : "Score"}
-                  </Button>
+                {m.isClosed && (
+                  <Badge color="slate"><span className="inline-flex items-center gap-1"><Lock className="h-3 w-3" /> Closed</span></Badge>
                 )}
+                {(() => {
+                  const bothSet = m.sides[0]?.label !== "TBD" && m.sides[1]?.label !== "TBD";
+                  const busy = busyId === m.id;
+                  const canManage = can(PERMS.MATCH_MANAGE);
+                  return (
+                    <>
+                      {/* Lifecycle (item 5): make status changes explicit. */}
+                      {canManage && m.status === "scheduled" && bothSet && (
+                        <Button size="sm" variant="ghost" loading={busy} onClick={() => patchMatch(m, { status: "in_progress" }, "Match started")}>
+                          <Play className="h-3.5 w-3.5" /> Start
+                        </Button>
+                      )}
+                      {canManage && (m.status === "scheduled" || m.status === "in_progress") && (
+                        <Button size="sm" variant="ghost" loading={busy} onClick={() => patchMatch(m, { status: "cancelled" }, "Match cancelled")}>
+                          <Ban className="h-3.5 w-3.5" /> Cancel
+                        </Button>
+                      )}
+                      {/* Score entry — blocked once the match is closed (item 6). */}
+                      {can(PERMS.SCORE_EDIT) && m.status !== "cancelled" && !m.isClosed && bothSet && (
+                        <Button size="sm" variant="outline" onClick={() => setScoreMatch(m)}>
+                          <Pencil className="h-3.5 w-3.5" /> {m.status === "completed" ? "Edit score" : "Score"}
+                        </Button>
+                      )}
+                      {/* Close / reopen the result lock (item 6). */}
+                      {canManage && m.status === "completed" && !m.isClosed && (
+                        <Button size="sm" variant="ghost" loading={busy} onClick={() => patchMatch(m, { closed: true }, "Match closed")}>
+                          <Lock className="h-3.5 w-3.5" /> Close
+                        </Button>
+                      )}
+                      {canManage && m.isClosed && (
+                        <Button size="sm" variant="ghost" loading={busy} onClick={() => patchMatch(m, { closed: false }, "Match reopened")}>
+                          <LockOpen className="h-3.5 w-3.5" /> Reopen
+                        </Button>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             </Card>
           ))}
