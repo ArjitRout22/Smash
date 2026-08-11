@@ -45,18 +45,24 @@ export async function requestPasswordReset(
 
   const link = `${env.APP_URL}/reset-password?token=${token}`;
   const minutes = Math.round(env.PASSWORD_RESET_TTL_SECONDS / 60);
-  await getEmailProvider().send({
-    to: email,
-    subject: "Reset your Smash password",
-    text: `Reset your password using this link (valid ${minutes} minutes):\n${link}\n\nIf you didn't request this, you can ignore this email.`,
-    html: `
+  // Never let a delivery failure 500 the request or reveal account existence —
+  // the token is already stored; log the failure server-side and return quietly.
+  try {
+    await getEmailProvider().send({
+      to: email,
+      subject: "Reset your Smash password",
+      text: `Reset your password using this link (valid ${minutes} minutes):\n${link}\n\nIf you didn't request this, you can ignore this email.`,
+      html: `
       <div style="font-family:sans-serif;max-width:480px;margin:auto">
         <h2>Reset your password</h2>
         <p>Click the button below to set a new password. This link is valid for ${minutes} minutes.</p>
         <p><a href="${link}" style="display:inline-block;background:#059669;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none">Reset password</a></p>
         <p style="color:#64748b;font-size:12px">If you didn't request this, you can safely ignore this email.</p>
       </div>`,
-  });
+    });
+  } catch (err) {
+    console.error("[password-reset] email delivery failed:", err);
+  }
 }
 
 /** Step 2: consume a token and set a new password (revokes existing sessions). */
