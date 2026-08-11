@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api, ApiClientError } from "@/lib/client/api";
 import { Button, Field, Input } from "@/components/ui/primitives";
@@ -118,6 +119,14 @@ function LoginInner() {
                 minLength={mode === "register" ? 8 : undefined}
               />
             </Field>
+
+            {mode === "login" && (
+              <div className="-mt-2 text-right">
+                <Link href="/forgot-password" className="text-xs text-muted hover:text-foreground">
+                  Forgot password?
+                </Link>
+              </div>
+            )}
 
             {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
 

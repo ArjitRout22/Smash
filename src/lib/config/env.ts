@@ -17,6 +17,12 @@ const EnvSchema = z.object({
   SESSION_TTL_SECONDS: z.coerce.number().int().positive().default(604800),
 
   DEFAULT_PHONE_REGION: z.string().default("IN"),
+
+  // Email (password reset). `auto` uses Resend when a key is present, else console.
+  EMAIL_PROVIDER: z.enum(["auto", "console", "resend"]).default("auto"),
+  RESEND_API_KEY: z.string().optional(),
+  EMAIL_FROM: z.string().default("Smash <onboarding@resend.dev>"),
+  PASSWORD_RESET_TTL_SECONDS: z.coerce.number().int().positive().default(3600),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

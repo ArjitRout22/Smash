@@ -94,6 +94,7 @@ model User {
   player       Player?       @relation(fields: [playerId], references: [id])
 
   sessions             Session[]
+  passwordResetTokens  PasswordResetToken[]
   organizedTournaments Tournament[] @relation("TournamentOrganizer")
   createdTournaments   Tournament[] @relation("TournamentCreatedBy")
   auditLogs            AuditLog[]
@@ -112,6 +113,20 @@ model Session {
   expiresAt DateTime
   revokedAt DateTime?
   createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique // sha256 of the emailed token (never store it raw)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

@@ -6,7 +6,7 @@ import { SESSION_COOKIE } from "@/lib/auth/cookie";
  * It does NOT trust the cookie's contents — full cryptographic + DB-backed
  * verification happens server-side (getAuthUser) in layouts and API routes.
  */
-const PUBLIC_PATHS = ["/login"];
+const PUBLIC_PATHS = ["/login", "/forgot-password", "/reset-password"];
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
