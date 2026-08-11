@@ -32,7 +32,8 @@ Prisma · PostgreSQL · Zod · Tailwind CSS**.
 
 Deeper docs: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) ·
 [`docs/DATABASE.md`](docs/DATABASE.md) (ERD) · [`docs/API.md`](docs/API.md) ·
-[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) (**going live**).
+[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) (**going live**) ·
+[`docs/PROJECT_HISTORY.md`](docs/PROJECT_HISTORY.md) (**how it was built + current state**).
 
 ---
 
