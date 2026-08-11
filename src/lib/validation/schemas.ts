@@ -164,6 +164,38 @@ export const SubmitScoreSchema = z.object({
   reason: z.string().trim().max(300).optional(),
 });
 
+// --- Casual (individual) matches -------------------------------------------
+const casualGameScore = z.object({
+  scoreA: z.number().int().min(0).max(99),
+  scoreB: z.number().int().min(0).max(99),
+});
+
+export const CreateCasualMatchSchema = z.object({
+  opponentPlayerId: z.string().uuid(),
+  bestOf: z
+    .number()
+    .int()
+    .refine((n) => n === 1 || n === 3, { message: "bestOf must be 1 or 3" })
+    .default(3),
+  scheduledAt: isoDate.optional(),
+  location: z.string().trim().max(120).optional(),
+});
+
+// State transitions the two participants can drive (see casual-match.service).
+export const CasualMatchActionSchema = z.object({
+  action: z.enum(["accept", "decline", "confirm", "reject", "cancel", "reopen"]),
+  expectedVersion: z.number().int().min(0).optional(),
+});
+
+export const ReportCasualScoreSchema = z.object({
+  games: z.array(casualGameScore).min(1).max(3),
+  expectedVersion: z.number().int().min(0).optional(),
+});
+
+export type CreateCasualMatchInput = z.infer<typeof CreateCasualMatchSchema>;
+export type CasualMatchActionInput = z.infer<typeof CasualMatchActionSchema>;
+export type ReportCasualScoreInput = z.infer<typeof ReportCasualScoreSchema>;
+
 export type CreatePlayerInput = z.infer<typeof CreatePlayerSchema>;
 export type CreateTournamentInput = z.infer<typeof CreateTournamentSchema>;
 export type CreateTeamInput = z.infer<typeof CreateTeamSchema>;

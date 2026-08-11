@@ -101,6 +101,8 @@ model User {
   createdTournaments   Tournament[] @relation("TournamentCreatedBy")
   auditLogs            AuditLog[]
   pointTransactions    PointTransaction[]
+  casualChallenges     CasualMatch[] @relation("CasualChallenger")
+  casualOpponents      CasualMatch[] @relation("CasualOpponent")
 
   @@index([roleId])
   @@index([organizationId])
@@ -175,6 +177,8 @@ model Player {
   pointTransactions PointTransaction[]
   ranking           PlayerRanking?
   leaderboardEntries LeaderboardEntry[]
+  casualAsChallenger CasualMatch[] @relation("CasualChallengerPlayer")
+  casualAsOpponent   CasualMatch[] @relation("CasualOpponentPlayer")
 
   @@index([organizationId])
   @@index([deletedAt])
@@ -429,6 +433,45 @@ model LeaderboardEntry {
   @@unique([tournamentId, playerId])
   @@unique([tournamentId, teamId])
   @@index([tournamentId])
+}
+
+// ---------------------------------------------------------------------------
+// Casual (individual) matches — player-vs-player OUTSIDE any tournament.
+// ---------------------------------------------------------------------------
+// Deliberately a separate table from Match: casual results never touch the
+// PointTransaction ledger, PlayerRanking, or LeaderboardEntry, so they are
+// structurally excluded from ranked leaderboards & stats (exclusion by design,
+// not by a filter). Both participants must have login accounts: the opponent
+// accepts the challenge, and BOTH must agree on the final score (one reports,
+// the other confirms) before it is marked completed.
+model CasualMatch {
+  id                 String    @id @default(uuid())
+  challengerUserId   String
+  challengerPlayerId String
+  opponentUserId     String
+  opponentPlayerId   String
+  status             String    @default("pending") // pending|accepted|awaiting_confirmation|completed|declined|cancelled
+  bestOf             Int       @default(3) // 1 or 3
+  scheduledAt        DateTime?
+  location           String?
+  games              Json?     // [{ scoreA, scoreB }] — proposed while awaiting confirmation, final once completed
+  winnerSide         String?   // "A" = challenger, "B" = opponent
+  winnerPlayerId     String?
+  reportedByUserId   String?   // who entered the score currently awaiting confirmation
+  version            Int       @default(0) // optimistic concurrency guard
+  createdAt          DateTime  @default(now())
+  respondedAt        DateTime? // when the opponent accepted/declined
+  completedAt        DateTime?
+  updatedAt          DateTime  @updatedAt
+
+  challengerUser   User   @relation("CasualChallenger", fields: [challengerUserId], references: [id], onDelete: Cascade)
+  opponentUser     User   @relation("CasualOpponent", fields: [opponentUserId], references: [id], onDelete: Cascade)
+  challengerPlayer Player @relation("CasualChallengerPlayer", fields: [challengerPlayerId], references: [id], onDelete: Cascade)
+  opponentPlayer   Player @relation("CasualOpponentPlayer", fields: [opponentPlayerId], references: [id], onDelete: Cascade)
+
+  @@index([challengerUserId])
+  @@index([opponentUserId])
+  @@index([status])
 }
 
 // ---------------------------------------------------------------------------

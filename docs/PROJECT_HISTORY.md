@@ -80,6 +80,28 @@ Tailwind CSS v4 · Vitest · Playwright.
   Verified live on production that one workspace cannot see or reach another's
   data (empty lists + 403 on ID access).
 
+### Phase 5 — Live-feedback fixes + individual (casual) matches
+- **Fixed two production 500s** reported from live use:
+  - *View full profile* crashed — the player page fetched paginated matches with
+    the envelope-unwrapping `swrFetcher` but read `.data` on the result, throwing
+    a `TypeError` into the error boundary. All its APIs were actually returning
+    200. Fixed by pairing paginated reads with `swrFetcherWithMeta` (same class
+    of bug also silently emptied the add-player-to-team picker).
+  - *Save score* 500'd on Neon — the score transaction (rewrite games/ledger +
+    recompute tournament & global standings) ran enough sequential round-trips to
+    exceed Prisma's **5s default interactive-transaction timeout** (`P2028`).
+    Raised the limits (`maxWait 15s / timeout 30s`), batched games/ledger/
+    leaderboard writes into `createMany`, and made the Prisma client a true
+    per-process singleton in production too (serverless connection reuse).
+- **Individual "casual" matches** (player-vs-player, outside any tournament):
+  a dedicated `CasualMatch` table kept **separate from tournament `Match`**, so
+  casual results never touch the point ledger / rankings / leaderboards — they're
+  excluded from ranked stats *by construction*. Flow: challenge → opponent
+  **accepts** → a result is **reported** by one player and **confirmed** by the
+  other (both must agree) → completed + locked, with **reopen** for corrections.
+  Only players with login accounts can be challenged. New **Challenges** page +
+  dashboard action card, reusing the badminton scoring engine + score modal.
+
 ---
 
 ## Key decisions
@@ -125,8 +147,16 @@ Tailwind CSS v4 · Vitest · Playwright.
   Neon DB password (reset → update Vercel `DATABASE_URL` → redeploy).
 - 🧹 Delete throwaway prod test rows: `delete from "User" where email like
   'hero-%' or email like 'probe-%' or email like 'deploy-check-%' or email like '%@t.test';`
-- 💡 Later: signup email verification; Redis-backed rate limiter for scale (the
-  current limiter is in-memory per serverless instance).
+- 🚀 **Pooled DB connection (perf + resilience):** point Vercel's `DATABASE_URL`
+  at Neon's **pooled** endpoint (`-pooler` host, `?...&pgbouncer=true&connection_limit=1`)
+  and add a separate `DIRECT_DATABASE_URL` (direct endpoint) with `directUrl` in
+  `schema.prisma` for migrations. Biggest remaining lever for page-load speed and
+  the safety net if score-save 500s persist (connection-pool exhaustion). Kept
+  out of the Phase-5 fix so it can't break auto-deploy — set the two Vercel vars
+  first, then wire `directUrl`.
+- 💡 Later: Redis-backed rate limiter for scale (the current limiter is in-memory
+  per serverless instance); casual head-to-head record on profiles; "Challenge"
+  button on player-directory profiles.
 
 ---
 

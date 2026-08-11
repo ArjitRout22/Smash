@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import useSWR from "swr";
-import { Trophy, Users, UsersRound, Activity, Plus, Mail } from "lucide-react";
+import { Trophy, Users, UsersRound, Activity, Plus, Mail, Zap } from "lucide-react";
 import { api, ApiClientError, swrFetcher } from "@/lib/client/api";
 import { PageHeader, CardGridSkeleton, ErrorState, EmptyState } from "@/components/ui/states";
 import { Card, CardHeader, Badge, statusColor, Button } from "@/components/ui/primitives";
@@ -60,6 +60,7 @@ export default function DashboardPage() {
       />
 
       <InvitationsCard />
+      <ChallengesCard />
 
       {isLoading && <CardGridSkeleton />}
       {error && <ErrorState onRetry={() => mutate()} />}
@@ -161,6 +162,80 @@ function InvitationsCard() {
             </div>
           </div>
         ))}
+      </div>
+    </Card>
+  );
+}
+
+type ChallengeLite = {
+  id: string;
+  status: string;
+  version: number;
+  challenger: { name: string };
+  opponent: { name: string };
+  isChallenger: boolean;
+  canRespond: boolean;
+  canConfirm: boolean;
+};
+
+// Surfaces only the casual matches that need THIS user to act right now
+// (a challenge to accept, or a reported result to confirm).
+function ChallengesCard() {
+  const toast = useToast();
+  const [busy, setBusy] = useState<string | null>(null);
+  const { data, mutate } = useSWR<ChallengeLite[]>("/api/casual-matches", swrFetcher);
+
+  const actionable = (data ?? []).filter((m) => m.canRespond || m.canConfirm);
+
+  async function act(m: ChallengeLite, action: string, msg: string) {
+    setBusy(m.id);
+    try {
+      await api.post(`/api/casual-matches/${m.id}`, { action, expectedVersion: m.version });
+      toast.success(msg);
+      mutate();
+    } catch (err) {
+      toast.error(err instanceof ApiClientError ? err.message : "Action failed");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  if (actionable.length === 0) return null;
+
+  return (
+    <Card className="mb-6 border-[var(--primary)]/40">
+      <CardHeader
+        title={<span className="flex items-center gap-2"><Zap className="h-4 w-4" /> Challenges ({actionable.length})</span>}
+        action={<Link href="/challenges" className="text-sm text-primary hover:underline">View all</Link>}
+      />
+      <div className="divide-y divide-[var(--border)]">
+        {actionable.map((m) => {
+          const other = m.isChallenger ? m.opponent.name : m.challenger.name;
+          return (
+            <div key={m.id} className="flex flex-col gap-2 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-medium">{m.challenger.name} vs {m.opponent.name}</p>
+                <p className="text-xs text-muted">
+                  {m.canRespond ? `${other} challenged you to a match` : `${other} reported a result — confirm it`}
+                </p>
+              </div>
+              <div className="flex shrink-0 gap-2">
+                {m.canRespond && (
+                  <>
+                    <Button size="sm" loading={busy === m.id} onClick={() => act(m, "accept", "Challenge accepted")}>Accept</Button>
+                    <Button size="sm" variant="ghost" disabled={busy === m.id} onClick={() => act(m, "decline", "Challenge declined")}>Decline</Button>
+                  </>
+                )}
+                {m.canConfirm && (
+                  <>
+                    <Button size="sm" loading={busy === m.id} onClick={() => act(m, "confirm", "Result confirmed")}>Confirm</Button>
+                    <Button size="sm" variant="ghost" disabled={busy === m.id} onClick={() => act(m, "reject", "Result rejected")}>Reject</Button>
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </Card>
   );

@@ -65,6 +65,23 @@ export const MATCH_TRANSITIONS: Record<MatchStatus, MatchStatus[]> = {
   cancelled: ["scheduled"],
 };
 
+// Casual (individual) match lifecycle — matches OUTSIDE any tournament.
+//  pending               — challenge sent, awaiting the opponent
+//  accepted              — opponent accepted; the match can be played + scored
+//  awaiting_confirmation — one player reported a result; the OTHER must confirm
+//  completed             — both players agreed on the result (locked)
+//  declined              — opponent declined the challenge (terminal)
+//  cancelled             — either player called it off before completion
+export const CASUAL_MATCH_STATUSES = [
+  "pending",
+  "accepted",
+  "awaiting_confirmation",
+  "completed",
+  "declined",
+  "cancelled",
+] as const;
+export type CasualMatchStatus = (typeof CASUAL_MATCH_STATUSES)[number];
+
 export const STAGE_TYPES = [
   "group",
   "round_robin",

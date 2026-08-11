@@ -24,11 +24,20 @@ export function ScoreEntryModal({
   onClose,
   match,
   onSaved,
+  onSubmit,
+  requireComplete = false,
 }: {
   open: boolean;
   onClose: () => void;
   match: ScorableMatch | null;
   onSaved?: () => void;
+  // Optional override: when provided, the modal calls this with the entered
+  // games instead of POSTing to the tournament score endpoint. Used by casual
+  // matches (which post to their own endpoint + confirmation flow).
+  onSubmit?: (games: { scoreA: number; scoreB: number }[]) => Promise<void>;
+  // When true, an in-progress (undecided) score can't be saved — the whole
+  // result must be entered (casual matches record only completed results).
+  requireComplete?: boolean;
 }) {
   const toast = useToast();
   const bestOf = match?.bestOf ?? 3;
@@ -54,13 +63,19 @@ export function ScoreEntryModal({
     if (filled.length === 0) return { ok: true, text: "Enter game scores" };
     try {
       const r = resolveMatch(bestOf, filled);
-      if (!r.complete) return { ok: true, text: "In progress — winner not yet decided" };
+      if (!r.complete)
+        return {
+          ok: !requireComplete,
+          text: requireComplete
+            ? "Enter the full result — a winner must be decided"
+            : "In progress — winner not yet decided",
+        };
       const winner = r.winnerSide === "A" ? match?.sides[0]?.label : match?.sides[1]?.label;
       return { ok: true, text: `Winner: ${winner} (${r.gamesWonA}–${r.gamesWonB})` };
     } catch (e) {
       return { ok: false, text: e instanceof Error ? e.message : "Invalid score" };
     }
-  }, [filled, bestOf, match]);
+  }, [filled, bestOf, match, requireComplete]);
 
   if (!match) return null;
   const [aLabel, bLabel] = [match.sides[0]?.label ?? "Side A", match.sides[1]?.label ?? "Side B"];
@@ -72,10 +87,14 @@ export function ScoreEntryModal({
     }
     setLoading(true);
     try {
-      await api.post(`/api/matches/${match!.id}/scores`, {
-        games: filled,
-        expectedVersion: match!.version,
-      });
+      if (onSubmit) {
+        await onSubmit(filled);
+      } else {
+        await api.post(`/api/matches/${match!.id}/scores`, {
+          games: filled,
+          expectedVersion: match!.version,
+        });
+      }
       toast.success("Score saved");
       onSaved?.();
       onClose();

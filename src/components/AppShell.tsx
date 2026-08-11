@@ -11,6 +11,7 @@ import {
   Users,
   UsersRound,
   Swords,
+  Zap,
   BarChart3,
   UserCircle,
   LogOut,
@@ -28,6 +29,7 @@ const NAV = [
   { href: "/players", label: "Players", icon: Users },
   { href: "/teams", label: "Teams", icon: UsersRound },
   { href: "/matches", label: "Matches", icon: Swords },
+  { href: "/challenges", label: "Challenges", icon: Zap },
   { href: "/leaderboard", label: "Leaderboard", icon: BarChart3 },
   { href: "/profile", label: "Profile", icon: UserCircle },
 ];
