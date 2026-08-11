@@ -112,18 +112,19 @@ Tailwind CSS v4 · Vitest · Playwright.
 - ✅ Live and working: auth, RBAC, tournaments/players/teams/stages/matches,
   scoring, leaderboards, brackets, password reset, multi-tenant isolation.
 - ✅ CI green on every push; 48 unit + 7 integration tests.
-- 🔜 In progress: **custom domain** (buy + connect to Vercel, then update `APP_URL`).
+- ✅ **Custom domain live:** https://smashhero.app (HTTPS; Vercel primary = `www`,
+  apex 308-redirects to it).
+- ✅ **Email delivery live:** `smashhero.app` verified in Resend (DKIM/SPF/MX),
+  `EMAIL_FROM` = `@smashhero.app`, `APP_URL` set — real password-reset emails
+  deliver with links to `smashhero.app` (verified end-to-end).
 - 🔜 To revisit: multi-tenant **scenarios** / product refinements.
 
 ## Pending follow-ups
 
 - 🔐 **Rotate secrets that were shared in chat:** the GitHub PAT (revoke) and the
   Neon DB password (reset → update Vercel `DATABASE_URL` → redeploy).
-- 📬 **Resend:** currently uses `onboarding@resend.dev` (delivers only to the
-  account owner). Verify a domain in Resend + set `EMAIL_FROM` to email arbitrary
-  public signups.
 - 🧹 Delete throwaway prod test rows: `delete from "User" where email like
-  'probe-%' or email like 'deploy-check-%' or email like '%@t.test';`
+  'hero-%' or email like 'probe-%' or email like 'deploy-check-%' or email like '%@t.test';`
 - 💡 Later: signup email verification; Redis-backed rate limiter for scale (the
   current limiter is in-memory per serverless instance).
 
