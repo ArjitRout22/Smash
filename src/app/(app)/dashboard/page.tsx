@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import useSWR from "swr";
-import { Trophy, Users, UsersRound, Activity, Plus } from "lucide-react";
-import { swrFetcher } from "@/lib/client/api";
+import { Trophy, Users, UsersRound, Activity, Plus, Mail } from "lucide-react";
+import { api, ApiClientError, swrFetcher } from "@/lib/client/api";
 import { PageHeader, CardGridSkeleton, ErrorState, EmptyState } from "@/components/ui/states";
 import { Card, CardHeader, Badge, statusColor, Button } from "@/components/ui/primitives";
+import { useToast } from "@/components/ui/Toast";
 import { useAuth } from "@/components/AuthProvider";
 import { PERMS } from "@/lib/client/perms";
 import { formatDateTime, titleCase } from "@/lib/client/format";
@@ -56,6 +58,8 @@ export default function DashboardPage() {
           </>
         }
       />
+
+      <InvitationsCard />
 
       {isLoading && <CardGridSkeleton />}
       {error && <ErrorState onRetry={() => mutate()} />}
@@ -114,6 +118,51 @@ export default function DashboardPage() {
         </div>
       )}
     </div>
+  );
+}
+
+type Invitation = {
+  tournament: { id: string; name: string; format: string; status: string; organizer: { name: string | null } | null; organization: { name: string } | null };
+};
+
+function InvitationsCard() {
+  const toast = useToast();
+  const [busy, setBusy] = useState<string | null>(null);
+  const { data, mutate } = useSWR<Invitation[]>("/api/me/invitations", swrFetcher);
+
+  async function respond(tournamentId: string, action: "accept" | "decline") {
+    setBusy(tournamentId);
+    try {
+      await api.post("/api/me/invitations", { tournamentId, action });
+      toast.success(action === "accept" ? "Joined the tournament" : "Invitation declined");
+      mutate();
+    } catch (err) {
+      toast.error(err instanceof ApiClientError ? err.message : "Action failed");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  if (!data || data.length === 0) return null;
+
+  return (
+    <Card className="mb-6 border-[var(--primary)]/40">
+      <CardHeader title={<span className="flex items-center gap-2"><Mail className="h-4 w-4" /> Tournament invitations ({data.length})</span>} />
+      <div className="divide-y divide-[var(--border)]">
+        {data.map((inv) => (
+          <div key={inv.tournament.id} className="flex flex-col gap-2 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <Link href={`/discover/${inv.tournament.id}`} className="font-medium hover:underline">{inv.tournament.name}</Link>
+              <p className="text-xs text-muted">{titleCase(inv.tournament.format)} · hosted by {inv.tournament.organization?.name ?? inv.tournament.organizer?.name ?? "—"}</p>
+            </div>
+            <div className="flex shrink-0 gap-2">
+              <Button size="sm" onClick={() => respond(inv.tournament.id, "accept")} loading={busy === inv.tournament.id}>Accept</Button>
+              <Button size="sm" variant="ghost" onClick={() => respond(inv.tournament.id, "decline")} disabled={busy === inv.tournament.id}>Decline</Button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
   );
 }
 

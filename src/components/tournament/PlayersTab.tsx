@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
-import { UserPlus } from "lucide-react";
+import { UserPlus, Send } from "lucide-react";
 import { api, ApiClientError, swrFetcher, swrFetcherWithMeta } from "@/lib/client/api";
 import { Card, Button, Badge, Input } from "@/components/ui/primitives";
 import { EmptyState, ErrorState, ListSkeleton } from "@/components/ui/states";
@@ -19,6 +19,7 @@ export function PlayersTab({ tournamentId }: { tournamentId: string }) {
   const { can } = useAuth();
   const toast = useToast();
   const [adding, setAdding] = useState(false);
+  const [inviting, setInviting] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const canManage = can(PERMS.TOURNAMENT_EDIT);
 
@@ -61,9 +62,12 @@ export function PlayersTab({ tournamentId }: { tournamentId: string }) {
 
   return (
     <div>
-      <div className="mb-4 flex justify-end">
+      <div className="mb-4 flex justify-end gap-2">
         {canManage && (
-          <Button onClick={() => setAdding(true)}><UserPlus className="h-4 w-4" /> Add players</Button>
+          <>
+            <Button variant="outline" onClick={() => setInviting(true)}><Send className="h-4 w-4" /> Invite player</Button>
+            <Button onClick={() => setAdding(true)}><UserPlus className="h-4 w-4" /> Add players</Button>
+          </>
         )}
       </div>
 
@@ -125,7 +129,71 @@ export function PlayersTab({ tournamentId }: { tournamentId: string }) {
           onAdded={() => { mutate(); toast.success("Players added"); }}
         />
       )}
+      {inviting && (
+        <InvitePlayersModal
+          tournamentId={tournamentId}
+          existingIds={new Set((data ?? []).map((tp) => tp.player.id))}
+          onClose={() => setInviting(false)}
+          onInvited={() => { mutate(); toast.success("Invitation sent"); }}
+        />
+      )}
     </div>
+  );
+}
+
+function InvitePlayersModal({
+  tournamentId,
+  existingIds,
+  onClose,
+  onInvited,
+}: {
+  tournamentId: string;
+  existingIds: Set<string>;
+  onClose: () => void;
+  onInvited: () => void;
+}) {
+  const toast = useToast();
+  const [search, setSearch] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
+  const { data, isLoading } = useSWR<{ data: PlayerLite[] }>(
+    `/api/players?scope=all&pageSize=50&search=${encodeURIComponent(search)}`,
+    swrFetcherWithMeta
+  );
+
+  async function invite(playerId: string) {
+    setBusy(playerId);
+    try {
+      await api.post(`/api/tournaments/${tournamentId}/invite`, { playerId });
+      onInvited();
+    } catch (err) {
+      toast.error(err instanceof ApiClientError ? err.message : "Could not invite");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const candidates = (data?.data ?? []).filter((p) => !existingIds.has(p.id));
+
+  return (
+    <Modal open onClose={onClose} title="Invite a player" footer={<Button variant="ghost" onClick={onClose}>Done</Button>}>
+      <p className="mb-3 text-sm text-muted">Invite any player across Smash. They&apos;ll get an invitation to accept.</p>
+      <Input placeholder="Search all players…" value={search} onChange={(e) => setSearch(e.target.value)} className="mb-3" />
+      {isLoading && <ListSkeleton rows={4} />}
+      {!isLoading && candidates.length === 0 && (
+        <p className="py-6 text-center text-sm text-muted">No players found.</p>
+      )}
+      <div className="max-h-72 space-y-1 overflow-y-auto">
+        {candidates.map((p) => (
+          <div key={p.id} className="flex items-center justify-between rounded-lg px-3 py-2 hover:bg-surface-2">
+            <div className="min-w-0">
+              <span className="font-medium">{p.displayName}</span>
+              <span className="ml-2 text-sm text-muted">{p.fullName}</span>
+            </div>
+            <Button size="sm" variant="outline" onClick={() => invite(p.id)} loading={busy === p.id}>Invite</Button>
+          </div>
+        ))}
+      </div>
+    </Modal>
   );
 }
 

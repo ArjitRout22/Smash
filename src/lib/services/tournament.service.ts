@@ -59,12 +59,13 @@ async function assertCanView(
   if (isPlatformAdmin(actor)) return;
   if (t.organizationId === actor.organizationId) return;
   if (t.visibility === "public") return;
-  // Private tournament in another workspace — only visible to its participants.
+  // Private tournament in another workspace — visible to its participants and
+  // to players who've been invited (so they can decide on the invite).
   if (actor.playerId) {
     const part = await prisma.tournamentPlayer.findUnique({
       where: { tournamentId_playerId: { tournamentId: t.id, playerId: actor.playerId } },
     });
-    if (part && part.status === "registered") return;
+    if (part && (part.status === "registered" || part.status === "invited")) return;
   }
   throw Errors.forbidden("You don't have access to this tournament");
 }
@@ -314,6 +315,62 @@ export async function removeParticipant(actor: AuthUser, tournamentId: string, p
     data: { status: "removed" },
   });
   await audit({ actorUserId: actor.id, action: "tournament.participant.removed", entityType: "Tournament", entityId: tournamentId, newValue: { playerId } });
+}
+
+// --- Invitations (Phase 4): organizer invites any registered player ---------
+
+/** Organizer invites a registered player (from anywhere in the app). */
+export async function inviteToTournament(actor: AuthUser, tournamentId: string, playerId: string) {
+  await loadOwnedTournament(actor, tournamentId);
+  const player = await prisma.player.findFirst({ where: { id: playerId, deletedAt: null }, select: { id: true } });
+  if (!player) throw Errors.validation("Player not found");
+
+  const existing = await prisma.tournamentPlayer.findUnique({
+    where: { tournamentId_playerId: { tournamentId, playerId } },
+  });
+  if (existing?.status === "registered") throw Errors.conflict("This player is already in the tournament");
+  if (existing?.status === "invited") throw Errors.conflict("This player has already been invited");
+
+  const tp = await prisma.tournamentPlayer.upsert({
+    where: { tournamentId_playerId: { tournamentId, playerId } },
+    update: { status: "invited" },
+    create: { tournamentId, playerId, status: "invited" },
+  });
+  await audit({ actorUserId: actor.id, action: "tournament.player.invited", entityType: "Tournament", entityId: tournamentId, newValue: { playerId } });
+  return tp;
+}
+
+/** Pending invitations for the current user's player. */
+export async function listMyInvitations(actor: AuthUser) {
+  if (!actor.playerId) return [];
+  return prisma.tournamentPlayer.findMany({
+    where: { playerId: actor.playerId, status: "invited" },
+    include: {
+      tournament: {
+        select: {
+          id: true, name: true, format: true, status: true, visibility: true,
+          organizer: { select: { name: true } },
+          organization: { select: { name: true } },
+        },
+      },
+    },
+    orderBy: { registeredAt: "desc" },
+  });
+}
+
+/** Invited player accepts or declines. */
+export async function respondToInvitation(actor: AuthUser, tournamentId: string, action: "accept" | "decline") {
+  if (!actor.playerId) throw Errors.forbidden("You have no player profile");
+  const tp = await prisma.tournamentPlayer.findUnique({
+    where: { tournamentId_playerId: { tournamentId, playerId: actor.playerId } },
+  });
+  if (!tp || tp.status !== "invited") throw Errors.notFound("Invitation");
+  const updated = await prisma.tournamentPlayer.update({
+    where: { tournamentId_playerId: { tournamentId, playerId: actor.playerId } },
+    data: { status: action === "accept" ? "registered" : "declined" },
+  });
+  await audit({ actorUserId: actor.id, action: `tournament.invitation.${action}ed`, entityType: "Tournament", entityId: tournamentId, newValue: { playerId: actor.playerId } });
+  return updated;
 }
 
 /** Load a tournament and assert the caller's workspace owns it. */
