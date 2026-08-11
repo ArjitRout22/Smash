@@ -3,7 +3,7 @@
 import { useState } from "react";
 import useSWR from "swr";
 import { Plus, Trash2, UsersRound } from "lucide-react";
-import { api, ApiClientError, swrFetcher } from "@/lib/client/api";
+import { api, ApiClientError, swrFetcher, swrFetcherWithMeta } from "@/lib/client/api";
 import { PageHeader, EmptyState, ErrorState, CardGridSkeleton } from "@/components/ui/states";
 import { Button, Card, Badge, Input, Select, Field } from "@/components/ui/primitives";
 import { Modal, ConfirmDialog } from "@/components/ui/Modal";
@@ -159,7 +159,7 @@ function CreateTeamModal({
 
   const { data } = useSWR<{ data: PlayerOption[] }>(
     open ? "/api/players?pageSize=100" : null,
-    swrFetcher
+    swrFetcherWithMeta
   );
   const players = data?.data ?? [];
 

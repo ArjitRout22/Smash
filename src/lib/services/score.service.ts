@@ -206,20 +206,17 @@ export async function submitScore(
     if (guarded.count === 0) throw Errors.concurrency();
     const newVersion = match.version + 1;
 
-    // Rewrite games.
+    // Rewrite games (single round-trip via createMany).
     await tx.game.deleteMany({ where: { matchId: match.id } });
-    for (let i = 0; i < input.games.length; i++) {
-      const g = input.games[i];
-      await tx.game.create({
-        data: {
-          matchId: match.id,
-          gameNumber: i + 1,
-          scoreA: g.scoreA,
-          scoreB: g.scoreB,
-          winnerSide: result.gameWinners[i] ?? null,
-        },
-      });
-    }
+    await tx.game.createMany({
+      data: input.games.map((g, i) => ({
+        matchId: match.id,
+        gameNumber: i + 1,
+        scoreA: g.scoreA,
+        scoreB: g.scoreB,
+        winnerSide: result.gameWinners[i] ?? null,
+      })),
+    });
 
     // Update participants.
     await tx.matchParticipant.update({
@@ -231,7 +228,7 @@ export async function submitScore(
       data: { isWinner: result.winnerSide === "B", gamesWon: result.gamesWonB },
     });
 
-    // Rewrite the match-scoped point ledger.
+    // Rewrite the match-scoped point ledger (batched into one createMany).
     await tx.pointTransaction.deleteMany({ where: { matchId: match.id } });
     if (result.complete && result.winnerSide) {
       const tournament = await tx.tournament.findUnique({
@@ -241,27 +238,27 @@ export async function submitScore(
       const config = resolvePointsConfig(tournament?.pointsConfig ?? undefined);
       const stageType = (match.stage?.type ?? null) as StageType | null;
 
+      const ledgerRows: Prisma.PointTransactionCreateManyInput[] = [];
       for (const part of [sideA, sideB]) {
         const isWinner = result.winnerSide === part.side;
         const awards = pointsForMatch({ config, isWinner, stageType });
         const playerIds = await sidePlayerIds(tx, part);
         for (const playerId of playerIds) {
           for (const a of awards) {
-            await tx.pointTransaction.create({
-              data: {
-                playerId,
-                tournamentId: match.tournamentId,
-                matchId: match.id,
-                stageId: match.stageId,
-                type: a.type,
-                points: a.points,
-                reason: a.reason,
-                createdById: actorUserId,
-              },
+            ledgerRows.push({
+              playerId,
+              tournamentId: match.tournamentId,
+              matchId: match.id,
+              stageId: match.stageId,
+              type: a.type,
+              points: a.points,
+              reason: a.reason,
+              createdById: actorUserId,
             });
           }
         }
       }
+      if (ledgerRows.length) await tx.pointTransaction.createMany({ data: ledgerRows });
     }
 
     // Bracket progression.
@@ -301,5 +298,9 @@ export async function submitScore(
       winnerSide: result.winnerSide,
       version: newVersion,
     };
-  });
+    // Raise the interactive-transaction limits well above Prisma's 5s default:
+    // scoring rewrites games/ledger and recomputes tournament + global standings
+    // in one atomic unit, which on a remote (Neon) DB can exceed 5s and abort
+    // with P2028 — surfacing to users as a generic 500 on "Save score".
+  }, { maxWait: 15000, timeout: 30000 });
 }

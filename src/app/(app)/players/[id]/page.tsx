@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import useSWR from "swr";
-import { swrFetcher } from "@/lib/client/api";
+import { swrFetcher, swrFetcherWithMeta } from "@/lib/client/api";
 import { PageHeader, ErrorState, ListSkeleton, CardGridSkeleton } from "@/components/ui/states";
 import { Card, CardHeader, Badge, statusColor } from "@/components/ui/primitives";
 import { formatDate, pct } from "@/lib/client/format";
@@ -64,7 +64,7 @@ export default function PlayerDetailPage() {
   );
   const { data: matches, isLoading: matchesLoading } = useSWR<{ data: MatchRow[] }>(
     id ? `/api/players/${id}/matches?page=1&pageSize=20` : null,
-    swrFetcher
+    swrFetcherWithMeta
   );
   const { data: tournaments, isLoading: tournamentsLoading } = useSWR<TournamentRow[]>(
     id ? `/api/players/${id}/tournaments` : null,

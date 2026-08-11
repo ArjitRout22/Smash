@@ -125,24 +125,21 @@ export async function recomputeTournamentLeaderboard(tx: Tx, tournamentId: strin
   );
   const rankById = new Map(ranked.map((r) => [r.id, r.rank]));
 
-  // Replace the tournament's leaderboard rows atomically.
+  // Replace the tournament's leaderboard rows atomically (one createMany).
   await tx.leaderboardEntry.deleteMany({ where: { tournamentId } });
-  for (const a of agg.values()) {
-    await tx.leaderboardEntry.create({
-      data: {
-        tournamentId,
-        playerId: a.isTeam ? null : a.id,
-        teamId: a.isTeam ? a.id : null,
-        matchesPlayed: a.matchesPlayed,
-        wins: a.wins,
-        losses: a.losses,
-        points: a.points,
-        stageReached: a.stageReached,
-        rank: rankById.get(a.id) ?? null,
-        position: rankById.get(a.id) ?? null,
-      },
-    });
-  }
+  const entries = [...agg.values()].map((a) => ({
+    tournamentId,
+    playerId: a.isTeam ? null : a.id,
+    teamId: a.isTeam ? a.id : null,
+    matchesPlayed: a.matchesPlayed,
+    wins: a.wins,
+    losses: a.losses,
+    points: a.points,
+    stageReached: a.stageReached,
+    rank: rankById.get(a.id) ?? null,
+    position: rankById.get(a.id) ?? null,
+  }));
+  if (entries.length) await tx.leaderboardEntry.createMany({ data: entries });
 }
 
 /** Rebuild one player's global aggregate stats from matches + the ledger. */
