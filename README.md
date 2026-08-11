@@ -30,10 +30,14 @@ Prisma · PostgreSQL · Zod · Tailwind CSS**.
 13. [Assumptions](#assumptions)
 14. [Scalability notes](#scalability-notes)
 
-Deeper docs: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) ·
+Deeper docs:
+[**`docs/SETUP_AND_OPERATIONS.md`**](docs/SETUP_AND_OPERATIONS.md) — **full
+first-to-last runbook** (local setup → GitHub → Neon → Vercel → custom domain →
+Resend email → operations & troubleshooting) ·
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) ·
 [`docs/DATABASE.md`](docs/DATABASE.md) (ERD) · [`docs/API.md`](docs/API.md) ·
-[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) (**going live**) ·
-[`docs/PROJECT_HISTORY.md`](docs/PROJECT_HISTORY.md) (**how it was built + current state**).
+[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) (going live) ·
+[`docs/PROJECT_HISTORY.md`](docs/PROJECT_HISTORY.md) (how it was built + current state).
 
 ---
 
