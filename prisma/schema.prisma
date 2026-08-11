@@ -1,0 +1,423 @@
+// Badminton Tournament & Match Management — Prisma schema
+// -----------------------------------------------------------------------------
+// Design notes
+// - PostgreSQL, normalized, UUID primary keys.
+// - "Enum-like" columns (status/format/type/role) are stored as String and
+//   validated at the application boundary (Zod + TS const unions). This is a
+//   deliberate choice: it keeps the schema portable and lets organizers add new
+//   tournament formats / stage types / roles WITHOUT a destructive migration
+//   (see requirement: "add future formats without major rewrites").
+// - Point ledger (PointTransaction) is the append-only source of truth. Global
+//   PlayerRanking and per-tournament LeaderboardEntry rows are MATERIALIZED
+//   caches, always rebuildable from the ledger + match results (auditable).
+// - Multi-organization ready: Organization FK is present on the entities a club
+//   would own. A default organization is seeded for single-club use.
+// - Soft deletion via `deletedAt` on user-facing aggregates.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Tenancy & access control
+// ---------------------------------------------------------------------------
+
+model Organization {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  users       User[]
+  players     Player[]
+  tournaments Tournament[]
+  teams       Team[]
+
+  @@index([deletedAt])
+}
+
+model Role {
+  id          String   @id @default(uuid())
+  name        String   @unique // ADMIN | ORGANIZER | PLAYER (extensible)
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users           User[]
+  rolePermissions RolePermission[]
+}
+
+model Permission {
+  id          String   @id @default(uuid())
+  key         String   @unique // e.g. "tournament.create", "match.score.edit"
+  description String?
+  createdAt   DateTime @default(now())
+
+  rolePermissions RolePermission[]
+}
+
+model RolePermission {
+  id           String     @id @default(uuid())
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@index([permissionId])
+}
+
+model User {
+  id             String   @id @default(uuid())
+  email          String?  @unique // login identity
+  passwordHash   String? // scrypt: "salt:hash"
+  phone          String?  @unique // optional contact number (E.164)
+  name           String?
+  roleId         String
+  organizationId String?
+  playerId       String?  @unique // optional link to a Player profile
+  isActive       Boolean  @default(true)
+  lastLoginAt    DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deletedAt      DateTime?
+
+  role         Role          @relation(fields: [roleId], references: [id])
+  organization Organization? @relation(fields: [organizationId], references: [id])
+  player       Player?       @relation(fields: [playerId], references: [id])
+
+  sessions             Session[]
+  organizedTournaments Tournament[] @relation("TournamentOrganizer")
+  createdTournaments   Tournament[] @relation("TournamentCreatedBy")
+  auditLogs            AuditLog[]
+  pointTransactions    PointTransaction[]
+
+  @@index([roleId])
+  @@index([organizationId])
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  userId    String
+  tokenHash String   @unique // sha256 of the JWT id (jti) — allows server-side revocation
+  userAgent String?
+  ip        String?
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// ---------------------------------------------------------------------------
+// People
+// ---------------------------------------------------------------------------
+
+model Player {
+  id             String    @id @default(uuid())
+  organizationId String?
+  fullName       String
+  displayName    String
+  phone          String?
+  photoUrl       String?
+  gender         String? // male | female | other
+  dateOfBirth    DateTime?
+  city           String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization      Organization?      @relation(fields: [organizationId], references: [id])
+  user              User?
+  tournamentPlayers TournamentPlayer[]
+  teamPlayers       TeamPlayer[]
+  matchParticipants MatchParticipant[]
+  pointTransactions PointTransaction[]
+  ranking           PlayerRanking?
+  leaderboardEntries LeaderboardEntry[]
+
+  @@index([organizationId])
+  @@index([deletedAt])
+  @@index([fullName])
+}
+
+// Global materialized stats per player (rebuildable from the point ledger).
+model PlayerRanking {
+  id                String   @id @default(uuid())
+  playerId          String   @unique
+  totalPoints       Int      @default(0)
+  matchesPlayed     Int      @default(0)
+  wins              Int      @default(0)
+  losses            Int      @default(0)
+  tournamentsPlayed Int      @default(0)
+  titles            Int      @default(0)
+  winPercentage     Float    @default(0)
+  rank              Int? // current global rank (1 = best)
+  bestRank          Int?
+  updatedAt         DateTime @updatedAt
+
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@index([totalPoints])
+  @@index([rank])
+}
+
+// ---------------------------------------------------------------------------
+// Tournaments
+// ---------------------------------------------------------------------------
+
+model Tournament {
+  id             String    @id @default(uuid())
+  organizationId String?
+  name           String
+  description    String?
+  location       String?
+  startDate      DateTime?
+  endDate        DateTime?
+  organizerId    String
+  createdById    String
+  status         String    @default("draft") // draft|upcoming|ongoing|completed|cancelled
+  format         String    @default("singles") // singles|doubles|mixed
+  pointsConfig   Json? // overrides the default points table for this tournament
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization? @relation(fields: [organizationId], references: [id])
+  organizer    User          @relation("TournamentOrganizer", fields: [organizerId], references: [id])
+  createdBy    User          @relation("TournamentCreatedBy", fields: [createdById], references: [id])
+
+  tournamentPlayers TournamentPlayer[]
+  teams             Team[]
+  stages            Stage[]
+  matches           Match[]
+  pointTransactions PointTransaction[]
+  leaderboard       LeaderboardEntry[]
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+model TournamentPlayer {
+  id           String   @id @default(uuid())
+  tournamentId String
+  playerId     String
+  seed         Int?
+  status       String   @default("registered") // registered|withdrawn
+  registeredAt DateTime @default(now())
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  player     Player     @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([tournamentId, playerId])
+  @@index([playerId])
+}
+
+model Team {
+  id             String   @id @default(uuid())
+  organizationId String?
+  tournamentId   String?
+  name           String
+  teamType       String   @default("doubles") // doubles|mixed
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization? @relation(fields: [organizationId], references: [id])
+  tournament   Tournament?   @relation(fields: [tournamentId], references: [id], onDelete: SetNull)
+
+  teamPlayers       TeamPlayer[]
+  matchParticipants MatchParticipant[]
+  leaderboardEntries LeaderboardEntry[]
+
+  @@index([tournamentId])
+  @@index([deletedAt])
+}
+
+model TeamPlayer {
+  id       String @id @default(uuid())
+  teamId   String
+  playerId String
+  position Int? // 1 or 2
+
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, playerId]) // same player cannot appear twice in a team
+  @@index([playerId])
+}
+
+model Stage {
+  id           String   @id @default(uuid())
+  tournamentId String
+  name         String
+  type         String // group|round_robin|round_of_32|round_of_16|quarterfinal|semifinal|final|third_place|qualifier|knockout|custom
+  order        Int
+  status       String   @default("pending") // pending|active|completed
+  config       Json? // e.g. { qualifiersPerGroup: 2 }
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  matches    Match[]
+
+  @@unique([tournamentId, order])
+  @@index([tournamentId])
+}
+
+// ---------------------------------------------------------------------------
+// Matches, games, scores
+// ---------------------------------------------------------------------------
+
+model Match {
+  id           String    @id @default(uuid())
+  tournamentId String
+  stageId      String?
+  matchType    String    @default("singles") // singles|doubles
+  bestOf       Int       @default(3) // 1 or 3
+  courtNumber  String?
+  scheduledAt  DateTime?
+  status       String    @default("scheduled") // scheduled|in_progress|completed|cancelled
+  winnerSide   String? // "A" | "B"
+  round        Int? // ordering within a knockout stage
+  slot         Int? // bracket slot within the round
+  nextMatchId  String? // winner advances into this match
+  nextMatchSlot String? // "A" | "B" — which side of the next match
+  version      Int       @default(0) // optimistic concurrency guard
+  createdById  String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  tournament   Tournament         @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  stage        Stage?             @relation(fields: [stageId], references: [id], onDelete: SetNull)
+  nextMatch    Match?             @relation("BracketProgression", fields: [nextMatchId], references: [id], onDelete: SetNull)
+  feederMatches Match[]           @relation("BracketProgression")
+  participants MatchParticipant[]
+  games        Game[]
+  pointTransactions PointTransaction[]
+
+  @@index([tournamentId])
+  @@index([stageId])
+  @@index([status])
+  @@index([scheduledAt])
+}
+
+model MatchParticipant {
+  id       String  @id @default(uuid())
+  matchId  String
+  side     String // "A" | "B"
+  playerId String? // set for singles
+  teamId   String? // set for doubles
+  isWinner Boolean @default(false)
+  gamesWon Int     @default(0)
+
+  match  Match   @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  player Player? @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  team   Team?   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, side])
+  @@index([playerId])
+  @@index([teamId])
+}
+
+model Game {
+  id         String   @id @default(uuid())
+  matchId    String
+  gameNumber Int
+  scoreA     Int      @default(0)
+  scoreB     Int      @default(0)
+  winnerSide String? // "A" | "B"
+  createdAt  DateTime @default(now())
+
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, gameNumber])
+}
+
+// ---------------------------------------------------------------------------
+// Points ledger + derived leaderboards
+// ---------------------------------------------------------------------------
+
+// Append-only ledger. Source of truth for all points. Corrections are made by
+// appending "reversal"/"adjustment" rows, never by mutating history.
+model PointTransaction {
+  id           String   @id @default(uuid())
+  playerId     String
+  tournamentId String?
+  matchId      String?
+  stageId      String?
+  type         String // match_win|match_loss|participation|stage_win|title|adjustment|reversal
+  points       Int
+  reason       String?
+  createdById  String?
+  createdAt    DateTime @default(now())
+
+  player     Player      @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  tournament Tournament? @relation(fields: [tournamentId], references: [id], onDelete: SetNull)
+  match      Match?      @relation(fields: [matchId], references: [id], onDelete: SetNull)
+  createdBy  User?       @relation(fields: [createdById], references: [id])
+
+  @@index([playerId])
+  @@index([tournamentId])
+  @@index([matchId])
+  @@index([createdAt])
+}
+
+// Per-tournament materialized standing (rebuildable). Either playerId (singles)
+// or teamId (doubles) is set.
+model LeaderboardEntry {
+  id            String   @id @default(uuid())
+  tournamentId  String
+  playerId      String?
+  teamId        String?
+  matchesPlayed Int      @default(0)
+  wins          Int      @default(0)
+  losses        Int      @default(0)
+  points        Int      @default(0)
+  stageReached  String?
+  position      Int?
+  rank          Int?
+  updatedAt     DateTime @updatedAt
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  player     Player?    @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  team       Team?      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([tournamentId, playerId])
+  @@unique([tournamentId, teamId])
+  @@index([tournamentId])
+}
+
+// ---------------------------------------------------------------------------
+// Audit
+// ---------------------------------------------------------------------------
+
+model AuditLog {
+  id            String   @id @default(uuid())
+  actorUserId   String?
+  action        String // e.g. "match.score.updated"
+  entityType    String
+  entityId      String
+  previousValue Json?
+  newValue      Json?
+  metadata      Json?
+  createdAt     DateTime @default(now())
+
+  actor User? @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([actorUserId])
+  @@index([createdAt])
+}

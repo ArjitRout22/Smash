@@ -1,0 +1,171 @@
+import { z } from "zod";
+import { prisma } from "@/lib/db/prisma";
+import { Errors } from "@/lib/errors";
+import { audit } from "@/lib/audit";
+import { skipTake, type Pagination } from "@/lib/api/pagination";
+import { winPercentage } from "@/lib/engines/leaderboard";
+import type { AuthUser } from "@/lib/auth/authorize";
+import type { CreatePlayerSchema, UpdatePlayerSchema } from "@/lib/validation/schemas";
+
+type CreateInput = z.infer<typeof CreatePlayerSchema>;
+type UpdateInput = z.infer<typeof UpdatePlayerSchema>;
+
+export async function listPlayers(p: Pagination) {
+  const where = {
+    deletedAt: null,
+    ...(p.search
+      ? {
+          OR: [
+            { fullName: { contains: p.search, mode: "insensitive" as const } },
+            { displayName: { contains: p.search, mode: "insensitive" as const } },
+          ],
+        }
+      : {}),
+  };
+  const [items, total] = await Promise.all([
+    prisma.player.findMany({
+      where,
+      ...skipTake(p),
+      orderBy: { fullName: "asc" },
+      include: { ranking: true },
+    }),
+    prisma.player.count({ where }),
+  ]);
+  return { items, total };
+}
+
+export async function getPlayer(id: string) {
+  const player = await prisma.player.findFirst({
+    where: { id, deletedAt: null },
+    include: { ranking: true },
+  });
+  if (!player) throw Errors.notFound("Player");
+  return player;
+}
+
+export async function createPlayer(input: CreateInput, actor: AuthUser) {
+  const player = await prisma.player.create({
+    data: {
+      fullName: input.fullName,
+      displayName: input.displayName ?? input.fullName,
+      phone: input.phone,
+      photoUrl: input.photoUrl,
+      gender: input.gender,
+      dateOfBirth: input.dateOfBirth,
+      city: input.city,
+      organizationId: actor.organizationId,
+    },
+  });
+  await audit({ actorUserId: actor.id, action: "player.created", entityType: "Player", entityId: player.id, newValue: player });
+  return player;
+}
+
+export async function updatePlayer(id: string, input: UpdateInput, actor: AuthUser) {
+  const existing = await prisma.player.findFirst({ where: { id, deletedAt: null } });
+  if (!existing) throw Errors.notFound("Player");
+  const updated = await prisma.player.update({
+    where: { id },
+    data: {
+      fullName: input.fullName ?? undefined,
+      displayName: input.displayName ?? undefined,
+      phone: input.phone ?? undefined,
+      photoUrl: input.photoUrl ?? undefined,
+      gender: input.gender ?? undefined,
+      dateOfBirth: input.dateOfBirth ?? undefined,
+      city: input.city ?? undefined,
+    },
+  });
+  await audit({ actorUserId: actor.id, action: "player.updated", entityType: "Player", entityId: id, previousValue: existing, newValue: updated });
+  return updated;
+}
+
+/** Aggregate stats, derived from PlayerRanking (which is derived from matches). */
+export async function getPlayerStatistics(id: string) {
+  const player = await getPlayer(id);
+  const r = player.ranking;
+  return {
+    playerId: id,
+    displayName: player.displayName,
+    matchesPlayed: r?.matchesPlayed ?? 0,
+    wins: r?.wins ?? 0,
+    losses: r?.losses ?? 0,
+    winPercentage: r?.winPercentage ?? winPercentage(r?.wins ?? 0, r?.matchesPlayed ?? 0),
+    totalPoints: r?.totalPoints ?? 0,
+    tournamentsPlayed: r?.tournamentsPlayed ?? 0,
+    titles: r?.titles ?? 0,
+    currentRank: r?.rank ?? null,
+    bestRank: r?.bestRank ?? null,
+  };
+}
+
+/** Paginated match history for a player (singles + doubles via team). */
+export async function getPlayerMatches(id: string, p: Pagination) {
+  await getPlayer(id);
+  const teamIds = (await prisma.teamPlayer.findMany({ where: { playerId: id }, select: { teamId: true } })).map(
+    (t) => t.teamId
+  );
+  const where = {
+    match: { deletedAt: null, tournament: { deletedAt: null } },
+    OR: [{ playerId: id }, ...(teamIds.length ? [{ teamId: { in: teamIds } }] : [])],
+  };
+  const [parts, total] = await Promise.all([
+    prisma.matchParticipant.findMany({
+      where,
+      ...skipTake(p),
+      orderBy: { match: { scheduledAt: "desc" } },
+      include: {
+        match: {
+          include: {
+            tournament: { select: { id: true, name: true } },
+            stage: { select: { name: true, type: true } },
+            games: { orderBy: { gameNumber: "asc" } },
+            participants: {
+              include: {
+                player: { select: { id: true, displayName: true } },
+                team: { select: { id: true, name: true } },
+              },
+            },
+          },
+        },
+      },
+    }),
+    prisma.matchParticipant.count({ where }),
+  ]);
+
+  const items = parts.map((mp) => {
+    const m = mp.match;
+    const opponent = m.participants.find((o) => o.side !== mp.side);
+    const label = (x?: typeof opponent) =>
+      x?.team?.name ?? x?.player?.displayName ?? "TBD";
+    return {
+      matchId: m.id,
+      date: m.scheduledAt,
+      tournament: m.tournament,
+      stage: m.stage,
+      opponent: label(opponent),
+      score: m.games.map((g) => (mp.side === "A" ? `${g.scoreA}-${g.scoreB}` : `${g.scoreB}-${g.scoreA}`)),
+      result: m.status === "completed" ? (mp.isWinner ? "win" : "loss") : m.status,
+      bestOf: m.bestOf,
+    };
+  });
+  return { items, total };
+}
+
+/** Tournament history with per-tournament result summary. */
+export async function getPlayerTournaments(id: string) {
+  await getPlayer(id);
+  const entries = await prisma.leaderboardEntry.findMany({
+    where: { playerId: id },
+    include: { tournament: { select: { id: true, name: true, status: true } } },
+    orderBy: { updatedAt: "desc" },
+  });
+  return entries.map((e) => ({
+    tournament: e.tournament,
+    stageReached: e.stageReached,
+    matchesPlayed: e.matchesPlayed,
+    wins: e.wins,
+    losses: e.losses,
+    points: e.points,
+    position: e.position,
+  }));
+}

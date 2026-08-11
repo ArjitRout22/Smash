@@ -1,0 +1,36 @@
+import { NextResponse, type NextRequest } from "next/server";
+import { SESSION_COOKIE } from "@/lib/auth/cookie";
+
+/**
+ * Edge middleware: a cheap first gate based on cookie presence.
+ * It does NOT trust the cookie's contents — full cryptographic + DB-backed
+ * verification happens server-side (getAuthUser) in layouts and API routes.
+ */
+const PUBLIC_PATHS = ["/login"];
+
+export function middleware(req: NextRequest) {
+  const { pathname } = req.nextUrl;
+  const hasSession = Boolean(req.cookies.get(SESSION_COOKIE)?.value);
+  const isPublic = PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+
+  if (!hasSession && !isPublic) {
+    const url = req.nextUrl.clone();
+    url.pathname = "/login";
+    url.searchParams.set("next", pathname);
+    return NextResponse.redirect(url);
+  }
+
+  if (hasSession && isPublic) {
+    const url = req.nextUrl.clone();
+    url.pathname = "/dashboard";
+    url.search = "";
+    return NextResponse.redirect(url);
+  }
+
+  return NextResponse.next();
+}
+
+export const config = {
+  // Run on everything except API routes, Next internals, and static assets.
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
+};
