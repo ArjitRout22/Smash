@@ -36,6 +36,8 @@ Common query params for list endpoints: `page`, `pageSize` (≤100), `search`,
 | POST | `/auth/login` | `{ email, password }` | Verifies credentials, sets session cookie. Rate-limited per email+IP. |
 | POST | `/auth/logout` | — | Revokes session. |
 | GET | `/auth/me` | — | Current user (id, email, role, permissions…). |
+| POST | `/auth/forgot-password` | `{ email }` | Emails a reset link. Always 200 (never reveals if the account exists). Rate-limited. |
+| POST | `/auth/reset-password` | `{ token, password }` | Consumes a single-use token, sets the new password, revokes all sessions. |
 
 ## Tournaments
 
