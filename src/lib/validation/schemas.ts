@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
   TOURNAMENT_FORMATS,
   TOURNAMENT_STATUSES,
+  TOURNAMENT_VISIBILITIES,
   MATCH_TYPES,
   MATCH_STATUSES,
   STAGE_TYPES,
@@ -37,6 +38,7 @@ export const CreateTournamentSchema = z
     startDate: isoDate.optional(),
     endDate: isoDate.optional(),
     format: z.enum(TOURNAMENT_FORMATS).default("singles"),
+    visibility: z.enum(TOURNAMENT_VISIBILITIES).default("private"),
     organizerId: z.string().uuid().optional(),
     pointsConfig: PointsConfigSchema.optional(),
   })
@@ -53,12 +55,18 @@ export const UpdateTournamentSchema = z.object({
   endDate: isoDate.nullable().optional(),
   format: z.enum(TOURNAMENT_FORMATS).optional(),
   status: z.enum(TOURNAMENT_STATUSES).optional(),
+  visibility: z.enum(TOURNAMENT_VISIBILITIES).optional(),
   organizerId: z.string().uuid().optional(),
   pointsConfig: PointsConfigSchema.nullable().optional(),
 });
 
 export const AddTournamentPlayersSchema = z.object({
   playerIds: z.array(z.string().uuid()).min(1).max(256),
+});
+
+export const RespondJoinRequestSchema = z.object({
+  playerId: z.string().uuid(),
+  action: z.enum(["accept", "decline"]),
 });
 
 // --- Teams ------------------------------------------------------------------

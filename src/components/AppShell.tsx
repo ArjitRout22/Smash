@@ -7,6 +7,7 @@ import { clsx } from "clsx";
 import {
   LayoutDashboard,
   Trophy,
+  Compass,
   Users,
   UsersRound,
   Swords,
@@ -23,6 +24,7 @@ import { api } from "@/lib/client/api";
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/tournaments", label: "Tournaments", icon: Trophy },
+  { href: "/discover", label: "Discover", icon: Compass },
   { href: "/players", label: "Players", icon: Users },
   { href: "/teams", label: "Teams", icon: UsersRound },
   { href: "/matches", label: "Matches", icon: Swords },

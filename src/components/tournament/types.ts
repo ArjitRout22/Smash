@@ -7,6 +7,8 @@ export type TournamentDetail = {
   endDate: string | null;
   status: string;
   format: string;
+  visibility: string;
+  canManage?: boolean;
   organizer: { id: string; name: string | null; phone: string } | null;
   stages: { id: string; name: string; type: string; order: number; status: string }[];
   _count: { tournamentPlayers: number; teams: number; matches: number; stages: number };

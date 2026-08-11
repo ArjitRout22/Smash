@@ -20,6 +20,7 @@ export default function CreateTournamentPage() {
     startDate: "",
     endDate: "",
     format: "singles",
+    visibility: "private",
   });
 
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
@@ -36,6 +37,7 @@ export default function CreateTournamentPage() {
         startDate: form.startDate || undefined,
         endDate: form.endDate || undefined,
         format: form.format,
+        visibility: form.visibility,
       };
       const t = await api.post<{ id: string }>("/api/tournaments", body);
       toast.success("Tournament created");
@@ -55,11 +57,19 @@ export default function CreateTournamentPage() {
           <Field label="Tournament name" htmlFor="name" required>
             <Input id="name" value={form.name} onChange={set("name")} placeholder="Summer Club Championship" required minLength={2} autoFocus />
           </Field>
-          <Field label="Format" htmlFor="format" hint="Singles uses players; doubles/mixed use teams.">
-            <Select id="format" value={form.format} onChange={set("format")}>
-              {TOURNAMENT_FORMATS.map((f) => <option key={f} value={f}>{titleCase(f)}</option>)}
-            </Select>
-          </Field>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Format" htmlFor="format" hint="Singles uses players; doubles/mixed use teams.">
+              <Select id="format" value={form.format} onChange={set("format")}>
+                {TOURNAMENT_FORMATS.map((f) => <option key={f} value={f}>{titleCase(f)}</option>)}
+              </Select>
+            </Field>
+            <Field label="Visibility" htmlFor="visibility" hint="Public tournaments appear in Discover and accept join requests.">
+              <Select id="visibility" value={form.visibility} onChange={set("visibility")}>
+                <option value="private">Private (only your workspace)</option>
+                <option value="public">Public (discoverable + joinable)</option>
+              </Select>
+            </Field>
+          </div>
           <Field label="Description" htmlFor="description">
             <Textarea id="description" value={form.description} onChange={set("description")} placeholder="Optional details about the event…" />
           </Field>

@@ -24,6 +24,7 @@ export function SettingsTab({ tournament, onChanged }: { tournament: TournamentD
     description: tournament.description ?? "",
     location: tournament.location ?? "",
     status: tournament.status,
+    visibility: tournament.visibility,
   });
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -41,6 +42,7 @@ export function SettingsTab({ tournament, onChanged }: { tournament: TournamentD
         description: form.description || null,
         location: form.location || null,
         status: form.status,
+        visibility: form.visibility,
       });
       toast.success("Saved");
       onChanged();
@@ -70,11 +72,19 @@ export function SettingsTab({ tournament, onChanged }: { tournament: TournamentD
           <CardHeader title="Tournament settings" subtitle="Status changes follow allowed transitions (e.g. draft → upcoming → ongoing → completed)." />
           <div className="space-y-4 p-5">
             <Field label="Name"><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
-            <Field label="Status">
-              <Select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
-                {TOURNAMENT_STATUSES.map((s) => <option key={s} value={s}>{titleCase(s)}</option>)}
-              </Select>
-            </Field>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="Status">
+                <Select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+                  {TOURNAMENT_STATUSES.map((s) => <option key={s} value={s}>{titleCase(s)}</option>)}
+                </Select>
+              </Field>
+              <Field label="Visibility" hint="Public = discoverable + accepts join requests.">
+                <Select value={form.visibility} onChange={(e) => setForm({ ...form, visibility: e.target.value })}>
+                  <option value="private">Private</option>
+                  <option value="public">Public</option>
+                </Select>
+              </Field>
+            </div>
             <Field label="Location"><Input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} /></Field>
             <Field label="Description"><Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field>
             <div className="flex justify-end">

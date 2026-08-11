@@ -19,30 +19,86 @@ export function PlayersTab({ tournamentId }: { tournamentId: string }) {
   const { can } = useAuth();
   const toast = useToast();
   const [adding, setAdding] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const canManage = can(PERMS.TOURNAMENT_EDIT);
 
   const { data, error, isLoading, mutate } = useSWR<TournamentPlayerDTO[]>(
     `/api/tournaments/${tournamentId}/players`,
     swrFetcher
   );
+  const { data: requests, mutate: mutateReq } = useSWR<TournamentPlayerDTO[]>(
+    canManage ? `/api/tournaments/${tournamentId}/requests` : null,
+    swrFetcher
+  );
+
+  const registered = (data ?? []).filter((tp) => tp.status === "registered");
+
+  async function respond(playerId: string, action: "accept" | "decline") {
+    setBusy(playerId);
+    try {
+      await api.post(`/api/tournaments/${tournamentId}/requests`, { playerId, action });
+      toast.success(action === "accept" ? "Player added" : "Request declined");
+      mutateReq(); mutate();
+    } catch (err) {
+      toast.error(err instanceof ApiClientError ? err.message : "Action failed");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function remove(playerId: string) {
+    setBusy(playerId);
+    try {
+      await api.del(`/api/tournaments/${tournamentId}/players/${playerId}`);
+      toast.success("Player removed");
+      mutate();
+    } catch (err) {
+      toast.error(err instanceof ApiClientError ? err.message : "Could not remove");
+    } finally {
+      setBusy(null);
+    }
+  }
 
   return (
     <div>
       <div className="mb-4 flex justify-end">
-        {can(PERMS.TOURNAMENT_EDIT) && (
+        {canManage && (
           <Button onClick={() => setAdding(true)}><UserPlus className="h-4 w-4" /> Add players</Button>
         )}
       </div>
 
-      {isLoading && <ListSkeleton rows={4} />}
-      {error && <ErrorState onRetry={() => mutate()} />}
-      {data && data.length === 0 && (
-        <EmptyState title="No players registered" message="Add existing players to this tournament." />
+      {canManage && requests && requests.length > 0 && (
+        <Card className="mb-4 border-amber-500/40">
+          <div className="border-b border-[var(--border)] px-5 py-3 text-sm font-semibold">
+            Join requests ({requests.length})
+          </div>
+          <div className="divide-y divide-[var(--border)]">
+            {requests.map((tp) => (
+              <div key={tp.id} className="flex items-center justify-between gap-2 px-5 py-3">
+                <Link href={`/players/${tp.player.id}`} className="min-w-0 hover:underline">
+                  <span className="font-medium">{tp.player.displayName}</span>
+                  <span className="ml-2 text-sm text-muted">{tp.player.fullName}</span>
+                </Link>
+                <div className="flex shrink-0 gap-2">
+                  <Button size="sm" onClick={() => respond(tp.player.id, "accept")} loading={busy === tp.player.id}>Accept</Button>
+                  <Button size="sm" variant="ghost" onClick={() => respond(tp.player.id, "decline")} disabled={busy === tp.player.id}>Decline</Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
       )}
 
-      {data && data.length > 0 && (
+      {isLoading && <ListSkeleton rows={4} />}
+      {error && <ErrorState onRetry={() => mutate()} />}
+      {data && registered.length === 0 && (
+        <EmptyState title="No players registered" message="Add existing players, or accept join requests on public tournaments." />
+      )}
+
+      {registered.length > 0 && (
         <Card>
           <div className="divide-y divide-[var(--border)]">
-            {data.map((tp) => (
+            {registered.map((tp) => (
               <div key={tp.id} className="flex items-center justify-between px-5 py-3">
                 <Link href={`/players/${tp.player.id}`} className="hover:underline">
                   <span className="font-medium">{tp.player.displayName}</span>
@@ -50,7 +106,10 @@ export function PlayersTab({ tournamentId }: { tournamentId: string }) {
                 </Link>
                 <div className="flex items-center gap-3 text-sm text-muted">
                   {tp.player.ranking && <span>{tp.player.ranking.wins}W · {tp.player.ranking.losses}L</span>}
-                  <Badge color={tp.status === "registered" ? "green" : "slate"}>{tp.status}</Badge>
+                  <Badge color="green">registered</Badge>
+                  {canManage && (
+                    <button onClick={() => remove(tp.player.id)} disabled={busy === tp.player.id} className="text-xs text-muted hover:text-[var(--danger)] disabled:opacity-50">Remove</button>
+                  )}
                 </div>
               </div>
             ))}

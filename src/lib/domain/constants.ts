@@ -27,6 +27,26 @@ export const TOURNAMENT_TRANSITIONS: Record<TournamentStatus, TournamentStatus[]
 export const TOURNAMENT_FORMATS = ["singles", "doubles", "mixed"] as const;
 export type TournamentFormat = (typeof TOURNAMENT_FORMATS)[number];
 
+export const TOURNAMENT_VISIBILITIES = ["private", "public"] as const;
+export type TournamentVisibility = (typeof TOURNAMENT_VISIBILITIES)[number];
+
+// TournamentPlayer.status lifecycle:
+//  registered — active participant
+//  requested  — player asked to join a public tournament (awaits organizer)
+//  invited    — organizer invited a player (awaits player accept) [Phase 4]
+//  declined   — organizer declined a request / player declined an invite
+//  withdrawn  — player left
+//  removed    — organizer removed the participant
+export const TOURNAMENT_PLAYER_STATUSES = [
+  "registered",
+  "requested",
+  "invited",
+  "declined",
+  "withdrawn",
+  "removed",
+] as const;
+export type TournamentPlayerStatus = (typeof TOURNAMENT_PLAYER_STATUSES)[number];
+
 export const MATCH_TYPES = ["singles", "doubles"] as const;
 export type MatchType = (typeof MATCH_TYPES)[number];
 

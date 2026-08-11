@@ -5,7 +5,7 @@ import { audit } from "@/lib/audit";
 import { skipTake, type Pagination } from "@/lib/api/pagination";
 import { TOURNAMENT_TRANSITIONS, type TournamentStatus } from "@/lib/domain/constants";
 import type { AuthUser } from "@/lib/auth/authorize";
-import { orgFilter, assertOrgAccess, ownOrgId } from "@/lib/auth/tenancy";
+import { orgFilter, assertOrgAccess, ownOrgId, isPlatformAdmin } from "@/lib/auth/tenancy";
 import type {
   CreateTournamentSchema,
   UpdateTournamentSchema,
@@ -46,7 +46,37 @@ export async function getTournament(actor: AuthUser, id: string) {
     },
   });
   if (!t) throw Errors.notFound("Tournament");
-  assertOrgAccess(actor, t.organizationId);
+  await assertCanView(actor, t);
+  const canManage = isPlatformAdmin(actor) || t.organizationId === actor.organizationId;
+  return { ...t, canManage };
+}
+
+/** True if the caller may VIEW this tournament (owner, public, or participant). */
+async function assertCanView(
+  actor: AuthUser,
+  t: { organizationId: string | null; visibility: string; id: string }
+): Promise<void> {
+  if (isPlatformAdmin(actor)) return;
+  if (t.organizationId === actor.organizationId) return;
+  if (t.visibility === "public") return;
+  // Private tournament in another workspace — only visible to its participants.
+  if (actor.playerId) {
+    const part = await prisma.tournamentPlayer.findUnique({
+      where: { tournamentId_playerId: { tournamentId: t.id, playerId: actor.playerId } },
+    });
+    if (part && part.status === "registered") return;
+  }
+  throw Errors.forbidden("You don't have access to this tournament");
+}
+
+/** Load a tournament the caller may VIEW (for read-only sub-resources). */
+export async function loadViewableTournament(actor: AuthUser, id: string) {
+  const t = await prisma.tournament.findFirst({
+    where: { id, deletedAt: null },
+    select: { id: true, organizationId: true, visibility: true, format: true },
+  });
+  if (!t) throw Errors.notFound("Tournament");
+  await assertCanView(actor, t);
   return t;
 }
 
@@ -59,6 +89,7 @@ export async function createTournament(input: CreateInput, actor: AuthUser) {
       startDate: input.startDate,
       endDate: input.endDate,
       format: input.format,
+      visibility: input.visibility,
       organizerId: input.organizerId ?? actor.id,
       createdById: actor.id,
       organizationId: ownOrgId(actor),
@@ -94,6 +125,7 @@ export async function updateTournament(id: string, input: UpdateInput, actor: Au
       endDate: input.endDate === undefined ? undefined : input.endDate,
       format: input.format ?? undefined,
       status: input.status ?? undefined,
+      visibility: input.visibility ?? undefined,
       organizerId: input.organizerId ?? undefined,
       pointsConfig: input.pointsConfig === undefined ? undefined : input.pointsConfig ?? undefined,
     },
@@ -153,7 +185,7 @@ export async function addTournamentPlayers(tournamentId: string, playerIds: stri
 }
 
 export async function getTournamentLeaderboard(actor: AuthUser, tournamentId: string) {
-  await loadOwnedTournament(actor, tournamentId);
+  await loadViewableTournament(actor, tournamentId);
   const entries = await prisma.leaderboardEntry.findMany({
     where: { tournamentId },
     include: {
@@ -176,6 +208,112 @@ export async function getTournamentLeaderboard(actor: AuthUser, tournamentId: st
         ? { type: "player" as const, id: e.player.id, name: e.player.displayName }
         : null,
   }));
+}
+
+// --- Public discovery + join requests (Phase 3) ----------------------------
+
+/** Cross-workspace list of PUBLIC tournaments anyone can discover + join. */
+export async function listPublicTournaments(p: Pagination, filters: { status?: string }) {
+  const where = {
+    deletedAt: null,
+    visibility: "public",
+    ...(filters.status ? { status: filters.status } : {}),
+    ...(p.search ? { name: { contains: p.search, mode: "insensitive" as const } } : {}),
+  };
+  const [items, total] = await Promise.all([
+    prisma.tournament.findMany({
+      where,
+      ...skipTake(p),
+      orderBy: { createdAt: p.sortDir },
+      include: {
+        organizer: { select: { id: true, name: true } },
+        organization: { select: { id: true, name: true } },
+        _count: { select: { tournamentPlayers: true, matches: true } },
+      },
+    }),
+    prisma.tournament.count({ where }),
+  ]);
+  return { items, total };
+}
+
+/** A signed-in player requests to join a public tournament. */
+export async function requestToJoin(actor: AuthUser, tournamentId: string) {
+  if (!actor.playerId) {
+    throw Errors.validation("You need a player profile to join tournaments");
+  }
+  const t = await prisma.tournament.findFirst({
+    where: { id: tournamentId, deletedAt: null },
+    select: { id: true, visibility: true, status: true, organizationId: true },
+  });
+  if (!t) throw Errors.notFound("Tournament");
+  if (t.organizationId === actor.organizationId) {
+    throw Errors.validation("This tournament is already in your workspace");
+  }
+  if (t.visibility !== "public") throw Errors.forbidden("This tournament isn't open to join");
+  if (t.status === "completed" || t.status === "cancelled") {
+    throw Errors.invalidState("This tournament is no longer accepting players");
+  }
+
+  const existing = await prisma.tournamentPlayer.findUnique({
+    where: { tournamentId_playerId: { tournamentId, playerId: actor.playerId } },
+  });
+  if (existing?.status === "registered") throw Errors.conflict("You're already in this tournament");
+  if (existing?.status === "requested") throw Errors.conflict("Your request is already pending");
+
+  const tp = await prisma.tournamentPlayer.upsert({
+    where: { tournamentId_playerId: { tournamentId, playerId: actor.playerId } },
+    update: { status: "requested" },
+    create: { tournamentId, playerId: actor.playerId, status: "requested" },
+  });
+  await audit({ actorUserId: actor.id, action: "tournament.join.requested", entityType: "Tournament", entityId: tournamentId, newValue: { playerId: actor.playerId } });
+  return tp;
+}
+
+/** Organizer: pending join requests for their tournament. */
+export async function listJoinRequests(actor: AuthUser, tournamentId: string) {
+  await loadOwnedTournament(actor, tournamentId);
+  return prisma.tournamentPlayer.findMany({
+    where: { tournamentId, status: "requested" },
+    include: { player: { select: { id: true, displayName: true, fullName: true, city: true, ranking: true } } },
+    orderBy: { registeredAt: "asc" },
+  });
+}
+
+/** Organizer: accept or decline a join request. */
+export async function respondToJoinRequest(
+  actor: AuthUser,
+  tournamentId: string,
+  playerId: string,
+  action: "accept" | "decline"
+) {
+  await loadOwnedTournament(actor, tournamentId);
+  const tp = await prisma.tournamentPlayer.findUnique({
+    where: { tournamentId_playerId: { tournamentId, playerId } },
+  });
+  if (!tp || tp.status !== "requested") throw Errors.notFound("Join request");
+  const updated = await prisma.tournamentPlayer.update({
+    where: { tournamentId_playerId: { tournamentId, playerId } },
+    data: { status: action === "accept" ? "registered" : "declined" },
+  });
+  await audit({ actorUserId: actor.id, action: `tournament.join.${action}ed`, entityType: "Tournament", entityId: tournamentId, newValue: { playerId } });
+  return updated;
+}
+
+/** Organizer: remove a participant (or a request) from their tournament. */
+export async function removeParticipant(actor: AuthUser, tournamentId: string, playerId: string) {
+  await loadOwnedTournament(actor, tournamentId);
+  const inUse = await prisma.matchParticipant.count({
+    where: { playerId, match: { tournamentId } },
+  });
+  if (inUse > 0) {
+    // Keep them registered if they already have matches (removing would orphan results).
+    throw Errors.conflict("This player already has matches — cannot remove them");
+  }
+  await prisma.tournamentPlayer.update({
+    where: { tournamentId_playerId: { tournamentId, playerId } },
+    data: { status: "removed" },
+  });
+  await audit({ actorUserId: actor.id, action: "tournament.participant.removed", entityType: "Tournament", entityId: tournamentId, newValue: { playerId } });
 }
 
 /** Load a tournament and assert the caller's workspace owns it. */

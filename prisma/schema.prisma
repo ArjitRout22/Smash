@@ -217,6 +217,7 @@ model Tournament {
   organizerId    String
   createdById    String
   status         String    @default("draft") // draft|upcoming|ongoing|completed|cancelled
+  visibility     String    @default("private") // private|public (public = discoverable + joinable)
   format         String    @default("singles") // singles|doubles|mixed
   pointsConfig   Json? // overrides the default points table for this tournament
   createdAt      DateTime  @default(now())

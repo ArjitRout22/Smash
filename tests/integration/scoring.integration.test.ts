@@ -49,7 +49,7 @@ d("scoring → leaderboard → correction (integration)", () => {
     playerA = pa.id;
     playerB = pb.id;
 
-    const t = await createTournament({ name: `IT ${Date.now()}`, format: "singles" }, actor);
+    const t = await createTournament({ name: `IT ${Date.now()}`, format: "singles", visibility: "private" }, actor);
     tournamentId = t.id;
     await addTournamentPlayers(tournamentId, [playerA, playerB], actor);
 

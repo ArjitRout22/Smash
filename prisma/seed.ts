@@ -108,6 +108,7 @@ async function main() {
       description: "Auto-generated demo tournament with a group stage and a 4-player knockout.",
       location: "Center Court",
       format: "singles",
+      visibility: "public",
     },
     actor
   );

@@ -7,7 +7,7 @@ import { MATCH_TRANSITIONS, type MatchStatus, type Side } from "@/lib/domain/con
 import { buildBracket, type BracketMatchInput } from "@/lib/engines/bracket";
 import type { AuthUser } from "@/lib/auth/authorize";
 import { assertOrgAccess, isPlatformAdmin } from "@/lib/auth/tenancy";
-import { loadOwnedTournament } from "@/lib/services/tournament.service";
+import { loadOwnedTournament, loadViewableTournament } from "@/lib/services/tournament.service";
 import type { CreateMatchSchema, UpdateMatchSchema } from "@/lib/validation/schemas";
 
 type CreateInput = z.infer<typeof CreateMatchSchema>;
@@ -86,12 +86,18 @@ export async function listMatches(
   p: Pagination,
   filters: { tournamentId?: string; stageId?: string; status?: string }
 ) {
+  // Listing a specific tournament's matches is allowed for anyone who may VIEW
+  // it (owner, public, or participant); the general list stays workspace-scoped.
+  if (filters.tournamentId) {
+    await loadViewableTournament(actor, filters.tournamentId);
+  }
   const where = {
     deletedAt: null,
-    // Scope to matches in the caller's workspace (platform admin sees all).
-    ...(isPlatformAdmin(actor)
+    ...(filters.tournamentId
       ? {}
-      : { tournament: { organizationId: actor.organizationId ?? "__no_org__" } }),
+      : isPlatformAdmin(actor)
+        ? {}
+        : { tournament: { organizationId: actor.organizationId ?? "__no_org__" } }),
     ...(filters.tournamentId ? { tournamentId: filters.tournamentId } : {}),
     ...(filters.stageId ? { stageId: filters.stageId } : {}),
     ...(filters.status ? { status: filters.status } : {}),
@@ -260,7 +266,7 @@ export async function softDeleteMatch(id: string, actor: AuthUser) {
 }
 
 export async function getBracket(actor: AuthUser, tournamentId: string) {
-  await loadOwnedTournament(actor, tournamentId);
+  await loadViewableTournament(actor, tournamentId);
   const matches = await prisma.match.findMany({
     where: { tournamentId, deletedAt: null, round: { not: null } },
     include: { participants: { include: participantInclude } },
