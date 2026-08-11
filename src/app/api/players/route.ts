@@ -7,9 +7,9 @@ import { CreatePlayerSchema } from "@/lib/validation/schemas";
 import { listPlayers, createPlayer } from "@/lib/services/player.service";
 
 export const GET = route(async (req) => {
-  await requirePermission(PERMISSIONS.PLAYER_VIEW);
+  const actor = await requirePermission(PERMISSIONS.PLAYER_VIEW);
   const p = parsePagination(new URL(req.url).searchParams);
-  const { items, total } = await listPlayers(p);
+  const { items, total } = await listPlayers(actor, p);
   return ok(items, { meta: paginationMeta(total, p.page, p.pageSize) });
 });
 

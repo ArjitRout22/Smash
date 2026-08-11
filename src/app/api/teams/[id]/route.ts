@@ -8,9 +8,9 @@ import { getTeam, updateTeam, deleteTeam } from "@/lib/services/team.service";
 type Ctx = RouteContext<{ id: string }>;
 
 export const GET = route<{ id: string }>(async (_req, { params }: Ctx) => {
-  await requirePermission(PERMISSIONS.TEAM_VIEW);
+  const actor = await requirePermission(PERMISSIONS.TEAM_VIEW);
   const { id } = await params;
-  return ok(await getTeam(id));
+  return ok(await getTeam(actor, id));
 });
 
 export const PUT = route<{ id: string }>(async (req, { params }: Ctx) => {

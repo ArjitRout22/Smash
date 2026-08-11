@@ -139,7 +139,7 @@ async function main() {
     await submitScore(
       match.id,
       { games: games.map(([scoreA, scoreB]) => ({ scoreA, scoreB })) },
-      actor.id
+      actor
     );
   }
 
@@ -153,14 +153,14 @@ async function main() {
     orderBy: { slot: "asc" },
   });
   for (const sf of semis) {
-    await submitScore(sf.id, { games: [{ scoreA: 21, scoreB: 14 }, { scoreA: 21, scoreB: 17 }] }, actor.id);
+    await submitScore(sf.id, { games: [{ scoreA: 21, scoreB: 14 }, { scoreA: 21, scoreB: 17 }] }, actor);
   }
   const final = await prisma.match.findFirst({
     where: { tournamentId: tournament.id, stage: { type: "final" } },
   });
   if (final) {
     // Ensure both finalists are seated (they are, via propagation), then score.
-    await submitScore(final.id, { games: [{ scoreA: 21, scoreB: 19 }, { scoreA: 19, scoreB: 21 }, { scoreA: 21, scoreB: 18 }] }, actor.id);
+    await submitScore(final.id, { games: [{ scoreA: 21, scoreB: 19 }, { scoreA: 19, scoreB: 21 }, { scoreA: 21, scoreB: 18 }] }, actor);
   }
 
   console.log("✅ Seed complete.\n");

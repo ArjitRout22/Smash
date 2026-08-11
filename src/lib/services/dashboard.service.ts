@@ -1,8 +1,10 @@
 import { prisma } from "@/lib/db/prisma";
 import { serializeMatch } from "@/lib/services/match.service";
+import type { AuthUser } from "@/lib/auth/authorize";
+import { orgFilter, isPlatformAdmin } from "@/lib/auth/tenancy";
 
 const matchInclude = {
-  tournament: { select: { id: true, name: true, format: true } },
+  tournament: { select: { id: true, name: true, format: true, organizationId: true } },
   stage: { select: { id: true, name: true, type: true, order: true } },
   games: { orderBy: { gameNumber: "asc" as const } },
   participants: {
@@ -19,7 +21,15 @@ const matchInclude = {
   },
 } as const;
 
-export async function getDashboard() {
+export async function getDashboard(actor: AuthUser) {
+  const org = orgFilter(actor); // {} for platform admin, else { organizationId }
+  const matchOrg = isPlatformAdmin(actor)
+    ? {}
+    : { tournament: { organizationId: actor.organizationId ?? "__no_org__" } };
+  const playerRankOrg = isPlatformAdmin(actor)
+    ? {}
+    : { player: { organizationId: actor.organizationId ?? "__no_org__" } };
+
   const [
     totalTournaments,
     activeTournaments,
@@ -31,30 +41,35 @@ export async function getDashboard() {
     topPlayersRaw,
     recentActivity,
   ] = await Promise.all([
-    prisma.tournament.count({ where: { deletedAt: null } }),
-    prisma.tournament.count({ where: { deletedAt: null, status: "ongoing" } }),
-    prisma.tournament.count({ where: { deletedAt: null, status: "completed" } }),
-    prisma.player.count({ where: { deletedAt: null } }),
-    prisma.team.count({ where: { deletedAt: null } }),
+    prisma.tournament.count({ where: { deletedAt: null, ...org } }),
+    prisma.tournament.count({ where: { deletedAt: null, status: "ongoing", ...org } }),
+    prisma.tournament.count({ where: { deletedAt: null, status: "completed", ...org } }),
+    prisma.player.count({ where: { deletedAt: null, ...org } }),
+    prisma.team.count({ where: { deletedAt: null, ...org } }),
     prisma.match.findMany({
-      where: { deletedAt: null, status: "completed" },
+      where: { deletedAt: null, status: "completed", ...matchOrg },
       orderBy: { updatedAt: "desc" },
       take: 5,
       include: matchInclude,
     }),
     prisma.match.findMany({
-      where: { deletedAt: null, status: { in: ["scheduled", "in_progress"] } },
+      where: { deletedAt: null, status: { in: ["scheduled", "in_progress"] }, ...matchOrg },
       orderBy: [{ scheduledAt: "asc" }, { createdAt: "asc" }],
       take: 5,
       include: matchInclude,
     }),
     prisma.playerRanking.findMany({
+      where: playerRankOrg,
       orderBy: [{ totalPoints: "desc" }, { wins: "desc" }],
       take: 5,
       include: { player: { select: { id: true, displayName: true } } },
     }),
     prisma.auditLog.findMany({
-      where: { action: { in: ["tournament.created", "stage.bracket.generated", "match.score.submitted"] } },
+      // Non-admins see only their own recent activity.
+      where: {
+        action: { in: ["tournament.created", "stage.bracket.generated", "match.score.submitted"] },
+        ...(isPlatformAdmin(actor) ? {} : { actorUserId: actor.id }),
+      },
       orderBy: { createdAt: "desc" },
       take: 8,
       select: { id: true, action: true, entityType: true, entityId: true, createdAt: true },

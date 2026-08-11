@@ -6,10 +6,10 @@ import { PERMISSIONS } from "@/lib/auth/permissions";
 import { getPlayerLeaderboard } from "@/lib/services/leaderboard.service";
 
 export const GET = route(async (req) => {
-  await requirePermission(PERMISSIONS.LEADERBOARD_VIEW);
+  const actor = await requirePermission(PERMISSIONS.LEADERBOARD_VIEW);
   const url = new URL(req.url);
   const p = parsePagination(url.searchParams);
-  const { items, total } = await getPlayerLeaderboard(p, {
+  const { items, total } = await getPlayerLeaderboard(actor, p, {
     sortBy: url.searchParams.get("sortBy") ?? undefined,
   });
   return ok(items, { meta: paginationMeta(total, p.page, p.pageSize) });

@@ -8,9 +8,9 @@ import { getMatch, updateMatch, softDeleteMatch } from "@/lib/services/match.ser
 type Ctx = RouteContext<{ id: string }>;
 
 export const GET = route<{ id: string }>(async (_req, { params }: Ctx) => {
-  await requirePermission(PERMISSIONS.MATCH_VIEW);
+  const actor = await requirePermission(PERMISSIONS.MATCH_VIEW);
   const { id } = await params;
-  return ok(await getMatch(id));
+  return ok(await getMatch(actor, id));
 });
 
 export const PUT = route<{ id: string }>(async (req, { params }: Ctx) => {

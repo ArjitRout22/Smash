@@ -76,12 +76,12 @@ d("scoring → leaderboard → correction (integration)", () => {
     const res = await submitScore(
       matchId,
       { games: [{ scoreA: 21, scoreB: 15 }, { scoreA: 21, scoreB: 18 }] },
-      actor.id
+      actor
     );
     expect(res.status).toBe("completed");
     expect(res.winnerSide).toBe("A");
 
-    const lb = await getTournamentLeaderboard(tournamentId);
+    const lb = await getTournamentLeaderboard(actor, tournamentId);
     const alice = lb.find((r) => r.entity?.id === playerA)!;
     const bob = lb.find((r) => r.entity?.id === playerB)!;
     expect(alice.wins).toBe(1);
@@ -106,11 +106,11 @@ d("scoring → leaderboard → correction (integration)", () => {
         expectedVersion: current.version,
         reason: "scorer entered wrong sides",
       },
-      actor.id
+      actor
     );
     expect(res.winnerSide).toBe("B");
 
-    const lb = await getTournamentLeaderboard(tournamentId);
+    const lb = await getTournamentLeaderboard(actor, tournamentId);
     const alice = lb.find((r) => r.entity?.id === playerA)!;
     const bob = lb.find((r) => r.entity?.id === playerB)!;
     expect(bob.wins).toBe(1);
@@ -128,7 +128,7 @@ d("scoring → leaderboard → correction (integration)", () => {
 
   it("rejects a stale (concurrent) score update via optimistic version", async () => {
     await expect(
-      submitScore(matchId, { games: [{ scoreA: 21, scoreB: 0 }], expectedVersion: 0 }, actor.id)
+      submitScore(matchId, { games: [{ scoreA: 21, scoreB: 0 }], expectedVersion: 0 }, actor)
     ).rejects.toMatchObject({ code: "CONCURRENCY_CONFLICT" });
   });
 });

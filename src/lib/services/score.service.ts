@@ -7,6 +7,8 @@ import { resolvePointsConfig, pointsForMatch } from "@/lib/engines/points";
 import { recomputeAfterMatch } from "@/lib/services/recompute";
 import type { Side, StageType } from "@/lib/domain/constants";
 import type { SubmitScoreInput } from "@/lib/validation/schemas";
+import type { AuthUser } from "@/lib/auth/authorize";
+import { assertOrgAccess } from "@/lib/auth/tenancy";
 
 type Tx = Prisma.TransactionClient;
 
@@ -152,14 +154,21 @@ export type SubmitScoreResult = {
 export async function submitScore(
   matchId: string,
   input: SubmitScoreInput,
-  actorUserId: string
+  actor: AuthUser
 ): Promise<SubmitScoreResult> {
+  const actorUserId = actor.id;
   return prisma.$transaction(async (tx) => {
     const match = await tx.match.findFirst({
       where: { id: matchId, deletedAt: null },
-      include: { participants: true, stage: true, games: true },
+      include: {
+        participants: true,
+        stage: true,
+        games: true,
+        tournament: { select: { organizationId: true } },
+      },
     });
     if (!match) throw Errors.notFound("Match");
+    assertOrgAccess(actor, match.tournament.organizationId);
     if (match.status === "cancelled") {
       throw Errors.invalidState("Cannot score a cancelled match");
     }

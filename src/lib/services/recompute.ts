@@ -204,28 +204,39 @@ export async function recomputePlayerAggregates(tx: Tx, playerId: string) {
   });
 }
 
-/** Reassign global ranks (and update bestRank) across all players. */
+/** Reassign ranks (and update bestRank) WITHIN each organization. */
 export async function recomputeGlobalRanks(tx: Tx) {
-  const rows = await tx.playerRanking.findMany();
-  const ranked = assignRanks(
-    rows.map<RankableStat>((r) => ({
-      id: r.playerId,
-      points: r.totalPoints,
-      wins: r.wins,
-      losses: r.losses,
-      matchesPlayed: r.matchesPlayed,
-      titles: r.titles,
-    }))
-  );
-  const byPlayer = new Map(ranked.map((r) => [r.id, r.rank]));
+  const rows = await tx.playerRanking.findMany({
+    include: { player: { select: { organizationId: true } } },
+  });
+
+  // Group by organization so ranks are per-workspace.
+  const groups = new Map<string, typeof rows>();
   for (const r of rows) {
-    const rank = byPlayer.get(r.playerId) ?? null;
+    const key = r.player.organizationId ?? "__none__";
+    (groups.get(key) ?? groups.set(key, []).get(key)!).push(r);
+  }
+
+  const rankByPlayer = new Map<string, number>();
+  for (const group of groups.values()) {
+    const ranked = assignRanks(
+      group.map<RankableStat>((r) => ({
+        id: r.playerId,
+        points: r.totalPoints,
+        wins: r.wins,
+        losses: r.losses,
+        matchesPlayed: r.matchesPlayed,
+        titles: r.titles,
+      }))
+    );
+    ranked.forEach((r) => rankByPlayer.set(r.id, r.rank));
+  }
+
+  for (const r of rows) {
+    const rank = rankByPlayer.get(r.playerId) ?? null;
     const bestRank =
       rank == null ? r.bestRank : r.bestRank == null ? rank : Math.min(r.bestRank, rank);
-    await tx.playerRanking.update({
-      where: { playerId: r.playerId },
-      data: { rank, bestRank },
-    });
+    await tx.playerRanking.update({ where: { playerId: r.playerId }, data: { rank, bestRank } });
   }
 }
 

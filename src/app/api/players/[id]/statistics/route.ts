@@ -5,7 +5,7 @@ import { PERMISSIONS } from "@/lib/auth/permissions";
 import { getPlayerStatistics } from "@/lib/services/player.service";
 
 export const GET = route<{ id: string }>(async (_req, { params }: RouteContext<{ id: string }>) => {
-  await requirePermission(PERMISSIONS.PLAYER_VIEW);
+  const actor = await requirePermission(PERMISSIONS.PLAYER_VIEW);
   const { id } = await params;
-  return ok(await getPlayerStatistics(id));
+  return ok(await getPlayerStatistics(actor, id));
 });

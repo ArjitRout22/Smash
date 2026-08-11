@@ -12,12 +12,12 @@ export const POST = route<{ id: string }>(async (req, { params }: Ctx) => {
   const actor = await requirePermission(PERMISSIONS.SCORE_EDIT);
   const { id } = await params;
   const input = SubmitScoreSchema.parse(await readJson(req));
-  return ok(await submitScore(id, input, actor.id));
+  return ok(await submitScore(id, input, actor));
 });
 
 export const PUT = route<{ id: string }>(async (req, { params }: Ctx) => {
   const actor = await requirePermission(PERMISSIONS.SCORE_EDIT);
   const { id } = await params;
   const input = SubmitScoreSchema.parse(await readJson(req));
-  return ok(await submitScore(id, input, actor.id));
+  return ok(await submitScore(id, input, actor));
 });

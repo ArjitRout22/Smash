@@ -8,9 +8,9 @@ import { listStages, createStage } from "@/lib/services/stage.service";
 type Ctx = RouteContext<{ id: string }>;
 
 export const GET = route<{ id: string }>(async (_req, { params }: Ctx) => {
-  await requirePermission(PERMISSIONS.STAGE_VIEW);
+  const actor = await requirePermission(PERMISSIONS.STAGE_VIEW);
   const { id } = await params;
-  return ok(await listStages(id));
+  return ok(await listStages(actor, id));
 });
 
 export const POST = route<{ id: string }>(async (req, { params }: Ctx) => {

@@ -11,9 +11,9 @@ import {
 type Ctx = RouteContext<{ id: string }>;
 
 export const GET = route<{ id: string }>(async (_req, { params }: Ctx) => {
-  await requirePermission(PERMISSIONS.TOURNAMENT_VIEW);
+  const actor = await requirePermission(PERMISSIONS.TOURNAMENT_VIEW);
   const { id } = await params;
-  return ok(await listTournamentPlayers(id));
+  return ok(await listTournamentPlayers(actor, id));
 });
 
 export const POST = route<{ id: string }>(async (req, { params }: Ctx) => {

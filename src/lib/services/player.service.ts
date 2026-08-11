@@ -5,14 +5,16 @@ import { audit } from "@/lib/audit";
 import { skipTake, type Pagination } from "@/lib/api/pagination";
 import { winPercentage } from "@/lib/engines/leaderboard";
 import type { AuthUser } from "@/lib/auth/authorize";
+import { orgFilter, assertOrgAccess, ownOrgId } from "@/lib/auth/tenancy";
 import type { CreatePlayerSchema, UpdatePlayerSchema } from "@/lib/validation/schemas";
 
 type CreateInput = z.infer<typeof CreatePlayerSchema>;
 type UpdateInput = z.infer<typeof UpdatePlayerSchema>;
 
-export async function listPlayers(p: Pagination) {
+export async function listPlayers(actor: AuthUser, p: Pagination) {
   const where = {
     deletedAt: null,
+    ...orgFilter(actor),
     ...(p.search
       ? {
           OR: [
@@ -34,12 +36,13 @@ export async function listPlayers(p: Pagination) {
   return { items, total };
 }
 
-export async function getPlayer(id: string) {
+export async function getPlayer(actor: AuthUser, id: string) {
   const player = await prisma.player.findFirst({
     where: { id, deletedAt: null },
     include: { ranking: true },
   });
   if (!player) throw Errors.notFound("Player");
+  assertOrgAccess(actor, player.organizationId);
   return player;
 }
 
@@ -53,7 +56,7 @@ export async function createPlayer(input: CreateInput, actor: AuthUser) {
       gender: input.gender,
       dateOfBirth: input.dateOfBirth,
       city: input.city,
-      organizationId: actor.organizationId,
+      organizationId: ownOrgId(actor),
     },
   });
   await audit({ actorUserId: actor.id, action: "player.created", entityType: "Player", entityId: player.id, newValue: player });
@@ -63,6 +66,7 @@ export async function createPlayer(input: CreateInput, actor: AuthUser) {
 export async function updatePlayer(id: string, input: UpdateInput, actor: AuthUser) {
   const existing = await prisma.player.findFirst({ where: { id, deletedAt: null } });
   if (!existing) throw Errors.notFound("Player");
+  assertOrgAccess(actor, existing.organizationId);
   const updated = await prisma.player.update({
     where: { id },
     data: {
@@ -80,8 +84,8 @@ export async function updatePlayer(id: string, input: UpdateInput, actor: AuthUs
 }
 
 /** Aggregate stats, derived from PlayerRanking (which is derived from matches). */
-export async function getPlayerStatistics(id: string) {
-  const player = await getPlayer(id);
+export async function getPlayerStatistics(actor: AuthUser, id: string) {
+  const player = await getPlayer(actor, id);
   const r = player.ranking;
   return {
     playerId: id,
@@ -99,8 +103,8 @@ export async function getPlayerStatistics(id: string) {
 }
 
 /** Paginated match history for a player (singles + doubles via team). */
-export async function getPlayerMatches(id: string, p: Pagination) {
-  await getPlayer(id);
+export async function getPlayerMatches(actor: AuthUser, id: string, p: Pagination) {
+  await getPlayer(actor, id);
   const teamIds = (await prisma.teamPlayer.findMany({ where: { playerId: id }, select: { teamId: true } })).map(
     (t) => t.teamId
   );
@@ -152,8 +156,8 @@ export async function getPlayerMatches(id: string, p: Pagination) {
 }
 
 /** Tournament history with per-tournament result summary. */
-export async function getPlayerTournaments(id: string) {
-  await getPlayer(id);
+export async function getPlayerTournaments(actor: AuthUser, id: string) {
+  await getPlayer(actor, id);
   const entries = await prisma.leaderboardEntry.findMany({
     where: { playerId: id },
     include: { tournament: { select: { id: true, name: true, status: true } } },

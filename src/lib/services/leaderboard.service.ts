@@ -1,30 +1,40 @@
 import { prisma } from "@/lib/db/prisma";
 import { assignRanks, type RankableStat } from "@/lib/engines/leaderboard";
 import type { Pagination } from "@/lib/api/pagination";
+import type { AuthUser } from "@/lib/auth/authorize";
+import { isPlatformAdmin } from "@/lib/auth/tenancy";
 
 type SortKey = "points" | "wins" | "winPercentage" | "tournaments" | "recent";
 
 /**
- * Global player leaderboard. Ranks are derived from the (already recomputed)
- * PlayerRanking aggregates via the shared ranking engine, so ordering is
- * deterministic and matches per-tournament standings.
+ * Player leaderboard, scoped to the caller's workspace (platform admin sees all).
+ * Ranks are derived from the (already recomputed) PlayerRanking aggregates via
+ * the shared ranking engine, so ordering is deterministic and matches
+ * per-tournament standings.
  */
 export async function getPlayerLeaderboard(
+  actor: AuthUser,
   p: Pagination,
   opts: { sortBy?: string }
 ) {
+  const orgWhere = isPlatformAdmin(actor)
+    ? {}
+    : { organizationId: actor.organizationId ?? "__no_org__" };
   const rows = await prisma.playerRanking.findMany({
-    where: p.search
-      ? {
-          player: {
-            deletedAt: null,
-            OR: [
-              { fullName: { contains: p.search, mode: "insensitive" } },
-              { displayName: { contains: p.search, mode: "insensitive" } },
-            ],
-          },
-        }
-      : { player: { deletedAt: null } },
+    where: {
+      player: {
+        deletedAt: null,
+        ...orgWhere,
+        ...(p.search
+          ? {
+              OR: [
+                { fullName: { contains: p.search, mode: "insensitive" as const } },
+                { displayName: { contains: p.search, mode: "insensitive" as const } },
+              ],
+            }
+          : {}),
+      },
+    },
     include: { player: { select: { id: true, displayName: true, fullName: true, city: true } } },
   });
 

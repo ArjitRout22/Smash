@@ -6,6 +6,8 @@ import { skipTake, type Pagination } from "@/lib/api/pagination";
 import { MATCH_TRANSITIONS, type MatchStatus, type Side } from "@/lib/domain/constants";
 import { buildBracket, type BracketMatchInput } from "@/lib/engines/bracket";
 import type { AuthUser } from "@/lib/auth/authorize";
+import { assertOrgAccess, isPlatformAdmin } from "@/lib/auth/tenancy";
+import { loadOwnedTournament } from "@/lib/services/tournament.service";
 import type { CreateMatchSchema, UpdateMatchSchema } from "@/lib/validation/schemas";
 
 type CreateInput = z.infer<typeof CreateMatchSchema>;
@@ -24,7 +26,7 @@ const participantInclude = {
 } as const;
 
 const matchInclude = {
-  tournament: { select: { id: true, name: true, format: true } },
+  tournament: { select: { id: true, name: true, format: true, organizationId: true } },
   stage: { select: { id: true, name: true, type: true, order: true } },
   games: { orderBy: { gameNumber: "asc" as const } },
   participants: { include: participantInclude },
@@ -40,7 +42,7 @@ function participantLabel(p: {
 export function serializeMatch(m: Awaited<ReturnType<typeof getMatchRaw>>) {
   return {
     id: m.id,
-    tournament: m.tournament,
+    tournament: { id: m.tournament.id, name: m.tournament.name, format: m.tournament.format },
     stage: m.stage,
     matchType: m.matchType,
     bestOf: m.bestOf,
@@ -73,16 +75,23 @@ async function getMatchRaw(id: string) {
   return m;
 }
 
-export async function getMatch(id: string) {
-  return serializeMatch(await getMatchRaw(id));
+export async function getMatch(actor: AuthUser, id: string) {
+  const m = await getMatchRaw(id);
+  assertOrgAccess(actor, m.tournament.organizationId);
+  return serializeMatch(m);
 }
 
 export async function listMatches(
+  actor: AuthUser,
   p: Pagination,
   filters: { tournamentId?: string; stageId?: string; status?: string }
 ) {
   const where = {
     deletedAt: null,
+    // Scope to matches in the caller's workspace (platform admin sees all).
+    ...(isPlatformAdmin(actor)
+      ? {}
+      : { tournament: { organizationId: actor.organizationId ?? "__no_org__" } }),
     ...(filters.tournamentId ? { tournamentId: filters.tournamentId } : {}),
     ...(filters.stageId ? { stageId: filters.stageId } : {}),
     ...(filters.status ? { status: filters.status } : {}),
@@ -151,11 +160,7 @@ async function validateSides(opts: {
 }
 
 export async function createMatch(input: CreateInput, actor: AuthUser) {
-  const tournament = await prisma.tournament.findFirst({
-    where: { id: input.tournamentId, deletedAt: null },
-    select: { id: true },
-  });
-  if (!tournament) throw Errors.notFound("Tournament");
+  await loadOwnedTournament(actor, input.tournamentId);
 
   if (input.stageId) {
     const stage = await prisma.stage.findFirst({ where: { id: input.stageId, tournamentId: input.tournamentId } });
@@ -193,8 +198,12 @@ export async function createMatch(input: CreateInput, actor: AuthUser) {
 }
 
 export async function updateMatch(id: string, input: UpdateInput, actor: AuthUser) {
-  const existing = await prisma.match.findFirst({ where: { id, deletedAt: null }, include: { participants: true } });
+  const existing = await prisma.match.findFirst({
+    where: { id, deletedAt: null },
+    include: { participants: true, tournament: { select: { organizationId: true } } },
+  });
   if (!existing) throw Errors.notFound("Match");
+  assertOrgAccess(actor, existing.tournament.organizationId);
 
   if (input.status && input.status !== existing.status) {
     const allowed = MATCH_TRANSITIONS[existing.status as MatchStatus] ?? [];
@@ -240,13 +249,18 @@ export async function updateMatch(id: string, input: UpdateInput, actor: AuthUse
 }
 
 export async function softDeleteMatch(id: string, actor: AuthUser) {
-  const existing = await prisma.match.findFirst({ where: { id, deletedAt: null } });
+  const existing = await prisma.match.findFirst({
+    where: { id, deletedAt: null },
+    include: { tournament: { select: { organizationId: true } } },
+  });
   if (!existing) throw Errors.notFound("Match");
+  assertOrgAccess(actor, existing.tournament.organizationId);
   await prisma.match.update({ where: { id }, data: { deletedAt: new Date() } });
-  await audit({ actorUserId: actor.id, action: "match.deleted", entityType: "Match", entityId: id, previousValue: existing });
+  await audit({ actorUserId: actor.id, action: "match.deleted", entityType: "Match", entityId: id, previousValue: { status: existing.status } });
 }
 
-export async function getBracket(tournamentId: string) {
+export async function getBracket(actor: AuthUser, tournamentId: string) {
+  await loadOwnedTournament(actor, tournamentId);
   const matches = await prisma.match.findMany({
     where: { tournamentId, deletedAt: null, round: { not: null } },
     include: { participants: { include: participantInclude } },

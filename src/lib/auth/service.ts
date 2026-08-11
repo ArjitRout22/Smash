@@ -1,9 +1,19 @@
+import { randomBytes } from "node:crypto";
 import { prisma } from "@/lib/db/prisma";
 import { AppError, Errors } from "@/lib/errors";
 import { rateLimiter } from "@/lib/ratelimit";
 import { normalizePhone } from "@/lib/auth/phone";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { createSession } from "@/lib/auth/session";
+
+function slugify(name: string): string {
+  const base = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40) || "club";
+  return `${base}-${randomBytes(3).toString("hex")}`;
+}
 
 export type AuthResult = {
   token: string;
@@ -28,14 +38,24 @@ export async function register(
 
   const passwordHash = hashPassword(input.password);
 
+  // Each signup gets their own workspace (organization) and becomes its
+  // ORGANIZER, so they can immediately create and run their own tournaments.
   const user = await prisma.$transaction(async (tx) => {
-    const playerRole = await tx.role.upsert({
-      where: { name: "PLAYER" },
+    const organizerRole = await tx.role.upsert({
+      where: { name: "ORGANIZER" },
       update: {},
-      create: { name: "PLAYER", description: "Default self-service role" },
+      create: { name: "ORGANIZER", description: "Owns and runs a workspace" },
+    });
+    const org = await tx.organization.create({
+      data: { name: `${input.name.split(" ")[0] || input.name}'s Club`, slug: slugify(input.name) },
     });
     const player = await tx.player.create({
-      data: { fullName: input.name, displayName: input.name.split(" ")[0] || input.name, phone },
+      data: {
+        fullName: input.name,
+        displayName: input.name.split(" ")[0] || input.name,
+        phone,
+        organizationId: org.id,
+      },
     });
     return tx.user.create({
       data: {
@@ -43,7 +63,8 @@ export async function register(
         passwordHash,
         phone,
         name: input.name,
-        roleId: playerRole.id,
+        roleId: organizerRole.id,
+        organizationId: org.id,
         playerId: player.id,
         lastLoginAt: new Date(),
       },

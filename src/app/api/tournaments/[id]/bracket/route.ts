@@ -10,9 +10,9 @@ type Ctx = RouteContext<{ id: string }>;
 
 // Visual bracket for the knockout stages.
 export const GET = route<{ id: string }>(async (_req, { params }: Ctx) => {
-  await requirePermission(PERMISSIONS.MATCH_VIEW);
+  const actor = await requirePermission(PERMISSIONS.MATCH_VIEW);
   const { id } = await params;
-  return ok(await getBracket(id));
+  return ok(await getBracket(actor, id));
 });
 
 // Generate a single-elimination bracket from seeded participants.

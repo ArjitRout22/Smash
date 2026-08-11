@@ -5,6 +5,7 @@ import { audit } from "@/lib/audit";
 import { skipTake, type Pagination } from "@/lib/api/pagination";
 import { TOURNAMENT_TRANSITIONS, type TournamentStatus } from "@/lib/domain/constants";
 import type { AuthUser } from "@/lib/auth/authorize";
+import { orgFilter, assertOrgAccess, ownOrgId } from "@/lib/auth/tenancy";
 import type {
   CreateTournamentSchema,
   UpdateTournamentSchema,
@@ -13,9 +14,10 @@ import type {
 type CreateInput = z.infer<typeof CreateTournamentSchema>;
 type UpdateInput = z.infer<typeof UpdateTournamentSchema>;
 
-export async function listTournaments(p: Pagination, filters: { status?: string }) {
+export async function listTournaments(actor: AuthUser, p: Pagination, filters: { status?: string }) {
   const where = {
     deletedAt: null,
+    ...orgFilter(actor),
     ...(filters.status ? { status: filters.status } : {}),
     ...(p.search ? { name: { contains: p.search, mode: "insensitive" as const } } : {}),
   };
@@ -34,7 +36,7 @@ export async function listTournaments(p: Pagination, filters: { status?: string 
   return { items, total };
 }
 
-export async function getTournament(id: string) {
+export async function getTournament(actor: AuthUser, id: string) {
   const t = await prisma.tournament.findFirst({
     where: { id, deletedAt: null },
     include: {
@@ -44,6 +46,7 @@ export async function getTournament(id: string) {
     },
   });
   if (!t) throw Errors.notFound("Tournament");
+  assertOrgAccess(actor, t.organizationId);
   return t;
 }
 
@@ -58,7 +61,7 @@ export async function createTournament(input: CreateInput, actor: AuthUser) {
       format: input.format,
       organizerId: input.organizerId ?? actor.id,
       createdById: actor.id,
-      organizationId: actor.organizationId,
+      organizationId: ownOrgId(actor),
       pointsConfig: input.pointsConfig ?? undefined,
       status: "draft",
     },
@@ -70,6 +73,7 @@ export async function createTournament(input: CreateInput, actor: AuthUser) {
 export async function updateTournament(id: string, input: UpdateInput, actor: AuthUser) {
   const existing = await prisma.tournament.findFirst({ where: { id, deletedAt: null } });
   if (!existing) throw Errors.notFound("Tournament");
+  assertOrgAccess(actor, existing.organizationId);
 
   if (input.status && input.status !== existing.status) {
     const allowed = TOURNAMENT_TRANSITIONS[existing.status as TournamentStatus] ?? [];
@@ -108,12 +112,13 @@ export async function updateTournament(id: string, input: UpdateInput, actor: Au
 export async function softDeleteTournament(id: string, actor: AuthUser) {
   const existing = await prisma.tournament.findFirst({ where: { id, deletedAt: null } });
   if (!existing) throw Errors.notFound("Tournament");
+  assertOrgAccess(actor, existing.organizationId);
   await prisma.tournament.update({ where: { id }, data: { deletedAt: new Date() } });
   await audit({ actorUserId: actor.id, action: "tournament.deleted", entityType: "Tournament", entityId: id, previousValue: existing });
 }
 
-export async function listTournamentPlayers(tournamentId: string) {
-  await ensureExists(tournamentId);
+export async function listTournamentPlayers(actor: AuthUser, tournamentId: string) {
+  await loadOwnedTournament(actor, tournamentId);
   return prisma.tournamentPlayer.findMany({
     where: { tournamentId },
     include: { player: { include: { ranking: true } } },
@@ -122,13 +127,17 @@ export async function listTournamentPlayers(tournamentId: string) {
 }
 
 export async function addTournamentPlayers(tournamentId: string, playerIds: string[], actor: AuthUser) {
-  await ensureExists(tournamentId);
+  const tournament = await loadOwnedTournament(actor, tournamentId);
   const players = await prisma.player.findMany({
     where: { id: { in: playerIds }, deletedAt: null },
-    select: { id: true },
+    select: { id: true, organizationId: true },
   });
   if (players.length !== playerIds.length) {
     throw Errors.validation("One or more players do not exist");
+  }
+  // Players must belong to the same workspace as the tournament.
+  if (players.some((p) => p.organizationId !== tournament.organizationId)) {
+    throw Errors.validation("All players must belong to this workspace");
   }
   const result = await prisma.$transaction(
     playerIds.map((playerId) =>
@@ -143,8 +152,8 @@ export async function addTournamentPlayers(tournamentId: string, playerIds: stri
   return result;
 }
 
-export async function getTournamentLeaderboard(tournamentId: string) {
-  await ensureExists(tournamentId);
+export async function getTournamentLeaderboard(actor: AuthUser, tournamentId: string) {
+  await loadOwnedTournament(actor, tournamentId);
   const entries = await prisma.leaderboardEntry.findMany({
     where: { tournamentId },
     include: {
@@ -169,10 +178,13 @@ export async function getTournamentLeaderboard(tournamentId: string) {
   }));
 }
 
-async function ensureExists(tournamentId: string) {
+/** Load a tournament and assert the caller's workspace owns it. */
+export async function loadOwnedTournament(actor: AuthUser, tournamentId: string) {
   const t = await prisma.tournament.findFirst({
     where: { id: tournamentId, deletedAt: null },
-    select: { id: true },
+    select: { id: true, organizationId: true, format: true },
   });
   if (!t) throw Errors.notFound("Tournament");
+  assertOrgAccess(actor, t.organizationId);
+  return t;
 }

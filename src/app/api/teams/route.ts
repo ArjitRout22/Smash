@@ -6,9 +6,9 @@ import { CreateTeamSchema } from "@/lib/validation/schemas";
 import { listTeams, createTeam } from "@/lib/services/team.service";
 
 export const GET = route(async (req) => {
-  await requirePermission(PERMISSIONS.TEAM_VIEW);
+  const actor = await requirePermission(PERMISSIONS.TEAM_VIEW);
   const tournamentId = new URL(req.url).searchParams.get("tournamentId") ?? undefined;
-  return ok(await listTeams({ tournamentId }));
+  return ok(await listTeams(actor, { tournamentId }));
 });
 
 export const POST = route(async (req) => {

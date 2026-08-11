@@ -9,6 +9,8 @@ import {
 } from "@/lib/engines/bracket";
 import type { StageType, Side } from "@/lib/domain/constants";
 import type { AuthUser } from "@/lib/auth/authorize";
+import { assertOrgAccess } from "@/lib/auth/tenancy";
+import { loadOwnedTournament } from "@/lib/services/tournament.service";
 import type {
   CreateStageSchema,
   UpdateStageSchema,
@@ -19,7 +21,8 @@ type CreateInput = z.infer<typeof CreateStageSchema>;
 type UpdateInput = z.infer<typeof UpdateStageSchema>;
 type GenerateInput = z.infer<typeof GenerateBracketSchema>;
 
-export async function listStages(tournamentId: string) {
+export async function listStages(actor: AuthUser, tournamentId: string) {
+  await loadOwnedTournament(actor, tournamentId);
   return prisma.stage.findMany({
     where: { tournamentId },
     orderBy: { order: "asc" },
@@ -37,7 +40,7 @@ async function nextOrder(tournamentId: string) {
 }
 
 export async function createStage(tournamentId: string, input: CreateInput, actor: AuthUser) {
-  await ensureTournament(tournamentId);
+  await loadOwnedTournament(actor, tournamentId);
   const stage = await prisma.stage.create({
     data: {
       tournamentId,
@@ -52,8 +55,12 @@ export async function createStage(tournamentId: string, input: CreateInput, acto
 }
 
 export async function updateStage(id: string, input: UpdateInput, actor: AuthUser) {
-  const existing = await prisma.stage.findUnique({ where: { id } });
+  const existing = await prisma.stage.findUnique({
+    where: { id },
+    include: { tournament: { select: { organizationId: true } } },
+  });
   if (!existing) throw Errors.notFound("Stage");
+  assertOrgAccess(actor, existing.tournament.organizationId);
   const updated = await prisma.stage.update({
     where: { id },
     data: {
@@ -86,7 +93,7 @@ function stageTypeForRound(round: number, totalRounds: number): { type: StageTyp
  * with bracket links, round-1 participants seeded, and byes auto-advanced.
  */
 export async function generateBracket(tournamentId: string, input: GenerateInput, actor: AuthUser) {
-  const tournament = await ensureTournament(tournamentId);
+  const tournament = await loadOwnedTournament(actor, tournamentId);
   const isTeam = tournament.format !== "singles";
   const matchType = isTeam ? "doubles" : "singles";
 
@@ -186,7 +193,7 @@ export async function generateBracket(tournamentId: string, input: GenerateInput
       tx
     );
 
-    return listStages(tournamentId);
+    return listStages(actor, tournamentId);
   });
 }
 
@@ -228,11 +235,3 @@ async function advanceByes(
   }
 }
 
-async function ensureTournament(tournamentId: string) {
-  const t = await prisma.tournament.findFirst({
-    where: { id: tournamentId, deletedAt: null },
-    select: { id: true, format: true },
-  });
-  if (!t) throw Errors.notFound("Tournament");
-  return t;
-}

@@ -318,8 +318,12 @@ Highlights: `POST /api/auth/register`, `POST /api/auth/login`,
   results — avoiding double counting.
 - **Global rank recompute** touches all ranked players on each result change —
   fine at club scale; see scalability notes for larger deployments.
-- Registration **auto-provisions** a `PLAYER` user + a linked `Player` profile;
-  the first users can be promoted (an admin manages roles).
+- **Multi-tenant:** each signup gets its own workspace (Organization) and
+  becomes its `ORGANIZER`, so they can run their own tournaments in isolation.
+  A platform `ADMIN` (created via `create:admin`, no org) sees across all
+  workspaces. Isolation is enforced server-side: list queries are org-filtered
+  and every get/mutate-by-id checks ownership (see `src/lib/auth/tenancy.ts`;
+  covered by `tests/integration/tenancy.integration.test.ts`).
 - A single default organization is seeded; multi-org is schema-ready but the UI
   is single-tenant for now.
 - Bracket generation is single-elimination; group→knockout progression is
