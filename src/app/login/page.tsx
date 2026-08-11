@@ -46,7 +46,13 @@ function LoginInner() {
       router.push(next);
       router.refresh();
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Something went wrong");
+      // Duplicate email on signup → switch to login, keep the email.
+      if (err instanceof ApiClientError && err.code === "CONFLICT" && mode === "register") {
+        setMode("login");
+        setError("That email is already registered — please log in.");
+      } else {
+        setError(err instanceof ApiClientError ? err.message : "Something went wrong");
+      }
     } finally {
       setLoading(false);
     }

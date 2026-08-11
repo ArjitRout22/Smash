@@ -8,8 +8,10 @@ import { listPlayers, createPlayer } from "@/lib/services/player.service";
 
 export const GET = route(async (req) => {
   const actor = await requirePermission(PERMISSIONS.PLAYER_VIEW);
-  const p = parsePagination(new URL(req.url).searchParams);
-  const { items, total } = await listPlayers(actor, p);
+  const url = new URL(req.url);
+  const p = parsePagination(url.searchParams);
+  const scope = url.searchParams.get("scope") === "all" ? "all" : "mine";
+  const { items, total } = await listPlayers(actor, p, { scope });
   return ok(items, { meta: paginationMeta(total, p.page, p.pageSize) });
 });
 

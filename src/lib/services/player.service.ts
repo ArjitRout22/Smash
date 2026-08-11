@@ -11,10 +11,15 @@ import type { CreatePlayerSchema, UpdatePlayerSchema } from "@/lib/validation/sc
 type CreateInput = z.infer<typeof CreatePlayerSchema>;
 type UpdateInput = z.infer<typeof UpdatePlayerSchema>;
 
-export async function listPlayers(actor: AuthUser, p: Pagination) {
+export async function listPlayers(
+  actor: AuthUser,
+  p: Pagination,
+  opts: { scope?: "mine" | "all" } = {}
+) {
   const where = {
     deletedAt: null,
-    ...orgFilter(actor),
+    // "all" = global player directory (view-only); default = your workspace.
+    ...(opts.scope === "all" ? {} : orgFilter(actor)),
     ...(p.search
       ? {
           OR: [
@@ -36,13 +41,18 @@ export async function listPlayers(actor: AuthUser, p: Pagination) {
   return { items, total };
 }
 
-export async function getPlayer(actor: AuthUser, id: string) {
+/**
+ * Player profiles are part of the global directory — any signed-in user can
+ * VIEW any player + their stats/history (a competitive record). Editing stays
+ * workspace-scoped (see updatePlayer). The `actor` is kept for signature
+ * symmetry / future per-field privacy, but no org check is applied to viewing.
+ */
+export async function getPlayer(_actor: AuthUser, id: string) {
   const player = await prisma.player.findFirst({
     where: { id, deletedAt: null },
     include: { ranking: true },
   });
   if (!player) throw Errors.notFound("Player");
-  assertOrgAccess(actor, player.organizationId);
   return player;
 }
 

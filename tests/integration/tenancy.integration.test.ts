@@ -8,7 +8,7 @@ import {
   getTournament,
   listTournaments,
 } from "@/lib/services/tournament.service";
-import { createPlayer, getPlayer } from "@/lib/services/player.service";
+import { createPlayer, getPlayer, listPlayers } from "@/lib/services/player.service";
 
 /**
  * Multi-tenant isolation: a user in workspace A must never be able to see or
@@ -75,15 +75,18 @@ d("multi-tenant isolation", () => {
     await expect(getTournament(bob, aliceTournamentId)).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
-  it("another workspace CANNOT read the player by id", async () => {
-    await expect(getPlayer(bob, alicePlayerId)).rejects.toMatchObject({ code: "FORBIDDEN" });
+  it("player profiles ARE public (directory) — another workspace can view them", async () => {
+    await expect(getPlayer(bob, alicePlayerId)).resolves.toMatchObject({ fullName: "Alice Player" });
   });
 
-  it("list queries never surface another workspace's data", async () => {
-    const bobList = await listTournaments(bob, PAGE, {});
-    expect(bobList.items.find((t) => t.id === aliceTournamentId)).toBeUndefined();
+  it("tournament list is still workspace-scoped by default; directory shows all players", async () => {
+    const bobTournaments = await listTournaments(bob, PAGE, {});
+    expect(bobTournaments.items.find((t) => t.id === aliceTournamentId)).toBeUndefined();
 
-    const aliceList = await listTournaments(alice, PAGE, {});
-    expect(aliceList.items.find((t) => t.id === aliceTournamentId)).toBeDefined();
+    const bobMine = await listPlayers(bob, PAGE, { scope: "mine" });
+    expect(bobMine.items.find((p) => p.id === alicePlayerId)).toBeUndefined();
+
+    const bobAll = await listPlayers(bob, PAGE, { scope: "all" });
+    expect(bobAll.items.find((p) => p.id === alicePlayerId)).toBeDefined();
   });
 });

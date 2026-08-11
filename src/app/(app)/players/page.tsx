@@ -54,11 +54,12 @@ export default function PlayersPage() {
 
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [scope, setScope] = useState<"mine" | "all">("mine");
   // Open the create modal when arriving via ?new=1 (derived, not an effect).
   const [modalOpen, setModalOpen] = useState(() => params.get("new") === "1");
 
   const { data, error, isLoading, mutate } = useSWR<{ data: Player[]; meta?: Meta }>(
-    `/api/players?page=${page}&pageSize=20&search=${encodeURIComponent(search)}`,
+    `/api/players?page=${page}&pageSize=20&scope=${scope}&search=${encodeURIComponent(search)}`,
     swrFetcherWithMeta
   );
 
@@ -69,15 +70,27 @@ export default function PlayersPage() {
     <div>
       <PageHeader
         title="Players"
-        subtitle="Everyone registered across your club."
+        subtitle={scope === "mine" ? "Players in your workspace." : "Everyone across Smash — view any player's profile."}
         actions={
-          canManage ? (
+          canManage && scope === "mine" ? (
             <Button size="sm" onClick={() => setModalOpen(true)}>
               <Plus className="h-4 w-4" /> New player
             </Button>
           ) : undefined
         }
       />
+
+      <div className="mb-4 inline-flex rounded-lg bg-surface-2 p-1 text-sm font-medium">
+        {(["mine", "all"] as const).map((s) => (
+          <button
+            key={s}
+            onClick={() => { setScope(s); setPage(1); }}
+            className={`rounded-md px-3 py-1.5 transition ${scope === s ? "bg-surface text-foreground shadow-sm" : "text-muted"}`}
+          >
+            {s === "mine" ? "My workspace" : "All players"}
+          </button>
+        ))}
+      </div>
 
       <div className="mb-4 relative max-w-sm">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
