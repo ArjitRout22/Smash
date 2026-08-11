@@ -4,11 +4,19 @@ import { useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
 import { User } from "lucide-react";
-import { swrFetcher } from "@/lib/client/api";
+import { api, ApiClientError, swrFetcher } from "@/lib/client/api";
 import { PageHeader, EmptyState, CardGridSkeleton } from "@/components/ui/states";
-import { Button, Card, CardHeader, Badge, Spinner } from "@/components/ui/primitives";
+import { Button, Card, CardHeader, Badge, Select, Spinner } from "@/components/ui/primitives";
+import { useToast } from "@/components/ui/Toast";
 import { useAuth } from "@/components/AuthProvider";
 import { titleCase, pct } from "@/lib/client/format";
+
+const SKILL_OPTIONS = [
+  { value: "", label: "Not set" },
+  { value: "beginner", label: "Beginner" },
+  { value: "intermediate", label: "Intermediate" },
+  { value: "pro", label: "Pro" },
+];
 
 type Statistics = {
   playerId: string;
@@ -31,6 +39,10 @@ export default function ProfilePage() {
   const playerId = user?.playerId ?? null;
   const { data: stats, isLoading: statsLoading } = useSWR<Statistics>(
     playerId ? `/api/players/${playerId}/statistics` : null,
+    swrFetcher
+  );
+  const { data: player, mutate: mutatePlayer } = useSWR<{ skillLevel: string | null }>(
+    playerId ? `/api/players/${playerId}` : null,
     swrFetcher
   );
 
@@ -81,6 +93,12 @@ export default function ProfilePage() {
         </dl>
       </Card>
 
+      {playerId && (
+        <div className="mt-6">
+          <SkillLevelCard currentLevel={player?.skillLevel ?? null} onSaved={() => mutatePlayer()} />
+        </div>
+      )}
+
       {playerId ? (
         <div className="mt-6">
           <div className="mb-3 flex items-center justify-between">
@@ -114,6 +132,58 @@ export default function ProfilePage() {
         </div>
       )}
     </div>
+  );
+}
+
+function SkillLevelCard({ currentLevel, onSaved }: { currentLevel: string | null; onSaved: () => void }) {
+  const toast = useToast();
+  const [level, setLevel] = useState<string>(currentLevel ?? "");
+  const [saving, setSaving] = useState(false);
+  // Keep the select in sync when the fetched value first arrives.
+  const [synced, setSynced] = useState(currentLevel ?? "");
+  if ((currentLevel ?? "") !== synced) {
+    setSynced(currentLevel ?? "");
+    setLevel(currentLevel ?? "");
+  }
+  const dirty = level !== (currentLevel ?? "");
+
+  async function save() {
+    setSaving(true);
+    try {
+      await api.put("/api/me/player", { skillLevel: level === "" ? null : level });
+      toast.success("Skill level updated");
+      onSaved();
+    } catch (err) {
+      toast.error(err instanceof ApiClientError ? err.message : "Could not update");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card className="overflow-hidden">
+      <CardHeader title="Playing profile" subtitle="Set your own standard so others know your level." />
+      <div className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-muted">Skill level</span>
+          {currentLevel ? (
+            <Badge color={currentLevel === "pro" ? "green" : currentLevel === "intermediate" ? "blue" : "slate"}>
+              {titleCase(currentLevel)}
+            </Badge>
+          ) : (
+            <span className="text-sm text-muted">Not set</span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <Select value={level} onChange={(e) => setLevel(e.target.value)} className="w-44">
+            {SKILL_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </Select>
+          <Button size="sm" onClick={save} loading={saving} disabled={!dirty}>Save</Button>
+        </div>
+      </div>
+    </Card>
   );
 }
 

@@ -6,7 +6,7 @@ import { skipTake, type Pagination } from "@/lib/api/pagination";
 import { winPercentage } from "@/lib/engines/leaderboard";
 import type { AuthUser } from "@/lib/auth/authorize";
 import { orgFilter, assertOrgAccess, ownOrgId } from "@/lib/auth/tenancy";
-import type { CreatePlayerSchema, UpdatePlayerSchema } from "@/lib/validation/schemas";
+import type { CreatePlayerSchema, UpdatePlayerSchema, UpdateOwnPlayerInput } from "@/lib/validation/schemas";
 
 type CreateInput = z.infer<typeof CreatePlayerSchema>;
 type UpdateInput = z.infer<typeof UpdatePlayerSchema>;
@@ -64,6 +64,7 @@ export async function createPlayer(input: CreateInput, actor: AuthUser) {
       phone: input.phone,
       photoUrl: input.photoUrl,
       gender: input.gender,
+      skillLevel: input.skillLevel,
       dateOfBirth: input.dateOfBirth,
       city: input.city,
       organizationId: ownOrgId(actor),
@@ -85,11 +86,34 @@ export async function updatePlayer(id: string, input: UpdateInput, actor: AuthUs
       phone: input.phone ?? undefined,
       photoUrl: input.photoUrl ?? undefined,
       gender: input.gender ?? undefined,
+      skillLevel: input.skillLevel ?? undefined,
       dateOfBirth: input.dateOfBirth ?? undefined,
       city: input.city ?? undefined,
     },
   });
   await audit({ actorUserId: actor.id, action: "player.updated", entityType: "Player", entityId: id, previousValue: existing, newValue: updated });
+  return updated;
+}
+
+/**
+ * Self-service edit of the CURRENT user's own linked player profile — no
+ * PLAYER_MANAGE permission required (any signed-in user can set their own
+ * display name, city, and self-declared skill level). `null` clears a field.
+ */
+export async function updateOwnPlayer(actor: AuthUser, input: UpdateOwnPlayerInput) {
+  if (!actor.playerId) {
+    throw Errors.validation("Your account isn't linked to a player profile.");
+  }
+  const updated = await prisma.player.update({
+    where: { id: actor.playerId },
+    data: {
+      displayName: input.displayName ?? undefined,
+      city: input.city === undefined ? undefined : input.city,
+      skillLevel: input.skillLevel === undefined ? undefined : input.skillLevel,
+    },
+    include: { ranking: true },
+  });
+  await audit({ actorUserId: actor.id, action: "player.self_updated", entityType: "Player", entityId: actor.playerId, newValue: { skillLevel: updated.skillLevel, city: updated.city, displayName: updated.displayName } });
   return updated;
 }
 

@@ -6,13 +6,14 @@ import useSWR from "swr";
 import { swrFetcher, swrFetcherWithMeta } from "@/lib/client/api";
 import { PageHeader, ErrorState, ListSkeleton, CardGridSkeleton } from "@/components/ui/states";
 import { Card, CardHeader, Badge, statusColor } from "@/components/ui/primitives";
-import { formatDate, pct } from "@/lib/client/format";
+import { formatDate, pct, titleCase } from "@/lib/client/format";
 
 type Player = {
   id: string;
   fullName: string;
   displayName: string;
   city?: string;
+  skillLevel?: string | null;
 };
 
 type Statistics = {
@@ -91,6 +92,13 @@ export default function PlayerDetailPage() {
         title={playerLoading ? "Loading…" : player?.displayName ?? "Player"}
         subtitle={
           player ? [player.fullName, player.city].filter(Boolean).join(" · ") || undefined : undefined
+        }
+        actions={
+          player?.skillLevel ? (
+            <Badge color={player.skillLevel === "pro" ? "green" : player.skillLevel === "intermediate" ? "blue" : "slate"}>
+              {titleCase(player.skillLevel)}
+            </Badge>
+          ) : undefined
         }
       />
 

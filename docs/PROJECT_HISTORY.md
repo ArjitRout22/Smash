@@ -106,6 +106,13 @@ Tailwind CSS v4 · Vitest · Playwright.
   **Close** action that finalizes a completed result — a new `Match.closedAt`
   locks the score so nobody can change it, with **Reopen** to correct. Scoring
   and edits are rejected server-side while a match is closed.
+- **Self-declared skill level** (`Player.skillLevel` = beginner/intermediate/pro):
+  players set their own on the profile via a new `PUT /api/me/player`
+  self-service endpoint (no PLAYER_MANAGE needed); shown as a badge on the public
+  player profile.
+- **Dashboard "join public tournaments" CTA:** a card surfacing open public
+  tournaments with an inline *Request to join* (reusing the request→accept flow),
+  so anyone can discover + join from the dashboard.
 
 ---
 

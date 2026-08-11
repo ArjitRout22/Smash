@@ -163,6 +163,7 @@ model Player {
   phone          String?
   photoUrl       String?
   gender         String? // male | female | other
+  skillLevel     String? // beginner | intermediate | pro (self-declared)
   dateOfBirth    DateTime?
   city           String?
   createdAt      DateTime  @default(now())

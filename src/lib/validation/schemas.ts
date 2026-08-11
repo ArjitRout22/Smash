@@ -7,6 +7,7 @@ import {
   MATCH_STATUSES,
   STAGE_TYPES,
   GENDERS,
+  SKILL_LEVELS,
   BEST_OF_OPTIONS,
 } from "@/lib/domain/constants";
 import { PointsConfigSchema } from "@/lib/engines/points";
@@ -24,10 +25,19 @@ export const CreatePlayerSchema = z.object({
   phone: z.string().trim().max(20).optional(),
   photoUrl: z.string().url().max(500).optional(),
   gender: z.enum(GENDERS).optional(),
+  skillLevel: z.enum(SKILL_LEVELS).optional(),
   dateOfBirth: isoDate.optional(),
   city: z.string().trim().max(120).optional(),
 });
 export const UpdatePlayerSchema = CreatePlayerSchema.partial();
+
+// What a user may edit on THEIR OWN linked player profile (self-service).
+export const UpdateOwnPlayerSchema = z.object({
+  displayName: z.string().trim().min(1).max(60).optional(),
+  city: z.string().trim().max(120).nullable().optional(),
+  skillLevel: z.enum(SKILL_LEVELS).nullable().optional(),
+});
+export type UpdateOwnPlayerInput = z.infer<typeof UpdateOwnPlayerSchema>;
 
 // --- Tournaments ------------------------------------------------------------
 export const CreateTournamentSchema = z

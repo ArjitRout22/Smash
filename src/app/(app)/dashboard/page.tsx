@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useState } from "react";
 import useSWR from "swr";
-import { Trophy, Users, UsersRound, Activity, Plus, Mail, Zap } from "lucide-react";
-import { api, ApiClientError, swrFetcher } from "@/lib/client/api";
+import { Trophy, Users, UsersRound, Activity, Plus, Mail, Zap, Compass, MapPin } from "lucide-react";
+import { api, ApiClientError, swrFetcher, swrFetcherWithMeta } from "@/lib/client/api";
 import { PageHeader, CardGridSkeleton, ErrorState, EmptyState } from "@/components/ui/states";
 import { Card, CardHeader, Badge, statusColor, Button } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/Toast";
@@ -61,6 +61,7 @@ export default function DashboardPage() {
 
       <InvitationsCard />
       <ChallengesCard />
+      <DiscoverCard />
 
       {isLoading && <CardGridSkeleton />}
       {error && <ErrorState onRetry={() => mutate()} />}
@@ -159,6 +160,77 @@ function InvitationsCard() {
             <div className="flex shrink-0 gap-2">
               <Button size="sm" onClick={() => respond(inv.tournament.id, "accept")} loading={busy === inv.tournament.id}>Accept</Button>
               <Button size="sm" variant="ghost" onClick={() => respond(inv.tournament.id, "decline")} disabled={busy === inv.tournament.id}>Decline</Button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+type PublicTournamentLite = {
+  id: string;
+  name: string;
+  location: string | null;
+  format: string;
+  status: string;
+  organizer: { name: string | null } | null;
+  organization: { name: string } | null;
+  _count: { tournamentPlayers: number; matches: number };
+};
+
+// Item 1: a join CTA on the dashboard so anyone can find + request to join
+// public tournaments without hunting through Discover first.
+function DiscoverCard() {
+  const toast = useToast();
+  const [requested, setRequested] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState<string | null>(null);
+  const { data } = useSWR<{ data: PublicTournamentLite[] }>(
+    "/api/tournaments/discover?page=1&pageSize=4",
+    swrFetcherWithMeta
+  );
+
+  const tournaments = data?.data ?? [];
+
+  async function join(id: string) {
+    setBusy(id);
+    try {
+      await api.post(`/api/tournaments/${id}/join`);
+      setRequested((s) => new Set(s).add(id));
+      toast.success("Request sent — the organizer will review it");
+    } catch (err) {
+      toast.error(err instanceof ApiClientError ? err.message : "Could not send request");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  if (tournaments.length === 0) return null;
+
+  return (
+    <Card className="mb-6">
+      <CardHeader
+        title={<span className="flex items-center gap-2"><Compass className="h-4 w-4" /> Public tournaments to join</span>}
+        action={<Link href="/discover" className="text-sm text-primary hover:underline">Browse all</Link>}
+      />
+      <div className="divide-y divide-[var(--border)]">
+        {tournaments.map((t) => (
+          <div key={t.id} className="flex flex-col gap-2 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <Link href={`/discover/${t.id}`} className="font-medium hover:underline">{t.name}</Link>
+              <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted">
+                <Badge color="slate">{titleCase(t.format)}</Badge>
+                {t.location && <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" />{t.location}</span>}
+                <span>· {t._count.tournamentPlayers} players</span>
+                <span>· hosted by {t.organization?.name ?? t.organizer?.name ?? "—"}</span>
+              </p>
+            </div>
+            <div className="shrink-0">
+              {requested.has(t.id) ? (
+                <Badge color="green">Requested</Badge>
+              ) : (
+                <Button size="sm" variant="outline" loading={busy === t.id} onClick={() => join(t.id)}>Request to join</Button>
+              )}
             </div>
           </div>
         ))}

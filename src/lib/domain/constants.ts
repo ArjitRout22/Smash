@@ -129,3 +129,7 @@ export type PointTxType = (typeof POINT_TX_TYPES)[number];
 
 export const GENDERS = ["male", "female", "other"] as const;
 export type Gender = (typeof GENDERS)[number];
+
+// Self-declared playing standard. Players can set their own (see /api/me/player).
+export const SKILL_LEVELS = ["beginner", "intermediate", "pro"] as const;
+export type SkillLevel = (typeof SKILL_LEVELS)[number];
