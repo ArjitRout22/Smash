@@ -87,13 +87,13 @@ export async function getDashboard(actor: AuthUser) {
     },
     recentMatches: recentMatchesRaw.map(serializeMatch),
     upcomingMatches: upcomingMatchesRaw.map(serializeMatch),
-    topPlayers: topPlayersRaw.map((r) => ({
+    topPlayers: topPlayersRaw.map((r, i) => ({
       playerId: r.playerId,
       name: r.player.displayName,
       points: r.wins * GLOBAL_POINTS_PER_WIN,
       wins: r.wins,
       losses: r.losses,
-      rank: r.rank,
+      rank: i + 1, // position within this top-N (ranks are computed on-read now)
     })),
     recentActivity,
   };

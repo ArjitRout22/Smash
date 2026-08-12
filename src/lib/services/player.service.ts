@@ -129,19 +129,27 @@ export async function updateOwnPlayer(actor: AuthUser, input: UpdateOwnPlayerInp
 export async function getPlayerStatistics(actor: AuthUser, id: string) {
   const player = await getPlayer(actor, id);
   const r = player.ranking;
+  const wins = r?.wins ?? 0;
+  const hasPlayed = (r?.matchesPlayed ?? 0) > 0;
+  // Global rank computed on-read (we no longer rewrite everyone's rank on each
+  // score). Global points = wins × 10, so rank by wins: 1 + how many players
+  // have more wins.
+  const currentRank = hasPlayed
+    ? (await prisma.playerRanking.count({ where: { wins: { gt: wins } } })) + 1
+    : null;
   return {
     playerId: id,
     displayName: player.displayName,
     matchesPlayed: r?.matchesPlayed ?? 0,
-    wins: r?.wins ?? 0,
+    wins,
     losses: r?.losses ?? 0,
-    winPercentage: r?.winPercentage ?? winPercentage(r?.wins ?? 0, r?.matchesPlayed ?? 0),
+    winPercentage: r?.winPercentage ?? winPercentage(wins, r?.matchesPlayed ?? 0),
     // Headline points mirror the global leaderboard: a flat 10 per win.
-    totalPoints: (r?.wins ?? 0) * GLOBAL_POINTS_PER_WIN,
+    totalPoints: wins * GLOBAL_POINTS_PER_WIN,
     tournamentsPlayed: r?.tournamentsPlayed ?? 0,
     titles: r?.titles ?? 0,
-    currentRank: r?.rank ?? null,
-    bestRank: r?.bestRank ?? null,
+    currentRank,
+    bestRank: r?.bestRank ?? currentRank,
   };
 }
 

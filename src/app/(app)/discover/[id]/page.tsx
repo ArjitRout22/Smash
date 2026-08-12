@@ -27,17 +27,13 @@ export default function PublicTournamentPage() {
   const [requested, setRequested] = useState(false);
 
   const { data, error, isLoading, mutate } = useSWR<TournamentDetail>(`/api/tournaments/${id}`, swrFetcher);
-  // Is the current user already registered/pending here?
-  const { data: players } = useSWR<{ player: { id: string }; status: string }[]>(
-    data?.canManage ? `/api/tournaments/${id}/players` : null,
-    swrFetcher
-  );
 
   if (isLoading) return <ListSkeleton rows={5} />;
   if (error || !data) return <ErrorState message="This tournament isn't available." onRetry={() => mutate()} />;
 
   const isOwner = Boolean(data.canManage);
-  const myStatus = players?.find((p) => p.player.id === user?.playerId)?.status;
+  // The API tells us the viewer's own status directly (works for non-owners).
+  const myStatus = data.viewerStatus ?? undefined;
 
   async function join() {
     setJoining(true);
@@ -45,6 +41,7 @@ export default function PublicTournamentPage() {
       await api.post(`/api/tournaments/${id}/join`);
       setRequested(true);
       toast.success("Join request sent — the organizer will review it.");
+      mutate();
     } catch (err) {
       toast.error(err instanceof ApiClientError ? err.message : "Could not send request");
     } finally {

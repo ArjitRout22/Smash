@@ -9,6 +9,7 @@ export type TournamentDetail = {
   format: string;
   visibility: string;
   canManage?: boolean;
+  viewerStatus?: string | null; // the current user's own join status, if any
   organizer: { id: string; name: string | null; phone: string } | null;
   stages: { id: string; name: string; type: string; order: number; status: string }[];
   _count: { tournamentPlayers: number; teams: number; matches: number; stages: number };

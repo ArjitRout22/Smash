@@ -237,9 +237,14 @@ export async function recomputeGlobalRanks(tx: Tx) {
   }
 }
 
-/** Full recompute after a match result changes. */
+/**
+ * Recompute after a match result changes. Only touches what's bounded by the
+ * tournament (its leaderboard + the handful of players in this match) — global
+ * ranks are NOT rewritten here (that was an O(all-players) write on every score,
+ * the main cause of slow saves). Ranks are computed on-read instead: the global
+ * leaderboard ranks live, and getPlayerStatistics derives currentRank on demand.
+ */
 export async function recomputeAfterMatch(tx: Tx, tournamentId: string, playerIds: string[]) {
   await recomputeTournamentLeaderboard(tx, tournamentId);
   for (const pid of playerIds) await recomputePlayerAggregates(tx, pid);
-  await recomputeGlobalRanks(tx);
 }

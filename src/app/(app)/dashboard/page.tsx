@@ -9,6 +9,7 @@ import { PageHeader, CardGridSkeleton, ErrorState, EmptyState } from "@/componen
 import { Card, CardHeader, Badge, statusColor, Button } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/Toast";
 import { useAuth } from "@/components/AuthProvider";
+import { ShareButton } from "@/components/ShareButton";
 import { PERMS } from "@/lib/client/perms";
 import { formatDateTime, titleCase } from "@/lib/client/format";
 
@@ -55,6 +56,12 @@ export default function DashboardPage() {
                 <Button size="sm" variant="outline"><Plus className="h-4 w-4" /> Add player</Button>
               </Link>
             )}
+            <ShareButton
+              url="https://smashhero.app"
+              title="Smash — Badminton Tournaments & Matches"
+              text="Run badminton tournaments, casual matches and a global leaderboard on Smash."
+              label="Share"
+            />
           </>
         }
       />

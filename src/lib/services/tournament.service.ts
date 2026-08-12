@@ -48,7 +48,17 @@ export async function getTournament(actor: AuthUser, id: string) {
   if (!t) throw Errors.notFound("Tournament");
   await assertCanView(actor, t);
   const canManage = isPlatformAdmin(actor) || t.organizationId === actor.organizationId;
-  return { ...t, canManage };
+  // The viewer's own participation status, so the UI shows Pending/Joined
+  // instead of a stale "Request to join" (works for non-owners too).
+  let viewerStatus: string | null = null;
+  if (actor.playerId) {
+    const part = await prisma.tournamentPlayer.findUnique({
+      where: { tournamentId_playerId: { tournamentId: id, playerId: actor.playerId } },
+      select: { status: true },
+    });
+    viewerStatus = part?.status ?? null;
+  }
+  return { ...t, canManage, viewerStatus };
 }
 
 /** True if the caller may VIEW this tournament (owner, public, or participant). */
