@@ -265,34 +265,43 @@ Tailwind CSS v4 · Vitest · Playwright.
 
 ---
 
-## Current state (as of 2026-08-11)
+## Current state (as of 2026-08-13)
 
 - ✅ Live and working: auth, RBAC, tournaments/players/teams/stages/matches,
   scoring, leaderboards, brackets, password reset, multi-tenant isolation.
+- ✅ **Phase 6 live** (deployed from `main`): profile phone + home location,
+  "View on map" CTAs, casual-match location, match comments (tournament + casual),
+  nearby-venue carousel. Verified on prod after deploy.
+- ✅ **Item-6 clean-slate reset executed on prod** (`scripts/cleanup_reset_stats.sql`):
+  all matches / casual matches / ledger / leaderboards / rankings / comments wiped
+  and throwaway test accounts hard-deleted. Stats start fresh.
 - ✅ CI green on every push; 48 unit + 7 integration tests.
 - ✅ **Custom domain live:** https://smashhero.app (HTTPS; Vercel primary = `www`,
   apex 308-redirects to it).
 - ✅ **Email delivery live:** `smashhero.app` verified in Resend (DKIM/SPF/MX),
   `EMAIL_FROM` = `@smashhero.app`, `APP_URL` set — real password-reset emails
   deliver with links to `smashhero.app` (verified end-to-end).
+- 💰 **Maps/venue search cost nothing:** OpenStreetMap **Nominatim** (free, no
+  key) for place + venue search, and "View on map" opens **Google Maps links**
+  (not the billable Maps/Places API); no embedded tiles. Queried browser-side
+  (distributed IPs) with debounce + OSM attribution — stays within OSM fair-use.
 - 🔜 To revisit: multi-tenant **scenarios** / product refinements.
 
 ## Pending follow-ups
 
+- 🚀 **Pooled DB connection (perf) — PR open (#1, branch
+  `chore/pooled-db-directurl-and-ops-checklist`).** Wires `directUrl =
+  env("DIRECT_DATABASE_URL")` in `schema.prisma`, documents pooled/direct URLs,
+  updates CI. **Before merging:** in Vercel set `DATABASE_URL` → Neon **pooled**
+  endpoint (`-pooler`, `?...&pgbouncer=true&connection_limit=1`) and add
+  `DIRECT_DATABASE_URL` → **direct** endpoint; else the build's `migrate deploy`
+  fails safe. Runbook: `docs/OPS_ROTATE_AND_POOL.md`.
 - 🔐 **Rotate secrets that were shared in chat:** the GitHub PAT (revoke) and the
-  Neon DB password (reset → update Vercel `DATABASE_URL` → redeploy).
-- 🧹 Delete throwaway prod test rows: `delete from "User" where email like
-  'hero-%' or email like 'probe-%' or email like 'deploy-check-%' or email like '%@t.test';`
-- 🚀 **Pooled DB connection (perf + resilience):** point Vercel's `DATABASE_URL`
-  at Neon's **pooled** endpoint (`-pooler` host, `?...&pgbouncer=true&connection_limit=1`)
-  and add a separate `DIRECT_DATABASE_URL` (direct endpoint) with `directUrl` in
-  `schema.prisma` for migrations. Biggest remaining lever for page-load speed and
-  the safety net if score-save 500s persist (connection-pool exhaustion). Kept
-  out of the Phase-5 fix so it can't break auto-deploy — set the two Vercel vars
-  first, then wire `directUrl`.
+  Neon DB password (reset → update Vercel URLs → redeploy). Steps in
+  `docs/OPS_ROTATE_AND_POOL.md` (bundled with PR #1).
 - 💡 Later: Redis-backed rate limiter for scale (the current limiter is in-memory
   per serverless instance); casual head-to-head record on profiles; "Challenge"
-  button on player-directory profiles.
+  button on player-directory profiles; client-side caching of OSM venue searches.
 
 ---
 

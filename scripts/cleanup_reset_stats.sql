@@ -10,13 +10,20 @@
 -- Real users, real players and real tournaments are preserved (their stats simply
 -- reset to zero and rebuild as new scores are entered).
 --
--- HOW TO RUN (Neon SQL editor or psql):
---   Run the whole block. It executes inside ONE transaction and prints NOTICE
---   counts before and after. Review them, then run  COMMIT;  to apply — or
---   ROLLBACK;  to abort with nothing changed.
+-- HOW TO RUN — from your LOCAL TERMINAL (not the SQL editor). Quote the URL so
+-- zsh doesn't glob the `?`. Use your real Neon connection string (direct endpoint
+-- preferred). Two steps:
 --
---   zsh users on the CLI: quote the URL —
---     psql "postgresql://…?sslmode=require" -f scripts/cleanup_reset_stats.sql
+--   1) DRY RUN (safe, changes nothing): the file's final COMMIT is commented out,
+--      so `-f` reaches EOF with the transaction still open and psql AUTO-ROLLS-BACK
+--      on disconnect. You still see the before/after NOTICE counts:
+--        psql "postgresql://…@ep-….aws.neon.tech/db?sslmode=require" -f scripts/cleanup_reset_stats.sql
+--
+--   2) APPLY (persists): append a COMMIT to the piped input:
+--        { cat scripts/cleanup_reset_stats.sql; echo "COMMIT;"; } | psql "postgresql://…?sslmode=require"
+--
+--   In the Neon web SQL editor instead: paste the FILE CONTENTS (not the psql
+--   line), review the NOTICE counts, then run  COMMIT;  (or  ROLLBACK;) yourself.
 -- -----------------------------------------------------------------------------
 
 BEGIN;
