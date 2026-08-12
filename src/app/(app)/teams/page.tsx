@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import useSWR from "swr";
-import { Plus, Trash2, UsersRound } from "lucide-react";
+import { Plus, Trash2, UsersRound, Search } from "lucide-react";
 import { api, ApiClientError, swrFetcher, swrFetcherWithMeta } from "@/lib/client/api";
 import { PageHeader, EmptyState, ErrorState, CardGridSkeleton } from "@/components/ui/states";
 import { Button, Card, Badge, Input, Select, Field } from "@/components/ui/primitives";
@@ -16,7 +16,7 @@ type Team = {
   name: string;
   teamType: string;
   tournament: { id: string; name: string } | null;
-  teamPlayers: { player: { id: string; displayName: string } }[];
+  teamPlayers: { player: { id: string; displayName: string }; status: string }[];
 };
 
 type PlayerOption = { id: string; displayName: string; fullName: string };
@@ -99,8 +99,9 @@ export default function TeamsPage() {
               </div>
               <div className="mt-3 space-y-1 text-sm">
                 {t.teamPlayers.map((tp) => (
-                  <p key={tp.player.id} className="text-foreground">
+                  <p key={tp.player.id} className="flex items-center gap-2 text-foreground">
                     {tp.player.displayName}
+                    {tp.status === "invited" && <Badge color="amber">Pending</Badge>}
                   </p>
                 ))}
               </div>
@@ -139,6 +140,56 @@ export default function TeamsPage() {
   );
 }
 
+// Searchable player picker over the WHOLE directory (so you can add players
+// from other workspaces — they'll be invited).
+function TeamPlayerPicker({
+  label,
+  selected,
+  onSelect,
+  excludeIds,
+  error,
+}: {
+  label: string;
+  selected: PlayerOption | null;
+  onSelect: (p: PlayerOption | null) => void;
+  excludeIds: string[];
+  error?: string;
+}) {
+  const [search, setSearch] = useState("");
+  const { data } = useSWR<{ data: PlayerOption[] }>(
+    `/api/players?scope=all&pageSize=15${search.trim() ? `&search=${encodeURIComponent(search.trim())}` : ""}`,
+    swrFetcherWithMeta
+  );
+  const results = (data?.data ?? []).filter((p) => !excludeIds.includes(p.id));
+
+  return (
+    <Field label={label} required error={error}>
+      {selected ? (
+        <div className="flex items-center justify-between rounded-lg border border-[var(--border)] px-3 py-2 text-sm">
+          <span><span className="font-medium">{selected.displayName}</span><span className="text-muted"> · {selected.fullName}</span></span>
+          <button type="button" className="text-xs font-medium text-primary hover:underline" onClick={() => onSelect(null)}>Change</button>
+        </div>
+      ) : (
+        <>
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+            <Input className="pl-9" placeholder="Search all players…" value={search} onChange={(e) => setSearch(e.target.value)} />
+          </div>
+          <div className="mt-2 max-h-40 overflow-y-auto rounded-lg border border-[var(--border)]">
+            {results.length === 0 && <p className="px-3 py-3 text-sm text-muted">No players found.</p>}
+            {results.map((p) => (
+              <button key={p.id} type="button" onClick={() => onSelect(p)} className="flex w-full items-center px-3 py-2 text-left text-sm hover:bg-surface-2">
+                <span className="font-medium">{p.displayName}</span>
+                <span className="text-muted"> · {p.fullName}</span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </Field>
+  );
+}
+
 function CreateTeamModal({
   open,
   onClose,
@@ -152,42 +203,28 @@ function CreateTeamModal({
 }) {
   const [name, setName] = useState("");
   const [teamType, setTeamType] = useState("doubles");
-  const [player1, setPlayer1] = useState("");
-  const [player2, setPlayer2] = useState("");
+  const [p1, setP1] = useState<PlayerOption | null>(null);
+  const [p2, setP2] = useState<PlayerOption | null>(null);
   const [playerError, setPlayerError] = useState<string | undefined>();
   const [submitting, setSubmitting] = useState(false);
-
-  const { data } = useSWR<{ data: PlayerOption[] }>(
-    open ? "/api/players?pageSize=100" : null,
-    swrFetcherWithMeta
-  );
-  const players = data?.data ?? [];
 
   function reset() {
     setName("");
     setTeamType("doubles");
-    setPlayer1("");
-    setPlayer2("");
+    setP1(null);
+    setP2(null);
     setPlayerError(undefined);
   }
 
   async function submit() {
-    if (!player1 || !player2) {
+    if (!p1 || !p2) {
       setPlayerError("Select two players.");
-      return;
-    }
-    if (player1 === player2) {
-      setPlayerError("Players must be distinct.");
       return;
     }
     setPlayerError(undefined);
     setSubmitting(true);
     try {
-      await api.post("/api/teams", {
-        name: name.trim(),
-        teamType,
-        playerIds: [player1, player2],
-      });
+      await api.post("/api/teams", { name: name.trim(), teamType, playerIds: [p1.id, p2.id] });
       reset();
       onCreated();
     } catch (err) {
@@ -197,6 +234,8 @@ function CreateTeamModal({
     }
   }
 
+  const picked = [p1, p2].filter(Boolean).map((p) => p!.id);
+
   return (
     <Modal
       open={open}
@@ -204,12 +243,8 @@ function CreateTeamModal({
       title="New team"
       footer={
         <>
-          <Button variant="ghost" onClick={onClose} disabled={submitting}>
-            Cancel
-          </Button>
-          <Button onClick={submit} loading={submitting}>
-            Create team
-          </Button>
+          <Button variant="ghost" onClick={onClose} disabled={submitting}>Cancel</Button>
+          <Button onClick={submit} loading={submitting}>Create team</Button>
         </>
       }
     >
@@ -223,26 +258,11 @@ function CreateTeamModal({
             <option value="mixed">Mixed</option>
           </Select>
         </Field>
-        <Field label="Player 1" htmlFor="player1" required error={playerError}>
-          <Select id="player1" value={player1} onChange={(e) => setPlayer1(e.target.value)}>
-            <option value="">Select a player…</option>
-            {players.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.displayName} ({p.fullName})
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="Player 2" htmlFor="player2" required>
-          <Select id="player2" value={player2} onChange={(e) => setPlayer2(e.target.value)}>
-            <option value="">Select a player…</option>
-            {players.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.displayName} ({p.fullName})
-              </option>
-            ))}
-          </Select>
-        </Field>
+        <TeamPlayerPicker label="Player 1" selected={p1} onSelect={setP1} excludeIds={picked} error={playerError} />
+        <TeamPlayerPicker label="Player 2" selected={p2} onSelect={setP2} excludeIds={picked} />
+        <p className="text-xs text-muted">
+          Players from another workspace will get an invite and show as “Pending” until they accept.
+        </p>
       </div>
     </Modal>
   );

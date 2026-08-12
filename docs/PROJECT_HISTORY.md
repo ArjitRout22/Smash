@@ -128,6 +128,12 @@ Tailwind CSS v4 · Vitest · Playwright.
 - **Admin cleanup:** platform-admin-only `/admin` screen to review accounts and
   **soft-delete** test users (hides them from directory + leaderboard, revokes
   login; reversible), plus `admin.service`.
+- **Team invites (cross-workspace):** replaced the confusing "all players must
+  belong to your workspace" block on standalone teams with an **invite → accept**
+  flow. Your own workspace's players join as `active`; a player from another
+  workspace (who has an account) is `invited` and appears as **Pending** until
+  they accept from a dashboard card. Tournament teams still use registration.
+  `TeamPlayer.status`; a team with a pending member can't be used in a match.
 - **Match lifecycle + close/lock** (tournament matches): explicit **Start** /
   **Cancel** controls (status was only changing implicitly via scoring), and a
   **Close** action that finalizes a completed result — a new `Match.closedAt`

@@ -163,6 +163,9 @@ async function validateSides(opts: {
       if (!team) throw Errors.invalidMatchConfig("Team not found");
       if (team.tournamentId && team.tournamentId !== tournamentId)
         throw Errors.invalidMatchConfig("Team belongs to a different tournament");
+      const pending = await prisma.teamPlayer.count({ where: { teamId: s.teamId, status: "invited" } });
+      if (pending > 0)
+        throw Errors.invalidMatchConfig("This team has a pending invite — all members must accept before it can play");
     }
   }
 }

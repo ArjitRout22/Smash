@@ -9,47 +9,76 @@ import type { CreateTeamSchema, UpdateTeamSchema } from "@/lib/validation/schema
 type CreateInput = z.infer<typeof CreateTeamSchema>;
 type UpdateInput = z.infer<typeof UpdateTeamSchema>;
 
-async function validatePlayers(playerIds: string[], actor: AuthUser, tournamentId?: string | null) {
+type MemberStatus = "active" | "invited";
+
+/**
+ * Decide each player's membership status for a team, or throw:
+ *  - tournament team: players must be REGISTERED in the tournament (all active).
+ *  - standalone team: your own workspace's players join as `active`; players from
+ *    OTHER workspaces must have a login account and are `invited` (they accept to
+ *    join). This replaces the old "must belong to your workspace" hard block.
+ * Returns playerId -> status.
+ */
+async function classifyTeamPlayers(
+  playerIds: string[],
+  actor: AuthUser,
+  tournamentId?: string | null
+): Promise<Map<string, MemberStatus>> {
   const unique = new Set(playerIds);
   if (unique.size !== playerIds.length) {
     throw Errors.validation("A team cannot contain the same player twice");
   }
   const found = await prisma.player.findMany({
     where: { id: { in: playerIds }, deletedAt: null },
-    select: { id: true, organizationId: true },
+    include: { user: { select: { id: true, isActive: true, deletedAt: true } } },
   });
   if (found.length !== playerIds.length) {
     throw Errors.validation("One or more players do not exist");
   }
 
+  const status = new Map<string, MemberStatus>();
+
   if (tournamentId) {
-    // A tournament team draws from that tournament's REGISTERED players, who may
-    // belong to other workspaces if they joined a public tournament. So the
-    // requirement is tournament registration, not workspace membership.
     const registered = await prisma.tournamentPlayer.findMany({
       where: { tournamentId, playerId: { in: playerIds }, status: "registered" },
       select: { playerId: true },
     });
     const regSet = new Set(registered.map((r) => r.playerId));
-    if (playerIds.some((id) => !regSet.has(id))) {
-      throw Errors.validation("All players must be registered in this tournament");
+    for (const p of found) {
+      if (!regSet.has(p.id)) throw Errors.validation("All players must be registered in this tournament");
+      status.set(p.id, "active");
     }
-    return;
+    return status;
   }
 
-  // A standalone (non-tournament) team stays workspace-scoped.
-  if (!isPlatformAdmin(actor) && found.some((p) => p.organizationId !== actor.organizationId)) {
-    throw Errors.validation("All players must belong to your workspace");
+  // Standalone team.
+  const admin = isPlatformAdmin(actor);
+  for (const p of found) {
+    if (admin || p.organizationId === actor.organizationId) {
+      status.set(p.id, "active"); // your own workspace's player — no invite needed
+    } else if (p.user && p.user.isActive && !p.user.deletedAt) {
+      status.set(p.id, "invited"); // another workspace's player with an account → invite
+    } else {
+      throw Errors.validation(
+        `${p.displayName} is in another workspace and has no account, so they can't be invited to a team.`
+      );
+    }
   }
+  return status;
 }
+
+const teamInclude = {
+  teamPlayers: {
+    include: { player: { select: { id: true, displayName: true } } },
+    orderBy: { position: "asc" as const },
+  },
+  tournament: { select: { id: true, name: true } },
+} as const;
 
 export async function listTeams(actor: AuthUser, filters: { tournamentId?: string }) {
   return prisma.team.findMany({
     where: { deletedAt: null, ...orgFilter(actor), ...(filters.tournamentId ? { tournamentId: filters.tournamentId } : {}) },
-    include: {
-      teamPlayers: { include: { player: { select: { id: true, displayName: true } } } },
-      tournament: { select: { id: true, name: true } },
-    },
+    include: teamInclude,
     orderBy: { createdAt: "desc" },
   });
 }
@@ -70,7 +99,7 @@ export async function createTeam(input: CreateInput, actor: AuthUser) {
     if (!t) throw Errors.validation("Tournament not found");
     assertOrgAccess(actor, t.organizationId);
   }
-  await validatePlayers(input.playerIds, actor, input.tournamentId);
+  const status = await classifyTeamPlayers(input.playerIds, actor, input.tournamentId);
   const team = await prisma.team.create({
     data: {
       name: input.name,
@@ -78,12 +107,12 @@ export async function createTeam(input: CreateInput, actor: AuthUser) {
       tournamentId: input.tournamentId,
       organizationId: ownOrgId(actor),
       teamPlayers: {
-        create: input.playerIds.map((playerId, i) => ({ playerId, position: i + 1 })),
+        create: input.playerIds.map((playerId, i) => ({ playerId, position: i + 1, status: status.get(playerId)! })),
       },
     },
-    include: { teamPlayers: true },
+    include: teamInclude,
   });
-  await audit({ actorUserId: actor.id, action: "team.created", entityType: "Team", entityId: team.id, newValue: team });
+  await audit({ actorUserId: actor.id, action: "team.created", entityType: "Team", entityId: team.id, newValue: { name: team.name } });
   return team;
 }
 
@@ -91,22 +120,22 @@ export async function updateTeam(id: string, input: UpdateInput, actor: AuthUser
   const existing = await prisma.team.findFirst({ where: { id, deletedAt: null }, include: { teamPlayers: true } });
   if (!existing) throw Errors.notFound("Team");
   assertOrgAccess(actor, existing.organizationId);
-  if (input.playerIds) await validatePlayers(input.playerIds, actor, existing.tournamentId);
+  const status = input.playerIds ? await classifyTeamPlayers(input.playerIds, actor, existing.tournamentId) : null;
 
   const updated = await prisma.$transaction(async (tx) => {
-    if (input.playerIds) {
+    if (input.playerIds && status) {
       await tx.teamPlayer.deleteMany({ where: { teamId: id } });
       await tx.teamPlayer.createMany({
-        data: input.playerIds.map((playerId, i) => ({ teamId: id, playerId, position: i + 1 })),
+        data: input.playerIds.map((playerId, i) => ({ teamId: id, playerId, position: i + 1, status: status.get(playerId)! })),
       });
     }
     return tx.team.update({
       where: { id },
       data: { name: input.name ?? undefined, teamType: input.teamType ?? undefined },
-      include: { teamPlayers: { include: { player: { select: { id: true, displayName: true } } } } },
+      include: teamInclude,
     });
   });
-  await audit({ actorUserId: actor.id, action: "team.updated", entityType: "Team", entityId: id, previousValue: existing, newValue: updated });
+  await audit({ actorUserId: actor.id, action: "team.updated", entityType: "Team", entityId: id, previousValue: { name: existing.name }, newValue: { name: updated.name } });
   return updated;
 }
 
@@ -120,4 +149,44 @@ export async function deleteTeam(id: string, actor: AuthUser) {
   }
   await prisma.team.update({ where: { id }, data: { deletedAt: new Date() } });
   await audit({ actorUserId: actor.id, action: "team.deleted", entityType: "Team", entityId: id, previousValue: existing });
+}
+
+// --- Team invites (a cross-workspace player joining a standalone team) --------
+
+/** The current user's pending team invitations. */
+export async function listMyTeamInvites(actor: AuthUser) {
+  if (!actor.playerId) return [];
+  const rows = await prisma.teamPlayer.findMany({
+    where: { playerId: actor.playerId, status: "invited", team: { deletedAt: null } },
+    include: {
+      team: {
+        include: {
+          teamPlayers: { include: { player: { select: { id: true, displayName: true } } } },
+          organization: { select: { name: true } },
+        },
+      },
+    },
+    orderBy: { id: "desc" },
+  });
+  return rows.map((r) => ({
+    teamId: r.teamId,
+    teamName: r.team.name,
+    teamType: r.team.teamType,
+    workspace: r.team.organization?.name ?? null,
+    members: r.team.teamPlayers.map((tp) => tp.player.displayName),
+  }));
+}
+
+/** Accept or decline a team invitation. */
+export async function respondToTeamInvite(actor: AuthUser, teamId: string, action: "accept" | "decline") {
+  if (!actor.playerId) throw Errors.validation("Your account isn't linked to a player profile.");
+  const tp = await prisma.teamPlayer.findFirst({ where: { teamId, playerId: actor.playerId, status: "invited" } });
+  if (!tp) throw Errors.notFound("Team invitation");
+  if (action === "accept") {
+    await prisma.teamPlayer.update({ where: { id: tp.id }, data: { status: "active" } });
+  } else {
+    await prisma.teamPlayer.delete({ where: { id: tp.id } });
+  }
+  await audit({ actorUserId: actor.id, action: `team.invite.${action}ed`, entityType: "Team", entityId: teamId });
+  return { status: action === "accept" ? "active" : "declined" };
 }

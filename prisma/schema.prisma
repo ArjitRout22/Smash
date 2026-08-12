@@ -306,6 +306,9 @@ model TeamPlayer {
   teamId   String
   playerId String
   position Int? // 1 or 2
+  // active   — a confirmed member (own-workspace players, or an accepted invite)
+  // invited  — a cross-workspace player who must accept before joining
+  status   String @default("active")
 
   team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
   player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)

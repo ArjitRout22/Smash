@@ -60,6 +60,7 @@ export default function DashboardPage() {
       />
 
       <InvitationsCard />
+      <TeamInvitesCard />
       <ChallengesCard />
       <DiscoverCard />
 
@@ -237,6 +238,58 @@ function DiscoverCard() {
               ) : (
                 <Button size="sm" variant="outline" loading={busy === t.id} onClick={() => join(t.id)}>Request to join</Button>
               )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+type TeamInvite = {
+  teamId: string;
+  teamName: string;
+  teamType: string;
+  workspace: string | null;
+  members: string[];
+};
+
+// Pending team invitations (a cross-workspace player invited to a team).
+function TeamInvitesCard() {
+  const toast = useToast();
+  const [busy, setBusy] = useState<string | null>(null);
+  const { data, mutate } = useSWR<TeamInvite[]>("/api/me/team-invites", swrFetcher);
+
+  async function respond(teamId: string, action: "accept" | "decline") {
+    setBusy(teamId);
+    try {
+      await api.post("/api/me/team-invites", { teamId, action });
+      toast.success(action === "accept" ? "Joined the team" : "Invite declined");
+      mutate();
+    } catch (err) {
+      toast.error(err instanceof ApiClientError ? err.message : "Action failed");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  if (!data || data.length === 0) return null;
+
+  return (
+    <Card className="mb-6 border-[var(--primary)]/40">
+      <CardHeader title={<span className="flex items-center gap-2"><UsersRound className="h-4 w-4" /> Team invitations ({data.length})</span>} />
+      <div className="divide-y divide-[var(--border)]">
+        {data.map((inv) => (
+          <div key={inv.teamId} className="flex flex-col gap-2 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-medium">{inv.teamName}</p>
+              <p className="text-xs text-muted">
+                {titleCase(inv.teamType)} · {inv.members.join(" & ")}{inv.workspace ? ` · ${inv.workspace}` : ""}
+              </p>
+            </div>
+            <div className="flex shrink-0 gap-2">
+              <Button size="sm" loading={busy === inv.teamId} onClick={() => respond(inv.teamId, "accept")}>Accept</Button>
+              <Button size="sm" variant="ghost" disabled={busy === inv.teamId} onClick={() => respond(inv.teamId, "decline")}>Decline</Button>
             </div>
           </div>
         ))}
