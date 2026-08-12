@@ -4,6 +4,7 @@ import { Errors } from "@/lib/errors";
 import { audit } from "@/lib/audit";
 import { skipTake, type Pagination } from "@/lib/api/pagination";
 import { winPercentage } from "@/lib/engines/leaderboard";
+import { GLOBAL_POINTS_PER_WIN } from "@/lib/domain/constants";
 import type { AuthUser } from "@/lib/auth/authorize";
 import { orgFilter, assertOrgAccess, ownOrgId } from "@/lib/auth/tenancy";
 import type { CreatePlayerSchema, UpdatePlayerSchema, UpdateOwnPlayerInput } from "@/lib/validation/schemas";
@@ -128,7 +129,8 @@ export async function getPlayerStatistics(actor: AuthUser, id: string) {
     wins: r?.wins ?? 0,
     losses: r?.losses ?? 0,
     winPercentage: r?.winPercentage ?? winPercentage(r?.wins ?? 0, r?.matchesPlayed ?? 0),
-    totalPoints: r?.totalPoints ?? 0,
+    // Headline points mirror the global leaderboard: a flat 10 per win.
+    totalPoints: (r?.wins ?? 0) * GLOBAL_POINTS_PER_WIN,
     tournamentsPlayed: r?.tournamentsPlayed ?? 0,
     titles: r?.titles ?? 0,
     currentRank: r?.rank ?? null,

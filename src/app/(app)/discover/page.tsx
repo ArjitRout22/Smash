@@ -18,6 +18,14 @@ type PublicTournament = {
   organizer: { name: string | null } | null;
   organization: { name: string } | null;
   _count: { tournamentPlayers: number; matches: number };
+  viewerStatus: string | null;
+  isOwnWorkspace: boolean;
+};
+
+const JOIN_BADGE: Record<string, { text: string; color: "green" | "amber" | "blue" }> = {
+  registered: { text: "Joined", color: "green" },
+  requested: { text: "Pending", color: "amber" },
+  invited: { text: "Invited", color: "blue" },
 };
 
 export default function DiscoverPage() {
@@ -50,7 +58,12 @@ export default function DiscoverPage() {
               <Card className="h-full p-5 transition hover:border-[var(--primary)]">
                 <div className="mb-2 flex items-start justify-between gap-2">
                   <h3 className="font-semibold leading-tight">{t.name}</h3>
-                  <Badge color={statusColor(t.status)}>{titleCase(t.status)}</Badge>
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    <Badge color={statusColor(t.status)}>{titleCase(t.status)}</Badge>
+                    {t.viewerStatus && JOIN_BADGE[t.viewerStatus] && (
+                      <Badge color={JOIN_BADGE[t.viewerStatus].color}>{JOIN_BADGE[t.viewerStatus].text}</Badge>
+                    )}
+                  </div>
                 </div>
                 <div className="mb-3 flex flex-wrap gap-2 text-xs text-muted">
                   <Badge color="slate">{titleCase(t.format)}</Badge>

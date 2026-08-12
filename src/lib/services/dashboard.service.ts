@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db/prisma";
 import { serializeMatch } from "@/lib/services/match.service";
+import { GLOBAL_POINTS_PER_WIN } from "@/lib/domain/constants";
 import type { AuthUser } from "@/lib/auth/authorize";
 import { orgFilter, isPlatformAdmin } from "@/lib/auth/tenancy";
 
@@ -60,7 +61,7 @@ export async function getDashboard(actor: AuthUser) {
     }),
     prisma.playerRanking.findMany({
       where: playerRankOrg,
-      orderBy: [{ totalPoints: "desc" }, { wins: "desc" }],
+      orderBy: [{ wins: "desc" }, { winPercentage: "desc" }],
       take: 5,
       include: { player: { select: { id: true, displayName: true } } },
     }),
@@ -89,7 +90,7 @@ export async function getDashboard(actor: AuthUser) {
     topPlayers: topPlayersRaw.map((r) => ({
       playerId: r.playerId,
       name: r.player.displayName,
-      points: r.totalPoints,
+      points: r.wins * GLOBAL_POINTS_PER_WIN,
       wins: r.wins,
       losses: r.losses,
       rank: r.rank,

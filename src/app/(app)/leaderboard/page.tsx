@@ -58,7 +58,7 @@ export default function LeaderboardPage() {
 
   return (
     <div>
-      <PageHeader title="Player Leaderboard" subtitle="Ranked across all tournaments." />
+      <PageHeader title="Player Leaderboard" subtitle="Global ranking — 10 points per win, across every workspace." />
 
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="relative max-w-xs flex-1">

@@ -1,30 +1,27 @@
 import { prisma } from "@/lib/db/prisma";
 import { assignRanks, type RankableStat } from "@/lib/engines/leaderboard";
+import { GLOBAL_POINTS_PER_WIN } from "@/lib/domain/constants";
 import type { Pagination } from "@/lib/api/pagination";
 import type { AuthUser } from "@/lib/auth/authorize";
-import { isPlatformAdmin } from "@/lib/auth/tenancy";
 
 type SortKey = "points" | "wins" | "winPercentage" | "tournaments" | "recent";
 
 /**
- * Player leaderboard, scoped to the caller's workspace (platform admin sees all).
- * Ranks are derived from the (already recomputed) PlayerRanking aggregates via
- * the shared ranking engine, so ordering is deterministic and matches
- * per-tournament standings.
+ * GLOBAL player leaderboard — every player across all workspaces (the player
+ * directory is global; so is the ranking). Points are a flat 10 per win / 0 per
+ * loss (GLOBAL_POINTS_PER_WIN), computed from each player's maintained win count
+ * so the board is always correct without a points recompute. Ranks come from the
+ * shared engine (points → wins → win% → …) for deterministic ordering.
  */
 export async function getPlayerLeaderboard(
   actor: AuthUser,
   p: Pagination,
   opts: { sortBy?: string }
 ) {
-  const orgWhere = isPlatformAdmin(actor)
-    ? {}
-    : { organizationId: actor.organizationId ?? "__no_org__" };
   const rows = await prisma.playerRanking.findMany({
     where: {
       player: {
         deletedAt: null,
-        ...orgWhere,
         ...(p.search
           ? {
               OR: [
@@ -38,11 +35,13 @@ export async function getPlayerLeaderboard(
     include: { player: { select: { id: true, displayName: true, fullName: true, city: true } } },
   });
 
+  const pointsFor = (wins: number) => wins * GLOBAL_POINTS_PER_WIN;
+
   // Canonical ranks (points → wins → win% → …) via the engine.
   const ranked = assignRanks(
     rows.map<RankableStat>((r) => ({
       id: r.playerId,
-      points: r.totalPoints,
+      points: pointsFor(r.wins),
       wins: r.wins,
       losses: r.losses,
       matchesPlayed: r.matchesPlayed,
@@ -61,7 +60,7 @@ export async function getPlayerLeaderboard(
     wins: r.wins,
     losses: r.losses,
     winPercentage: r.winPercentage,
-    points: r.totalPoints,
+    points: pointsFor(r.wins),
     tournaments: r.tournamentsPlayed,
     titles: r.titles,
     updatedAt: r.updatedAt,

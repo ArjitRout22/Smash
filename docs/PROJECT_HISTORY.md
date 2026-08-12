@@ -105,6 +105,16 @@ Tailwind CSS v4 · Vitest · Playwright.
   the opposing captain accepts on behalf of their pair, and all four players must
   have accounts (partners are watch-only participants; only the two captains
   accept/report/confirm).
+- **Global leaderboard + simple scoring:** the player leaderboard is now **global**
+  (every player across all workspaces, like the directory) instead of
+  workspace-scoped, and headline **points are a flat 10 per win / 0 per loss**
+  (`GLOBAL_POINTS_PER_WIN`, computed from each player's win count — no recompute
+  needed; decoupled from per-tournament scoring). Profile + dashboard "points"
+  match. Casual matches remain excluded.
+- **Discover join state:** public-tournament listings now carry the viewer's own
+  status, so the dashboard/Discover CTA shows **Pending / Joined / Invited**
+  instead of a stale "Request to join". Casual matches: **removed Reopen** — a
+  completed result both players confirmed is final.
 - **Match lifecycle + close/lock** (tournament matches): explicit **Start** /
   **Cancel** controls (status was only changing implicitly via scoring), and a
   **Close** action that finalizes a completed result — a new `Match.closedAt`

@@ -204,9 +204,10 @@ export const CreateCasualMatchSchema = z
     { message: "Doubles matches need a partner on each side", path: ["challengerPartnerPlayerId"] }
   );
 
-// State transitions the two participants can drive (see casual-match.service).
+// State transitions the two captains can drive (see casual-match.service).
+// A completed casual match is final — no reopen (both players already agreed).
 export const CasualMatchActionSchema = z.object({
-  action: z.enum(["accept", "decline", "confirm", "reject", "cancel", "reopen"]),
+  action: z.enum(["accept", "decline", "confirm", "reject", "cancel"]),
   expectedVersion: z.number().int().min(0).optional(),
 });
 

@@ -36,7 +36,6 @@ type CasualMatch = {
   canReport: boolean;
   canConfirm: boolean;
   canCancel: boolean;
-  canReopen: boolean;
   version: number;
   completedAt: string | null;
 };
@@ -127,7 +126,6 @@ export default function ChallengesPage() {
                     onConfirm={() => act(m, "confirm", "Result confirmed")}
                     onReject={() => act(m, "reject", "Result rejected — play it again")}
                     onCancel={() => act(m, "cancel", "Challenge cancelled")}
-                    onReopen={() => act(m, "reopen", "Match reopened")}
                   />
                 )}
               </Section>
@@ -141,7 +139,6 @@ export default function ChallengesPage() {
                       onConfirm={() => act(m, "confirm", "Result confirmed")}
                       onReject={() => act(m, "reject", "Result rejected — play it again")}
                       onCancel={() => act(m, "cancel", "Challenge cancelled")}
-                      onReopen={() => act(m, "reopen", "Match reopened")}
                     />
                   )}
                 </Section>
@@ -156,7 +153,6 @@ export default function ChallengesPage() {
                       onConfirm={() => act(m, "confirm", "Result confirmed")}
                       onReject={() => act(m, "reject", "Result rejected — play it again")}
                       onCancel={() => act(m, "cancel", "Challenge cancelled")}
-                      onReopen={() => act(m, "reopen", "Match reopened")}
                     />
                   )}
                 </Section>
@@ -235,7 +231,6 @@ function ChallengeCard({
   onConfirm,
   onReject,
   onCancel,
-  onReopen,
 }: {
   m: CasualMatch;
   busy: string | null;
@@ -244,7 +239,6 @@ function ChallengeCard({
   onConfirm: () => void;
   onReject: () => void;
   onCancel: () => void;
-  onReopen: () => void;
 }) {
   const label = STATUS_LABEL[m.status];
   const mySide: "A" | "B" = m.isChallenger ? "A" : "B";
@@ -301,9 +295,6 @@ function ChallengeCard({
         )}
         {m.status === "awaiting_confirmation" && m.canReport && (
           <Button size="sm" variant="outline" disabled={busyAny} onClick={onReport}>Edit result</Button>
-        )}
-        {m.canReopen && (
-          <Button size="sm" variant="ghost" disabled={busyAny} onClick={onReopen}>Reopen</Button>
         )}
         {m.canCancel && m.status !== "pending" && !m.canReport && !m.canConfirm && !m.canRespond && (
           <Button size="sm" variant="ghost" disabled={busyAny} onClick={onCancel}>Cancel</Button>

@@ -87,7 +87,6 @@ function serialize(m: RawCasualMatch, actor: AuthUser) {
       (m.status === "accepted" || (m.status === "awaiting_confirmation" && isReporter)),
     canConfirm: isCaptain && m.status === "awaiting_confirmation" && !isReporter,
     canCancel: isCaptain && ["pending", "accepted", "awaiting_confirmation"].includes(m.status),
-    canReopen: isCaptain && m.status === "completed",
     version: m.version,
     createdAt: m.createdAt,
     respondedAt: m.respondedAt,
@@ -335,19 +334,6 @@ export async function actOnCasualMatch(
         throw Errors.invalidState(`A ${m.status} match can't be cancelled.`);
       }
       data = { status: "cancelled", version: { increment: 1 } };
-      break;
-    }
-    case "reopen": {
-      if (m.status !== "completed") throw Errors.invalidState("Only a completed match can be reopened.");
-      data = {
-        status: "accepted",
-        games: Prisma.DbNull,
-        winnerSide: null,
-        winnerPlayerId: null,
-        reportedByUserId: null,
-        completedAt: null,
-        version: { increment: 1 },
-      };
       break;
     }
     default:

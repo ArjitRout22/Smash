@@ -7,10 +7,10 @@ import { listPublicTournaments } from "@/lib/services/tournament.service";
 
 // Cross-workspace list of public tournaments anyone can discover + join.
 export const GET = route(async (req) => {
-  await requirePermission(PERMISSIONS.TOURNAMENT_VIEW);
+  const actor = await requirePermission(PERMISSIONS.TOURNAMENT_VIEW);
   const url = new URL(req.url);
   const p = parsePagination(url.searchParams);
-  const { items, total } = await listPublicTournaments(p, {
+  const { items, total } = await listPublicTournaments(actor, p, {
     status: url.searchParams.get("status") ?? undefined,
   });
   return ok(items, { meta: paginationMeta(total, p.page, p.pageSize) });

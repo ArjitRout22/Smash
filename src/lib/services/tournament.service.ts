@@ -214,7 +214,11 @@ export async function getTournamentLeaderboard(actor: AuthUser, tournamentId: st
 // --- Public discovery + join requests (Phase 3) ----------------------------
 
 /** Cross-workspace list of PUBLIC tournaments anyone can discover + join. */
-export async function listPublicTournaments(p: Pagination, filters: { status?: string }) {
+export async function listPublicTournaments(
+  actor: AuthUser,
+  p: Pagination,
+  filters: { status?: string }
+) {
   const where = {
     deletedAt: null,
     visibility: "public",
@@ -230,11 +234,27 @@ export async function listPublicTournaments(p: Pagination, filters: { status?: s
         organizer: { select: { id: true, name: true } },
         organization: { select: { id: true, name: true } },
         _count: { select: { tournamentPlayers: true, matches: true } },
+        // The viewer's own participation row (if any) so the UI can show
+        // "Pending" / "Joined" instead of a stale "Request to join".
+        tournamentPlayers: actor.playerId
+          ? { where: { playerId: actor.playerId }, select: { status: true } }
+          : false,
       },
     }),
     prisma.tournament.count({ where }),
   ]);
-  return { items, total };
+  return {
+    items: items.map((t) => {
+      const { tournamentPlayers, organizationId, ...rest } = t;
+      return {
+        ...rest,
+        // requested | registered | invited | declined | withdrawn | removed | null
+        viewerStatus: (tournamentPlayers as { status: string }[] | undefined)?.[0]?.status ?? null,
+        isOwnWorkspace: organizationId != null && organizationId === actor.organizationId,
+      };
+    }),
+    total,
+  };
 }
 
 /** A signed-in player requests to join a public tournament. */

@@ -177,27 +177,29 @@ type PublicTournamentLite = {
   organizer: { name: string | null } | null;
   organization: { name: string } | null;
   _count: { tournamentPlayers: number; matches: number };
+  viewerStatus: string | null; // requested | registered | invited | ... | null
+  isOwnWorkspace: boolean;
 };
 
 // Item 1: a join CTA on the dashboard so anyone can find + request to join
 // public tournaments without hunting through Discover first.
 function DiscoverCard() {
   const toast = useToast();
-  const [requested, setRequested] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState<string | null>(null);
-  const { data } = useSWR<{ data: PublicTournamentLite[] }>(
-    "/api/tournaments/discover?page=1&pageSize=4",
+  const { data, mutate } = useSWR<{ data: PublicTournamentLite[] }>(
+    "/api/tournaments/discover?page=1&pageSize=6",
     swrFetcherWithMeta
   );
 
-  const tournaments = data?.data ?? [];
+  // Hide the viewer's own workspace tournaments — you can't join those.
+  const tournaments = (data?.data ?? []).filter((t) => !t.isOwnWorkspace).slice(0, 4);
 
   async function join(id: string) {
     setBusy(id);
     try {
       await api.post(`/api/tournaments/${id}/join`);
-      setRequested((s) => new Set(s).add(id));
       toast.success("Request sent — the organizer will review it");
+      mutate(); // refresh so the CTA flips to "Pending"
     } catch (err) {
       toast.error(err instanceof ApiClientError ? err.message : "Could not send request");
     } finally {
@@ -226,8 +228,12 @@ function DiscoverCard() {
               </p>
             </div>
             <div className="shrink-0">
-              {requested.has(t.id) ? (
-                <Badge color="green">Requested</Badge>
+              {t.viewerStatus === "registered" ? (
+                <Badge color="green">Joined</Badge>
+              ) : t.viewerStatus === "requested" ? (
+                <Badge color="amber">Pending</Badge>
+              ) : t.viewerStatus === "invited" ? (
+                <Badge color="blue">Invited</Badge>
               ) : (
                 <Button size="sm" variant="outline" loading={busy === t.id} onClick={() => join(t.id)}>Request to join</Button>
               )}
