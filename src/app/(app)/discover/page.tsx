@@ -7,12 +7,15 @@ import { Compass, Search, MapPin } from "lucide-react";
 import { swrFetcherWithMeta, type PageMeta } from "@/lib/client/api";
 import { PageHeader, EmptyState, ErrorState, ListSkeleton } from "@/components/ui/states";
 import { Card, Badge, statusColor, Button, Input } from "@/components/ui/primitives";
+import { mapUrl } from "@/components/LocationPicker";
 import { titleCase } from "@/lib/client/format";
 
 type PublicTournament = {
   id: string;
   name: string;
   location: string | null;
+  locationLat: number | null;
+  locationLng: number | null;
   status: string;
   format: string;
   organizer: { name: string | null } | null;
@@ -21,6 +24,27 @@ type PublicTournament = {
   viewerStatus: string | null;
   isOwnWorkspace: boolean;
 };
+
+/** A "view on map" chip that works inside a clickable card (it won't navigate
+ *  the card — it opens maps in a new tab). */
+function MapChip({ location, lat, lng }: { location: string | null; lat: number | null; lng: number | null }) {
+  if (!location) return null;
+  const url = mapUrl(location, lat, lng);
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (url) window.open(url, "_blank", "noopener,noreferrer");
+      }}
+      className="inline-flex items-center gap-1 text-primary hover:underline"
+    >
+      <MapPin className="h-3 w-3 shrink-0" />
+      <span className="line-clamp-1 text-left">{location}</span>
+    </button>
+  );
+}
 
 const JOIN_BADGE: Record<string, { text: string; color: "green" | "amber" | "blue" }> = {
   registered: { text: "Joined", color: "green" },
@@ -67,7 +91,7 @@ export default function DiscoverPage() {
                 </div>
                 <div className="mb-3 flex flex-wrap gap-2 text-xs text-muted">
                   <Badge color="slate">{titleCase(t.format)}</Badge>
-                  {t.location && <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" />{t.location}</span>}
+                  <MapChip location={t.location} lat={t.locationLat} lng={t.locationLng} />
                 </div>
                 <p className="text-sm text-muted">Hosted by {t.organization?.name ?? t.organizer?.name ?? "—"}</p>
                 <div className="mt-2 flex gap-4 text-sm text-muted">

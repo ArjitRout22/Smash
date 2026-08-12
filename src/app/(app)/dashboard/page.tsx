@@ -10,6 +10,7 @@ import { Card, CardHeader, Badge, statusColor, Button, Avatar } from "@/componen
 import { useToast } from "@/components/ui/Toast";
 import { useAuth } from "@/components/AuthProvider";
 import { ShareButton } from "@/components/ShareButton";
+import { mapUrl } from "@/components/LocationPicker";
 import { PERMS } from "@/lib/client/perms";
 import { formatDateTime, titleCase } from "@/lib/client/format";
 
@@ -181,6 +182,8 @@ type PublicTournamentLite = {
   id: string;
   name: string;
   location: string | null;
+  locationLat: number | null;
+  locationLng: number | null;
   format: string;
   status: string;
   organizer: { name: string | null } | null;
@@ -231,7 +234,11 @@ function DiscoverCard() {
               <Link href={`/discover/${t.id}`} className="font-medium hover:underline">{t.name}</Link>
               <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted">
                 <Badge color="slate">{titleCase(t.format)}</Badge>
-                {t.location && <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" />{t.location}</span>}
+                {t.location && (
+                  <a href={mapUrl(t.location, t.locationLat, t.locationLng) ?? "#"} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline">
+                    <MapPin className="h-3 w-3 shrink-0" />{t.location}
+                  </a>
+                )}
                 <span>· {t._count.tournamentPlayers} players</span>
                 <span>· hosted by {t.organization?.name ?? t.organizer?.name ?? "—"}</span>
               </p>
