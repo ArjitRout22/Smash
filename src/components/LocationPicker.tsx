@@ -119,3 +119,39 @@ export function mapUrl(location: string | null, lat: number | null, lng: number 
   if (location && location.trim()) return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location.trim())}`;
   return null;
 }
+
+/**
+ * A button-styled "View on map" CTA (opens Google Maps in a new tab). Renders
+ * nothing when there's no resolvable location, so callers can drop it in
+ * unconditionally. Use `size="sm"` for cards, `size="md"` for detail views.
+ */
+export function ViewOnMapButton({
+  location,
+  lat,
+  lng,
+  size = "sm",
+  label = "View on map",
+  className,
+}: {
+  location: string | null;
+  lat: number | null;
+  lng: number | null;
+  size?: "sm" | "md";
+  label?: string;
+  className?: string;
+}) {
+  const url = mapUrl(location, lat, lng);
+  if (!url) return null;
+  const sizeCls = size === "md" ? "h-10 px-4 text-sm" : "h-8 px-3 text-sm";
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={`inline-flex items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] bg-surface font-medium text-foreground transition hover:bg-surface-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] ${sizeCls} ${className ?? ""}`}
+    >
+      <MapPin className="h-4 w-4 text-primary" />
+      {label}
+    </a>
+  );
+}

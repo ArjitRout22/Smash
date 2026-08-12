@@ -36,7 +36,12 @@ export const UpdateOwnPlayerSchema = z.object({
   fullName: z.string().trim().min(2).max(120).optional(),
   displayName: z.string().trim().min(1).max(60).optional(),
   city: z.string().trim().max(120).nullable().optional(),
+  phone: z.string().trim().max(20).nullable().optional(),
   skillLevel: z.enum(SKILL_LEVELS).nullable().optional(),
+  // Home location from the OpenStreetMap place picker (name + coordinates).
+  locationName: z.string().trim().max(200).nullable().optional(),
+  locationLat: z.number().min(-90).max(90).nullable().optional(),
+  locationLng: z.number().min(-180).max(180).nullable().optional(),
 });
 export type UpdateOwnPlayerInput = z.infer<typeof UpdateOwnPlayerSchema>;
 
@@ -228,7 +233,9 @@ export const CreateCasualMatchSchema = z
       .refine((n) => n === 1 || n === 3, { message: "bestOf must be 1 or 3" })
       .default(3),
     scheduledAt: isoDate.optional(),
-    location: z.string().trim().max(120).optional(),
+    location: z.string().trim().max(200).optional(),
+    locationLat: z.number().min(-90).max(90).nullable().optional(),
+    locationLng: z.number().min(-180).max(180).nullable().optional(),
   })
   .refine(
     (v) =>
@@ -252,6 +259,12 @@ export const ReportCasualScoreSchema = z.object({
 export type CreateCasualMatchInput = z.infer<typeof CreateCasualMatchSchema>;
 export type CasualMatchActionInput = z.infer<typeof CasualMatchActionSchema>;
 export type ReportCasualScoreInput = z.infer<typeof ReportCasualScoreSchema>;
+
+// --- Match comments ---------------------------------------------------------
+export const CreateCommentSchema = z.object({
+  body: z.string().trim().min(1).max(1000),
+});
+export type CreateCommentInput = z.infer<typeof CreateCommentSchema>;
 
 export type CreatePlayerInput = z.infer<typeof CreatePlayerSchema>;
 export type CreateTournamentInput = z.infer<typeof CreateTournamentSchema>;

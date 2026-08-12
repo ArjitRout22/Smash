@@ -6,6 +6,7 @@ import useSWR from "swr";
 import { swrFetcher, swrFetcherWithMeta } from "@/lib/client/api";
 import { PageHeader, ErrorState, ListSkeleton, CardGridSkeleton } from "@/components/ui/states";
 import { Card, CardHeader, Badge, statusColor, Avatar } from "@/components/ui/primitives";
+import { ViewOnMapButton } from "@/components/LocationPicker";
 import { formatDate, pct, titleCase } from "@/lib/client/format";
 
 type Player = {
@@ -15,6 +16,9 @@ type Player = {
   city?: string;
   skillLevel?: string | null;
   photoUrl?: string | null;
+  locationName?: string | null;
+  locationLat?: number | null;
+  locationLng?: number | null;
 };
 
 type Statistics = {
@@ -97,13 +101,24 @@ export default function PlayerDetailPage() {
           </span>
         }
         subtitle={
-          player ? [player.fullName, player.city].filter(Boolean).join(" · ") || undefined : undefined
+          player
+            ? [player.fullName, player.locationName ?? player.city].filter(Boolean).join(" · ") || undefined
+            : undefined
         }
         actions={
-          player?.skillLevel ? (
-            <Badge color={player.skillLevel === "pro" ? "green" : player.skillLevel === "intermediate" ? "blue" : "slate"}>
-              {titleCase(player.skillLevel)}
-            </Badge>
+          player ? (
+            <div className="flex items-center gap-2">
+              {player.skillLevel && (
+                <Badge color={player.skillLevel === "pro" ? "green" : player.skillLevel === "intermediate" ? "blue" : "slate"}>
+                  {titleCase(player.skillLevel)}
+                </Badge>
+              )}
+              <ViewOnMapButton
+                location={player.locationName ?? player.city ?? null}
+                lat={player.locationLat ?? null}
+                lng={player.locationLng ?? null}
+              />
+            </div>
           ) : undefined
         }
       />

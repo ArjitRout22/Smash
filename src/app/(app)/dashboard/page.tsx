@@ -11,6 +11,7 @@ import { useToast } from "@/components/ui/Toast";
 import { useAuth } from "@/components/AuthProvider";
 import { ShareButton } from "@/components/ShareButton";
 import { mapUrl } from "@/components/LocationPicker";
+import { NearbyVenues } from "@/components/NearbyVenues";
 import { PERMS } from "@/lib/client/perms";
 import { formatDateTime, titleCase } from "@/lib/client/format";
 
@@ -70,6 +71,7 @@ export default function DashboardPage() {
       <InvitationsCard />
       <TeamInvitesCard />
       <ChallengesCard />
+      <NearbyVenues />
       <DiscoverCard />
 
       {isLoading && <CardGridSkeleton />}

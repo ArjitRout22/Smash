@@ -104,6 +104,7 @@ model User {
   casualChallenges     CasualMatch[] @relation("CasualChallenger")
   casualOpponents      CasualMatch[] @relation("CasualOpponent")
   tournamentScorer     TournamentScorer[]
+  matchComments        MatchComment[]
 
   @@index([roleId])
   @@index([organizationId])
@@ -167,6 +168,11 @@ model Player {
   skillLevel     String? // beginner | intermediate | pro (self-declared)
   dateOfBirth    DateTime?
   city           String?
+  // Self-declared home location (OpenStreetMap place search). locationName is the
+  // display place; the coordinates power "View on map" + nearby-venue discovery.
+  locationName   String?
+  locationLat    Float?
+  locationLng    Float?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
   deletedAt      DateTime?
@@ -489,6 +495,8 @@ model CasualMatch {
   bestOf             Int       @default(3) // 1 or 3
   scheduledAt        DateTime?
   location           String?
+  locationLat        Float?    // selected place coordinates (OpenStreetMap search)
+  locationLng        Float?
   games              Json?     // [{ scoreA, scoreB }] — proposed while awaiting confirmation, final once completed
   winnerSide         String?   // "A" = challenger, "B" = opponent
   winnerPlayerId     String?
@@ -531,4 +539,27 @@ model AuditLog {
   @@index([entityType, entityId])
   @@index([actorUserId])
   @@index([createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Match comments
+// ---------------------------------------------------------------------------
+// Polymorphic comment thread shared by tournament matches ("match") and casual
+// matches ("casual_match"), keyed by (entityType, entityId). Access is gated in
+// the service by the same rules that govern viewing the underlying match, so no
+// FK to Match/CasualMatch is needed (and either can be soft/hard deleted freely).
+model MatchComment {
+  id           String    @id @default(uuid())
+  entityType   String // "match" | "casual_match"
+  entityId     String
+  authorUserId String
+  body         String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  author User @relation(fields: [authorUserId], references: [id], onDelete: Cascade)
+
+  @@index([entityType, entityId])
+  @@index([authorUserId])
 }

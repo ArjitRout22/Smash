@@ -65,6 +65,8 @@ function serialize(m: RawCasualMatch, actor: AuthUser) {
     bestOf: m.bestOf,
     scheduledAt: m.scheduledAt,
     location: m.location,
+    locationLat: m.locationLat,
+    locationLng: m.locationLng,
     challenger: {
       userId: m.challengerUserId,
       playerId: m.challengerPlayerId,
@@ -215,6 +217,8 @@ export async function createCasualMatch(actor: AuthUser, input: CreateCasualMatc
       bestOf: input.bestOf,
       scheduledAt: input.scheduledAt,
       location: input.location,
+      locationLat: input.locationLat ?? null,
+      locationLng: input.locationLng ?? null,
       status: "pending",
     },
     include: withPlayers,
