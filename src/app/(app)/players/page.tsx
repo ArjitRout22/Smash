@@ -7,7 +7,7 @@ import useSWR from "swr";
 import { Plus, Search, Users } from "lucide-react";
 import { api, ApiClientError, swrFetcherWithMeta } from "@/lib/client/api";
 import { PageHeader, EmptyState, ErrorState, ListSkeleton } from "@/components/ui/states";
-import { Button, Card, Input, Select, Field } from "@/components/ui/primitives";
+import { Button, Card, Input, Select, Field, Avatar } from "@/components/ui/primitives";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { useAuth } from "@/components/AuthProvider";
@@ -139,9 +139,12 @@ export default function PlayersPage() {
                 {players.map((p) => (
                   <tr key={p.id} className="border-t border-[var(--border)] hover:bg-surface-2">
                     <td className="px-4 py-3">
-                      <Link href={`/players/${p.id}`} className="block">
-                        <span className="font-medium text-foreground">{p.displayName}</span>
-                        <span className="block text-xs text-muted">{p.fullName}</span>
+                      <Link href={`/players/${p.id}`} className="flex items-center gap-3">
+                        <Avatar src={p.photoUrl} name={p.displayName} size={32} />
+                        <span>
+                          <span className="font-medium text-foreground">{p.displayName}</span>
+                          <span className="block text-xs text-muted">{p.fullName}</span>
+                        </span>
                       </Link>
                     </td>
                     <td className="px-4 py-3 text-muted">{p.city ?? "—"}</td>

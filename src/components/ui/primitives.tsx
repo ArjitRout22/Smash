@@ -1,7 +1,7 @@
 "use client";
 
 import { clsx } from "clsx";
-import { forwardRef } from "react";
+import { forwardRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 
 // --- Button -----------------------------------------------------------------
@@ -152,6 +152,45 @@ export function statusColor(status: string): keyof typeof badgeColors {
     loss: "red",
   };
   return map[status] ?? "neutral";
+}
+
+// --- Avatar ------------------------------------------------------------------
+function initials(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? "")
+    .join("") || "?";
+}
+
+/** Circular player avatar — shows the photo URL, falling back to initials if
+ *  there's no photo or the image fails to load. */
+export function Avatar({ src, name, size = 40, className }: { src?: string | null; name: string; size?: number; className?: string }) {
+  const [failed, setFailed] = useState(false);
+  const dims = { width: size, height: size };
+  if (src && !failed) {
+    // Arbitrary external URLs — plain <img> (no next/image domain config needed).
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={src}
+        alt={name}
+        style={dims}
+        onError={() => setFailed(true)}
+        className={clsx("shrink-0 rounded-full object-cover", className)}
+      />
+    );
+  }
+  return (
+    <div
+      style={{ ...dims, fontSize: Math.round(size * 0.38) }}
+      className={clsx("flex shrink-0 items-center justify-center rounded-full bg-surface-2 font-semibold text-muted", className)}
+      aria-label={name}
+    >
+      {initials(name)}
+    </div>
+  );
 }
 
 // --- Spinner / Skeleton ------------------------------------------------------

@@ -112,6 +112,7 @@ export async function updateOwnPlayer(actor: AuthUser, input: UpdateOwnPlayerInp
       displayName: input.displayName ?? undefined,
       city: input.city === undefined ? undefined : input.city,
       skillLevel: input.skillLevel === undefined ? undefined : input.skillLevel,
+      photoUrl: input.photoUrl === undefined ? undefined : input.photoUrl,
     },
     include: { ranking: true },
   });

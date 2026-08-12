@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import useSWR from "swr";
 import { swrFetcher, swrFetcherWithMeta } from "@/lib/client/api";
 import { PageHeader, ErrorState, ListSkeleton, CardGridSkeleton } from "@/components/ui/states";
-import { Card, CardHeader, Badge, statusColor } from "@/components/ui/primitives";
+import { Card, CardHeader, Badge, statusColor, Avatar } from "@/components/ui/primitives";
 import { formatDate, pct, titleCase } from "@/lib/client/format";
 
 type Player = {
@@ -14,6 +14,7 @@ type Player = {
   displayName: string;
   city?: string;
   skillLevel?: string | null;
+  photoUrl?: string | null;
 };
 
 type Statistics = {
@@ -89,7 +90,12 @@ export default function PlayerDetailPage() {
   return (
     <div>
       <PageHeader
-        title={playerLoading ? "Loading…" : player?.displayName ?? "Player"}
+        title={
+          <span className="flex items-center gap-3">
+            {player && <Avatar src={player.photoUrl} name={player.displayName} size={40} />}
+            {playerLoading ? "Loading…" : player?.displayName ?? "Player"}
+          </span>
+        }
         subtitle={
           player ? [player.fullName, player.city].filter(Boolean).join(" · ") || undefined : undefined
         }

@@ -32,7 +32,7 @@ export async function getPlayerLeaderboard(
           : {}),
       },
     },
-    include: { player: { select: { id: true, displayName: true, fullName: true, city: true } } },
+    include: { player: { select: { id: true, displayName: true, fullName: true, city: true, photoUrl: true } } },
   });
 
   const pointsFor = (wins: number) => wins * GLOBAL_POINTS_PER_WIN;
@@ -56,6 +56,7 @@ export async function getPlayerLeaderboard(
     name: r.player.displayName,
     fullName: r.player.fullName,
     city: r.player.city,
+    photoUrl: r.player.photoUrl,
     matchesPlayed: r.matchesPlayed,
     wins: r.wins,
     losses: r.losses,

@@ -37,6 +37,9 @@ export const UpdateOwnPlayerSchema = z.object({
   displayName: z.string().trim().min(1).max(60).optional(),
   city: z.string().trim().max(120).nullable().optional(),
   skillLevel: z.enum(SKILL_LEVELS).nullable().optional(),
+  // A link to an already-hosted image; null clears it. We only ever store the
+  // URL, never the image bytes.
+  photoUrl: z.union([z.string().url().max(500), z.null()]).optional(),
 });
 export type UpdateOwnPlayerInput = z.infer<typeof UpdateOwnPlayerSchema>;
 

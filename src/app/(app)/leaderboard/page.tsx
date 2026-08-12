@@ -6,7 +6,7 @@ import useSWR from "swr";
 import { Search, Trophy } from "lucide-react";
 import { swrFetcherWithMeta } from "@/lib/client/api";
 import { PageHeader, EmptyState, ErrorState, ListSkeleton } from "@/components/ui/states";
-import { Card, Input, Select } from "@/components/ui/primitives";
+import { Card, Input, Select, Avatar } from "@/components/ui/primitives";
 import { pct } from "@/lib/client/format";
 
 type Row = {
@@ -15,6 +15,7 @@ type Row = {
   name: string;
   fullName: string;
   city?: string;
+  photoUrl?: string | null;
   matchesPlayed: number;
   wins: number;
   losses: number;
@@ -128,9 +129,12 @@ export default function LeaderboardPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        <Link href={`/players/${r.playerId}`} className="block">
-                          <span className="font-medium text-foreground hover:underline">{r.name}</span>
-                          {r.city && <span className="block text-xs text-muted">{r.city}</span>}
+                        <Link href={`/players/${r.playerId}`} className="flex items-center gap-3">
+                          <Avatar src={r.photoUrl} name={r.name} size={32} />
+                          <span>
+                            <span className="font-medium text-foreground hover:underline">{r.name}</span>
+                            {r.city && <span className="block text-xs text-muted">{r.city}</span>}
+                          </span>
                         </Link>
                       </td>
                       <td className="px-4 py-3 text-muted">{r.matchesPlayed}</td>

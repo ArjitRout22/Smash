@@ -6,7 +6,7 @@ import useSWR from "swr";
 import { User } from "lucide-react";
 import { api, ApiClientError, swrFetcher } from "@/lib/client/api";
 import { PageHeader, EmptyState, CardGridSkeleton, BrandedLoader } from "@/components/ui/states";
-import { Button, Card, CardHeader, Badge, Select, Input, Field } from "@/components/ui/primitives";
+import { Button, Card, CardHeader, Badge, Select, Input, Field, Avatar } from "@/components/ui/primitives";
 import { ShareButton } from "@/components/ShareButton";
 import { useToast } from "@/components/ui/Toast";
 import { useAuth } from "@/components/AuthProvider";
@@ -44,7 +44,7 @@ export default function ProfilePage() {
     playerId ? `/api/players/${playerId}/statistics` : null,
     swrFetcher
   );
-  const { data: player, mutate: mutatePlayer } = useSWR<{ skillLevel: string | null; fullName: string; displayName: string }>(
+  const { data: player, mutate: mutatePlayer } = useSWR<{ skillLevel: string | null; fullName: string; displayName: string; photoUrl: string | null }>(
     playerId ? `/api/players/${playerId}` : null,
     swrFetcher
   );
@@ -87,14 +87,21 @@ export default function ProfilePage() {
       />
 
       {playerId && (
-        <NameCard
-          fullName={player?.fullName ?? user.name ?? ""}
-          displayName={player?.displayName ?? ""}
-          onSaved={() => {
-            mutatePlayer();
-            refresh();
-          }}
-        />
+        <div className="space-y-6">
+          <PhotoCard
+            photoUrl={player?.photoUrl ?? null}
+            name={player?.displayName ?? user.name ?? "You"}
+            onSaved={() => mutatePlayer()}
+          />
+          <NameCard
+            fullName={player?.fullName ?? user.name ?? ""}
+            displayName={player?.displayName ?? ""}
+            onSaved={() => {
+              mutatePlayer();
+              refresh();
+            }}
+          />
+        </div>
       )}
 
       <Card className="mt-6 overflow-hidden">
@@ -152,6 +159,48 @@ export default function ProfilePage() {
         </div>
       )}
     </div>
+  );
+}
+
+function PhotoCard({ photoUrl, name, onSaved }: { photoUrl: string | null; name: string; onSaved: () => void }) {
+  const toast = useToast();
+  const [url, setUrl] = useState(photoUrl ?? "");
+  const [saving, setSaving] = useState(false);
+  const [synced, setSynced] = useState(photoUrl ?? "");
+  if ((photoUrl ?? "") !== synced) {
+    setSynced(photoUrl ?? "");
+    setUrl(photoUrl ?? "");
+  }
+  const dirty = url.trim() !== (photoUrl ?? "");
+
+  async function save(clear = false) {
+    setSaving(true);
+    try {
+      await api.put("/api/me/player", { photoUrl: clear || url.trim() === "" ? null : url.trim() });
+      toast.success(clear ? "Photo removed" : "Photo updated");
+      if (clear) setUrl("");
+      onSaved();
+    } catch (err) {
+      toast.error(err instanceof ApiClientError ? err.message : "Could not update photo");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card className="overflow-hidden">
+      <CardHeader title="Profile photo" subtitle="Paste a link to an image — only the link is stored, never the file." />
+      <div className="flex items-center gap-4 px-5 py-4">
+        <Avatar src={url.trim() || null} name={name} size={64} />
+        <div className="flex-1 space-y-2">
+          <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…/photo.jpg" inputMode="url" />
+          <div className="flex gap-2">
+            <Button size="sm" onClick={() => save(false)} loading={saving} disabled={!dirty}>Save photo</Button>
+            {photoUrl && <Button size="sm" variant="ghost" onClick={() => save(true)} disabled={saving}>Remove</Button>}
+          </div>
+        </div>
+      </div>
+    </Card>
   );
 }
 
