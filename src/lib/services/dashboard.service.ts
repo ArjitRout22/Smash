@@ -63,7 +63,7 @@ export async function getDashboard(actor: AuthUser) {
       where: playerRankOrg,
       orderBy: [{ wins: "desc" }, { winPercentage: "desc" }],
       take: 5,
-      include: { player: { select: { id: true, displayName: true } } },
+      include: { player: { select: { id: true, displayName: true, photoUrl: true } } },
     }),
     prisma.auditLog.findMany({
       // Non-admins see only their own recent activity.
@@ -90,6 +90,7 @@ export async function getDashboard(actor: AuthUser) {
     topPlayers: topPlayersRaw.map((r, i) => ({
       playerId: r.playerId,
       name: r.player.displayName,
+      photoUrl: r.player.photoUrl,
       points: r.wins * GLOBAL_POINTS_PER_WIN,
       wins: r.wins,
       losses: r.losses,

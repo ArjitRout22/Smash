@@ -6,7 +6,7 @@ import useSWR from "swr";
 import { Trophy, Users, UsersRound, Activity, Plus, Mail, Zap, Compass, MapPin } from "lucide-react";
 import { api, ApiClientError, swrFetcher, swrFetcherWithMeta } from "@/lib/client/api";
 import { PageHeader, CardGridSkeleton, ErrorState, EmptyState } from "@/components/ui/states";
-import { Card, CardHeader, Badge, statusColor, Button } from "@/components/ui/primitives";
+import { Card, CardHeader, Badge, statusColor, Button, Avatar } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/Toast";
 import { useAuth } from "@/components/AuthProvider";
 import { ShareButton } from "@/components/ShareButton";
@@ -32,7 +32,7 @@ type Dashboard = {
   };
   recentMatches: MatchDTO[];
   upcomingMatches: MatchDTO[];
-  topPlayers: { playerId: string; name: string; points: number; wins: number; losses: number; rank: number | null }[];
+  topPlayers: { playerId: string; name: string; photoUrl: string | null; points: number; wins: number; losses: number; rank: number | null }[];
 };
 
 export default function DashboardPage() {
@@ -115,6 +115,7 @@ export default function DashboardPage() {
                 <Link key={p.playerId} href={`/players/${p.playerId}`} className="flex items-center justify-between px-5 py-3 hover:bg-surface-2">
                   <div className="flex items-center gap-3">
                     <span className="w-6 text-center font-semibold text-muted">{p.rank ?? i + 1}</span>
+                    <Avatar src={p.photoUrl} name={p.name} size={28} />
                     <span className="font-medium">{p.name}</span>
                   </div>
                   <div className="flex items-center gap-4 text-sm text-muted">
