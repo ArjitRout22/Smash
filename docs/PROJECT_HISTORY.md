@@ -149,6 +149,14 @@ Tailwind CSS v4 · Vitest · Playwright.
 
 ---
 
+- **Round-robin / group fixtures generator:** a "Generate fixtures" tool on the
+  Stages tab bulk-creates matches — all-play-all, or **groups (cross-play only)**,
+  each **once or twice** (double round-robin), optionally wrapped in a new stage.
+  Solves the "2 groups of 3, everyone plays the other group twice = 18 matches"
+  format without hand-creating each match. No new schema.
+
+---
+
 ## Key decisions
 
 - **Enum-like columns as strings** (validated by Zod + TS unions) instead of DB

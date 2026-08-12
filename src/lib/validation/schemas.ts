@@ -118,6 +118,34 @@ export const GenerateBracketSchema = z.object({
   participantIds: z.array(z.string().uuid()).min(2).max(64),
 });
 
+// Generate round-robin fixtures. mode "round_robin" = everyone plays everyone;
+// mode "groups" = cross-group only (teams in different groups play). rounds 2 =
+// double round-robin (each pairing played twice). Ids are players (singles) or
+// teams (doubles).
+export const GenerateFixturesSchema = z
+  .object({
+    stageName: z.string().trim().min(1).max(120).optional(),
+    matchType: z.enum(MATCH_TYPES).default("singles"),
+    bestOf: z
+      .number()
+      .int()
+      .refine((n) => n === 1 || n === 3, { message: "bestOf must be 1 or 3" })
+      .default(3),
+    rounds: z.union([z.literal(1), z.literal(2)]).default(1),
+    mode: z.enum(["round_robin", "groups"]),
+    participantIds: z.array(z.string().uuid()).optional(),
+    groups: z.array(z.array(z.string().uuid())).optional(),
+  })
+  .refine((v) => v.mode !== "round_robin" || (!!v.participantIds && v.participantIds.length >= 2), {
+    message: "Round-robin needs at least 2 participants",
+    path: ["participantIds"],
+  })
+  .refine(
+    (v) => v.mode !== "groups" || (!!v.groups && v.groups.length >= 2 && v.groups.every((g) => g.length >= 1)),
+    { message: "Group play needs at least 2 groups, each with a participant", path: ["groups"] }
+  );
+export type GenerateFixturesInput = z.infer<typeof GenerateFixturesSchema>;
+
 // --- Matches ----------------------------------------------------------------
 const sideRef = z
   .object({

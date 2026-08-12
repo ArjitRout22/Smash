@@ -8,7 +8,7 @@ import { buildBracket, type BracketMatchInput } from "@/lib/engines/bracket";
 import type { AuthUser } from "@/lib/auth/authorize";
 import { assertOrgAccess, isPlatformAdmin } from "@/lib/auth/tenancy";
 import { loadOwnedTournament, loadViewableTournament } from "@/lib/services/tournament.service";
-import type { CreateMatchSchema, UpdateMatchSchema } from "@/lib/validation/schemas";
+import type { CreateMatchSchema, UpdateMatchSchema, GenerateFixturesInput } from "@/lib/validation/schemas";
 
 type CreateInput = z.infer<typeof CreateMatchSchema>;
 type UpdateInput = z.infer<typeof UpdateMatchSchema>;
@@ -206,6 +206,121 @@ export async function createMatch(input: CreateInput, actor: AuthUser) {
   });
   await audit({ actorUserId: actor.id, action: "match.created", entityType: "Match", entityId: match.id, newValue: { tournamentId: match.tournamentId } });
   return serializeMatch(match);
+}
+
+const MAX_FIXTURES = 128;
+
+function roundRobinPairs(ids: string[]): [string, string][] {
+  const pairs: [string, string][] = [];
+  for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) pairs.push([ids[i], ids[j]]);
+  return pairs;
+}
+function crossGroupPairs(groups: string[][]): [string, string][] {
+  const pairs: [string, string][] = [];
+  for (let i = 0; i < groups.length; i++)
+    for (let j = i + 1; j < groups.length; j++)
+      for (const a of groups[i]) for (const b of groups[j]) pairs.push([a, b]);
+  return pairs;
+}
+
+/**
+ * Bulk-create round-robin fixtures — everyone-plays-everyone, or cross-group
+ * only (teams in different groups), single or double (each pairing twice).
+ * Optionally wraps them in a new stage. Ids are players (singles) or teams
+ * (doubles); all must belong to the tournament.
+ */
+export async function generateFixtures(tournamentId: string, input: GenerateFixturesInput, actor: AuthUser) {
+  await loadOwnedTournament(actor, tournamentId);
+
+  const allIds = input.mode === "groups" ? (input.groups ?? []).flat() : (input.participantIds ?? []);
+  if (new Set(allIds).size !== allIds.length) {
+    throw Errors.validation("A participant can't appear more than once");
+  }
+  if (allIds.length < 2) throw Errors.validation("Select at least two participants");
+
+  const pairs = input.mode === "groups" ? crossGroupPairs(input.groups!) : roundRobinPairs(input.participantIds!);
+  if (pairs.length === 0) throw Errors.validation("This selection produces no matches");
+  const total = pairs.length * input.rounds;
+  if (total > MAX_FIXTURES) {
+    throw Errors.validation(`That would create ${total} matches — too many at once (max ${MAX_FIXTURES}).`);
+  }
+
+  // Validate every participant belongs to the tournament.
+  if (input.matchType === "singles") {
+    const regs = await prisma.tournamentPlayer.findMany({
+      where: { tournamentId, status: "registered", playerId: { in: allIds } },
+      select: { playerId: true },
+    });
+    const regSet = new Set(regs.map((r) => r.playerId));
+    if (allIds.some((id) => !regSet.has(id))) {
+      throw Errors.invalidMatchConfig("Every selected player must be registered in this tournament");
+    }
+  } else {
+    const teams = await prisma.team.findMany({
+      where: { id: { in: allIds }, deletedAt: null },
+      select: { id: true, tournamentId: true, teamPlayers: { where: { status: "invited" }, select: { id: true } } },
+    });
+    const byId = new Map(teams.map((t) => [t.id, t]));
+    for (const id of allIds) {
+      const t = byId.get(id);
+      if (!t) throw Errors.invalidMatchConfig("One of the selected teams doesn't exist");
+      if (t.tournamentId && t.tournamentId !== tournamentId)
+        throw Errors.invalidMatchConfig("A selected team belongs to a different tournament");
+      if (t.teamPlayers.length > 0)
+        throw Errors.invalidMatchConfig("A selected team has a pending invite — all members must accept first");
+    }
+  }
+
+  const ref = (id: string): { playerId?: string; teamId?: string } =>
+    input.matchType === "singles" ? { playerId: id } : { teamId: id };
+
+  const created = await prisma.$transaction(
+    async (tx) => {
+      let stageId: string | null = null;
+      if (input.stageName) {
+        const maxOrder = await tx.stage.aggregate({ where: { tournamentId }, _max: { order: true } });
+        const stage = await tx.stage.create({
+          data: {
+            tournamentId,
+            name: input.stageName,
+            type: input.mode === "groups" ? "group" : "round_robin",
+            order: (maxOrder._max.order ?? -1) + 1,
+            status: "active",
+          },
+        });
+        stageId = stage.id;
+      }
+
+      let n = 0;
+      for (const [a, b] of pairs) {
+        for (let r = 0; r < input.rounds; r++) {
+          const [x, y] = r % 2 === 0 ? [a, b] : [b, a]; // alternate sides on the return leg
+          await tx.match.create({
+            data: {
+              tournamentId,
+              stageId,
+              matchType: input.matchType,
+              bestOf: input.bestOf,
+              createdById: actor.id,
+              participants: { create: [{ side: "A", ...ref(x) }, { side: "B", ...ref(y) }] },
+            },
+          });
+          n++;
+        }
+      }
+      return n;
+    },
+    { timeout: 30000 }
+  );
+
+  await audit({
+    actorUserId: actor.id,
+    action: "tournament.fixtures.generated",
+    entityType: "Tournament",
+    entityId: tournamentId,
+    newValue: { mode: input.mode, rounds: input.rounds, matches: created },
+  });
+  return { created };
 }
 
 export async function updateMatch(id: string, input: UpdateInput, actor: AuthUser) {
