@@ -15,6 +15,7 @@ import {
   BarChart3,
   UserCircle,
   ShieldAlert,
+  HelpCircle,
   LogOut,
   Menu,
   X,
@@ -33,6 +34,7 @@ const NAV = [
   { href: "/challenges", label: "Challenges", icon: Zap },
   { href: "/leaderboard", label: "Leaderboard", icon: BarChart3 },
   { href: "/profile", label: "Profile", icon: UserCircle },
+  { href: "/help", label: "Help", icon: HelpCircle },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {

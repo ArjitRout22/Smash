@@ -42,7 +42,7 @@ export function StagesTab({ tournamentId, format }: { tournamentId: string; form
       {data && data.length === 0 && (
         <EmptyState
           title="No stages yet"
-          message="Add stages manually (Group, Quarterfinal…) or generate a single-elimination bracket."
+          message="Use Generate fixtures for a round-robin or group stage, Generate bracket for a knockout, or Add stage to build phases yourself."
           icon={Layers}
         />
       )}
