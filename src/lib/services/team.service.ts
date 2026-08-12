@@ -9,7 +9,7 @@ import type { CreateTeamSchema, UpdateTeamSchema } from "@/lib/validation/schema
 type CreateInput = z.infer<typeof CreateTeamSchema>;
 type UpdateInput = z.infer<typeof UpdateTeamSchema>;
 
-async function validatePlayers(playerIds: string[], actor: AuthUser) {
+async function validatePlayers(playerIds: string[], actor: AuthUser, tournamentId?: string | null) {
   const unique = new Set(playerIds);
   if (unique.size !== playerIds.length) {
     throw Errors.validation("A team cannot contain the same player twice");
@@ -21,6 +21,23 @@ async function validatePlayers(playerIds: string[], actor: AuthUser) {
   if (found.length !== playerIds.length) {
     throw Errors.validation("One or more players do not exist");
   }
+
+  if (tournamentId) {
+    // A tournament team draws from that tournament's REGISTERED players, who may
+    // belong to other workspaces if they joined a public tournament. So the
+    // requirement is tournament registration, not workspace membership.
+    const registered = await prisma.tournamentPlayer.findMany({
+      where: { tournamentId, playerId: { in: playerIds }, status: "registered" },
+      select: { playerId: true },
+    });
+    const regSet = new Set(registered.map((r) => r.playerId));
+    if (playerIds.some((id) => !regSet.has(id))) {
+      throw Errors.validation("All players must be registered in this tournament");
+    }
+    return;
+  }
+
+  // A standalone (non-tournament) team stays workspace-scoped.
   if (!isPlatformAdmin(actor) && found.some((p) => p.organizationId !== actor.organizationId)) {
     throw Errors.validation("All players must belong to your workspace");
   }
@@ -48,12 +65,12 @@ export async function getTeam(actor: AuthUser, id: string) {
 }
 
 export async function createTeam(input: CreateInput, actor: AuthUser) {
-  await validatePlayers(input.playerIds, actor);
   if (input.tournamentId) {
     const t = await prisma.tournament.findFirst({ where: { id: input.tournamentId, deletedAt: null }, select: { organizationId: true } });
     if (!t) throw Errors.validation("Tournament not found");
     assertOrgAccess(actor, t.organizationId);
   }
+  await validatePlayers(input.playerIds, actor, input.tournamentId);
   const team = await prisma.team.create({
     data: {
       name: input.name,
@@ -74,7 +91,7 @@ export async function updateTeam(id: string, input: UpdateInput, actor: AuthUser
   const existing = await prisma.team.findFirst({ where: { id, deletedAt: null }, include: { teamPlayers: true } });
   if (!existing) throw Errors.notFound("Team");
   assertOrgAccess(actor, existing.organizationId);
-  if (input.playerIds) await validatePlayers(input.playerIds, actor);
+  if (input.playerIds) await validatePlayers(input.playerIds, actor, existing.tournamentId);
 
   const updated = await prisma.$transaction(async (tx) => {
     if (input.playerIds) {
