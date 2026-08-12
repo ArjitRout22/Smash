@@ -270,6 +270,7 @@ model TournamentPlayer {
   tournamentId String
   playerId     String
   seed         Int?
+  group        String? // group label (A, B, …) for group-stage standings
   status       String   @default("registered") // registered|withdrawn
   registeredAt DateTime @default(now())
 
@@ -286,6 +287,7 @@ model Team {
   tournamentId   String?
   name           String
   teamType       String   @default("doubles") // doubles|mixed
+  group          String? // group label (A, B, …) for group-stage standings
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   deletedAt      DateTime?

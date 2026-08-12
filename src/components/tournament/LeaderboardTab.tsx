@@ -3,7 +3,7 @@
 import Link from "next/link";
 import useSWR from "swr";
 import { swrFetcher } from "@/lib/client/api";
-import { Card } from "@/components/ui/primitives";
+import { Card, CardHeader } from "@/components/ui/primitives";
 import { EmptyState, ErrorState, ListSkeleton } from "@/components/ui/states";
 import { titleCase } from "@/lib/client/format";
 import type { LeaderboardRow } from "./types";
@@ -19,8 +19,30 @@ export function LeaderboardTab({ tournamentId }: { tournamentId: string }) {
   if (!data || data.length === 0)
     return <EmptyState title="No standings yet" message="Standings update automatically as match results come in." />;
 
+  // If participants were assigned groups (via Generate fixtures → Groups), show
+  // a separate standings table per group; otherwise one combined table.
+  const groups = Array.from(new Set(data.map((r) => r.group).filter((g): g is string => Boolean(g)))).sort();
+
+  if (groups.length > 0) {
+    return (
+      <div className="space-y-6">
+        {groups.map((g) => (
+          <StandingsTable key={g} title={`Group ${g}`} rows={data.filter((r) => r.group === g)} />
+        ))}
+        {data.some((r) => !r.group) && (
+          <StandingsTable title="Ungrouped" rows={data.filter((r) => !r.group)} />
+        )}
+      </div>
+    );
+  }
+
+  return <StandingsTable rows={data} />;
+}
+
+function StandingsTable({ title, rows }: { title?: string; rows: LeaderboardRow[] }) {
   return (
-    <Card>
+    <Card className="overflow-hidden">
+      {title && <CardHeader title={title} />}
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
@@ -35,9 +57,10 @@ export function LeaderboardTab({ tournamentId }: { tournamentId: string }) {
             </tr>
           </thead>
           <tbody>
-            {data.map((row, i) => (
+            {rows.map((row, i) => (
               <tr key={row.entity?.id ?? i} className="border-b border-[var(--border)] last:border-0">
-                <td className="px-4 py-3 font-semibold text-muted">{row.rank ?? i + 1}</td>
+                {/* Rank within THIS table (per-group when grouped). */}
+                <td className="px-4 py-3 font-semibold text-muted">{i + 1}</td>
                 <td className="px-4 py-3 font-medium">
                   {row.entity?.type === "player" ? (
                     <Link href={`/players/${row.entity.id}`} className="hover:underline">{row.entity.name}</Link>

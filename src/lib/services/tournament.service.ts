@@ -197,14 +197,22 @@ export async function addTournamentPlayers(tournamentId: string, playerIds: stri
 
 export async function getTournamentLeaderboard(actor: AuthUser, tournamentId: string) {
   await loadViewableTournament(actor, tournamentId);
-  const entries = await prisma.leaderboardEntry.findMany({
-    where: { tournamentId },
-    include: {
-      player: { select: { id: true, displayName: true, fullName: true } },
-      team: { select: { id: true, name: true } },
-    },
-    orderBy: [{ rank: "asc" }, { points: "desc" }],
-  });
+  const [entries, tps, teams] = await Promise.all([
+    prisma.leaderboardEntry.findMany({
+      where: { tournamentId },
+      include: {
+        player: { select: { id: true, displayName: true, fullName: true } },
+        team: { select: { id: true, name: true } },
+      },
+      orderBy: [{ rank: "asc" }, { points: "desc" }],
+    }),
+    // Group labels for per-group standings (A, B, …).
+    prisma.tournamentPlayer.findMany({ where: { tournamentId, group: { not: null } }, select: { playerId: true, group: true } }),
+    prisma.team.findMany({ where: { tournamentId, group: { not: null } }, select: { id: true, group: true } }),
+  ]);
+  const playerGroup = new Map(tps.map((t) => [t.playerId, t.group]));
+  const teamGroup = new Map(teams.map((t) => [t.id, t.group]));
+
   return entries.map((e) => ({
     rank: e.rank,
     position: e.position,
@@ -213,6 +221,7 @@ export async function getTournamentLeaderboard(actor: AuthUser, tournamentId: st
     wins: e.wins,
     losses: e.losses,
     points: e.points,
+    group: e.teamId ? teamGroup.get(e.teamId) ?? null : e.playerId ? playerGroup.get(e.playerId) ?? null : null,
     entity: e.team
       ? { type: "team" as const, id: e.team.id, name: e.team.name }
       : e.player

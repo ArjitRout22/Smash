@@ -209,6 +209,7 @@ export async function createMatch(input: CreateInput, actor: AuthUser) {
 }
 
 const MAX_FIXTURES = 128;
+const GROUP_LABELS = ["A", "B", "C", "D"];
 
 function roundRobinPairs(ids: string[]): [string, string][] {
   const pairs: [string, string][] = [];
@@ -289,6 +290,20 @@ export async function generateFixtures(tournamentId: string, input: GenerateFixt
           },
         });
         stageId = stage.id;
+      }
+
+      // Record each participant's group so the leaderboard can show per-group
+      // standings (A, B, …).
+      if (input.mode === "groups") {
+        for (let gi = 0; gi < input.groups!.length; gi++) {
+          const label = GROUP_LABELS[gi] ?? String(gi + 1);
+          const ids = input.groups![gi];
+          if (input.matchType === "singles") {
+            await tx.tournamentPlayer.updateMany({ where: { tournamentId, playerId: { in: ids } }, data: { group: label } });
+          } else {
+            await tx.team.updateMany({ where: { id: { in: ids } }, data: { group: label } });
+          }
+        }
       }
 
       let n = 0;

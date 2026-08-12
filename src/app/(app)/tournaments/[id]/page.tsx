@@ -1,7 +1,7 @@
 "use client";
 
-import { useParams } from "next/navigation";
-import { useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import useSWR from "swr";
 import { swrFetcher } from "@/lib/client/api";
 import { PageHeader, ErrorState, ListSkeleton } from "@/components/ui/states";
@@ -32,14 +32,22 @@ type Tab = (typeof TABS)[number];
 
 export default function TournamentDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const [tab, setTab] = useState<Tab>("Overview");
   const { data, error, isLoading, mutate } = useSWR<TournamentDetail>(
     `/api/tournaments/${id}`,
     swrFetcher
   );
 
+  // This is the management view — non-owners (e.g. people who joined) belong on
+  // the read-only public page. The server also blocks any management action.
+  useEffect(() => {
+    if (data && !data.canManage) router.replace(`/discover/${id}`);
+  }, [data, id, router]);
+
   if (isLoading) return <ListSkeleton rows={5} />;
   if (error || !data) return <ErrorState onRetry={() => mutate()} />;
+  if (!data.canManage) return <ListSkeleton rows={5} />; // redirecting
 
   const isTeamFormat = data.format !== "singles";
   const visibleTabs = TABS.filter((t) => (t === "Teams" ? isTeamFormat : true));

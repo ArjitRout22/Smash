@@ -157,6 +157,15 @@ Tailwind CSS v4 · Vitest · Playwright.
 
 ---
 
+- **Per-group standings + owner-only management:** Generate-fixtures (Groups mode)
+  now records each participant's group (Team.group / TournamentPlayer.group), and
+  the tournament Leaderboard shows a **separate ranked table per group** (A, B, …).
+  Progression to a knockout is then "pick the group qualifiers → Generate bracket".
+  Also hardened the UI: the tournament management page redirects non-owners to the
+  read-only public page (management was already blocked server-side).
+
+---
+
 ## Key decisions
 
 - **Enum-like columns as strings** (validated by Zod + TS unions) instead of DB

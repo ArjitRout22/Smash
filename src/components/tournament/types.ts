@@ -81,6 +81,7 @@ export type LeaderboardRow = {
   wins: number;
   losses: number;
   points: number;
+  group?: string | null;
   entity: { type: "player" | "team"; id: string; name: string } | null;
 };
 
