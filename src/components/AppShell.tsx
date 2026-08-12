@@ -14,6 +14,7 @@ import {
   Zap,
   BarChart3,
   UserCircle,
+  ShieldAlert,
   LogOut,
   Menu,
   X,
@@ -39,13 +40,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
 
+  const nav =
+    user?.role === "ADMIN"
+      ? [...NAV, { href: "/admin", label: "Admin", icon: ShieldAlert }]
+      : NAV;
+
   return (
     <div className="flex min-h-screen">
       {/* Desktop sidebar */}
       <aside className="hidden w-60 shrink-0 flex-col border-r border-[var(--border)] bg-surface p-4 md:flex">
         <Brand />
         <div className="mt-6 flex-1">
-          <NavLinks pathname={pathname} />
+          <NavLinks pathname={pathname} items={nav} />
         </div>
         <UserFooter name={user?.name ?? user?.phone ?? ""} role={user?.role ?? ""} onLogout={logout} />
       </aside>
@@ -70,7 +76,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </button>
               </div>
               <div className="mt-6 flex-1">
-                <NavLinks pathname={pathname} onNavigate={() => setMobileOpen(false)} />
+                <NavLinks pathname={pathname} items={nav} onNavigate={() => setMobileOpen(false)} />
               </div>
               <UserFooter name={user?.name ?? user?.phone ?? ""} role={user?.role ?? ""} onLogout={logout} />
             </div>
@@ -86,10 +92,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-function NavLinks({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {
+function NavLinks({
+  pathname,
+  items,
+  onNavigate,
+}: {
+  pathname: string;
+  items: { href: string; label: string; icon: typeof LayoutDashboard }[];
+  onNavigate?: () => void;
+}) {
   return (
     <nav className="flex flex-col gap-1">
-      {NAV.map(({ href, label, icon: Icon }) => {
+      {items.map(({ href, label, icon: Icon }) => {
         const active = pathname === href || pathname.startsWith(`${href}/`);
         return (
           <Link

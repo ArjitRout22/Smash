@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { api, ApiClientError } from "@/lib/client/api";
+import useSWR from "swr";
+import { X } from "lucide-react";
+import { api, ApiClientError, swrFetcher } from "@/lib/client/api";
 import { Card, CardHeader, Button, Input, Textarea, Select, Field } from "@/components/ui/primitives";
 import { ConfirmDialog } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
@@ -10,7 +12,7 @@ import { useAuth } from "@/components/AuthProvider";
 import { PERMS } from "@/lib/client/perms";
 import { TOURNAMENT_STATUSES } from "@/lib/domain/constants";
 import { titleCase } from "@/lib/client/format";
-import type { TournamentDetail } from "./types";
+import type { TournamentDetail, TournamentPlayerDTO } from "./types";
 
 export function SettingsTab({ tournament, onChanged }: { tournament: TournamentDetail; onChanged: () => void }) {
   const { can } = useAuth();
@@ -94,6 +96,8 @@ export function SettingsTab({ tournament, onChanged }: { tournament: TournamentD
         </Card>
       )}
 
+      {canEdit && <ScorersCard tournamentId={tournament.id} />}
+
       {canDelete && (
         <Card className="border-[var(--danger)]/40">
           <CardHeader title="Danger zone" />
@@ -118,5 +122,78 @@ export function SettingsTab({ tournament, onChanged }: { tournament: TournamentD
         loading={deleting}
       />
     </div>
+  );
+}
+
+type Scorer = { userId: string; playerId: string | null; name: string };
+
+/** Owner-only: nominate registered players to also enter match scores. */
+function ScorersCard({ tournamentId }: { tournamentId: string }) {
+  const toast = useToast();
+  const [pick, setPick] = useState("");
+  const [busy, setBusy] = useState(false);
+  const { data: scorers, mutate } = useSWR<Scorer[]>(`/api/tournaments/${tournamentId}/scorers`, swrFetcher);
+  const { data: players } = useSWR<TournamentPlayerDTO[]>(`/api/tournaments/${tournamentId}/players`, swrFetcher);
+
+  const scorerPlayerIds = new Set((scorers ?? []).map((s) => s.playerId));
+  const candidates = (players ?? []).filter((tp) => !scorerPlayerIds.has(tp.player.id));
+
+  async function add() {
+    if (!pick) return;
+    setBusy(true);
+    try {
+      await api.post(`/api/tournaments/${tournamentId}/scorers`, { playerId: pick });
+      toast.success("Scorer nominated");
+      setPick("");
+      mutate();
+    } catch (err) {
+      toast.error(err instanceof ApiClientError ? err.message : "Could not nominate");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(userId: string) {
+    try {
+      await api.del(`/api/tournaments/${tournamentId}/scorers/${userId}`);
+      mutate();
+    } catch (err) {
+      toast.error(err instanceof ApiClientError ? err.message : "Could not remove");
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader
+        title="Scorers"
+        subtitle="You (the organizer) can always enter scores. Nominate registered players to help — everyone else can only view. A completed score is locked."
+      />
+      <div className="space-y-4 p-5">
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Select value={pick} onChange={(e) => setPick(e.target.value)} className="sm:flex-1">
+            <option value="">Select a registered player…</option>
+            {candidates.map((tp) => (
+              <option key={tp.player.id} value={tp.player.id}>{tp.player.displayName} · {tp.player.fullName}</option>
+            ))}
+          </Select>
+          <Button onClick={add} loading={busy} disabled={!pick}>Nominate</Button>
+        </div>
+
+        {(scorers?.length ?? 0) === 0 ? (
+          <p className="text-sm text-muted">No nominated scorers yet — only you can enter scores.</p>
+        ) : (
+          <ul className="divide-y divide-[var(--border)] rounded-lg border border-[var(--border)]">
+            {scorers!.map((s) => (
+              <li key={s.userId} className="flex items-center justify-between px-3 py-2 text-sm">
+                <span className="font-medium">{s.name}</span>
+                <button onClick={() => remove(s.userId)} className="text-muted hover:text-[var(--danger)]" aria-label={`Remove ${s.name}`}>
+                  <X className="h-4 w-4" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </Card>
   );
 }

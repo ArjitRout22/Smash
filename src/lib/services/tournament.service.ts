@@ -403,3 +403,69 @@ export async function loadOwnedTournament(actor: AuthUser, tournamentId: string)
   assertOrgAccess(actor, t.organizationId);
   return t;
 }
+
+// --- Nominated scorers (item 5) --------------------------------------------
+
+/** Owner: list the players nominated to help score this tournament. */
+export async function listScorers(actor: AuthUser, tournamentId: string) {
+  await loadOwnedTournament(actor, tournamentId);
+  const rows = await prisma.tournamentScorer.findMany({
+    where: { tournamentId },
+    include: {
+      user: { select: { id: true, name: true, email: true, player: { select: { id: true, displayName: true } } } },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+  return rows.map((r) => ({
+    userId: r.userId,
+    playerId: r.user.player?.id ?? null,
+    name: r.user.player?.displayName ?? r.user.name ?? r.user.email ?? "Player",
+  }));
+}
+
+/** Owner: nominate a player (who must have an account) to also enter scores. */
+export async function addScorer(actor: AuthUser, tournamentId: string, playerId: string) {
+  await loadOwnedTournament(actor, tournamentId);
+  const player = await prisma.player.findFirst({
+    where: { id: playerId, deletedAt: null },
+    include: { user: { select: { id: true, isActive: true, deletedAt: true } } },
+  });
+  if (!player) throw Errors.notFound("Player");
+  if (!player.user || !player.user.isActive || player.user.deletedAt) {
+    throw Errors.validation("That player doesn't have an account, so they can't be nominated to score.");
+  }
+  await prisma.tournamentScorer.upsert({
+    where: { tournamentId_userId: { tournamentId, userId: player.user.id } },
+    update: {},
+    create: { tournamentId, userId: player.user.id },
+  });
+  await audit({ actorUserId: actor.id, action: "tournament.scorer.added", entityType: "Tournament", entityId: tournamentId, newValue: { userId: player.user.id } });
+  return { userId: player.user.id };
+}
+
+/** Owner: remove a nominated scorer. */
+export async function removeScorer(actor: AuthUser, tournamentId: string, userId: string) {
+  await loadOwnedTournament(actor, tournamentId);
+  await prisma.tournamentScorer.deleteMany({ where: { tournamentId, userId } });
+  await audit({ actorUserId: actor.id, action: "tournament.scorer.removed", entityType: "Tournament", entityId: tournamentId, previousValue: { userId } });
+}
+
+/**
+ * May this user enter scores for the tournament? Allowed for a platform admin,
+ * the tournament's organizer/creator, or a nominated scorer. Everyone else can
+ * only view (item 5). Accepts a db client so it can run inside the score
+ * transaction.
+ */
+export async function assertCanScoreTournament(
+  actor: AuthUser,
+  t: { id: string; organizerId: string; createdById: string },
+  db: { tournamentScorer: typeof prisma.tournamentScorer } = prisma
+) {
+  if (isPlatformAdmin(actor)) return;
+  if (t.organizerId === actor.id || t.createdById === actor.id) return;
+  const scorer = await db.tournamentScorer.findUnique({
+    where: { tournamentId_userId: { tournamentId: t.id, userId: actor.id } },
+  });
+  if (scorer) return;
+  throw Errors.forbidden("Only the organizer or a nominated scorer can enter scores for this tournament.");
+}

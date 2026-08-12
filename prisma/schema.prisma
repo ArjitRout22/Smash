@@ -103,6 +103,7 @@ model User {
   pointTransactions    PointTransaction[]
   casualChallenges     CasualMatch[] @relation("CasualChallenger")
   casualOpponents      CasualMatch[] @relation("CasualOpponent")
+  tournamentScorer     TournamentScorer[]
 
   @@index([roleId])
   @@index([organizationId])
@@ -241,10 +242,27 @@ model Tournament {
   matches           Match[]
   pointTransactions PointTransaction[]
   leaderboard       LeaderboardEntry[]
+  scorers           TournamentScorer[]
 
   @@index([organizationId])
   @@index([status])
   @@index([deletedAt])
+}
+
+// People the organizer has nominated to ALSO enter scores for a tournament
+// (beyond the organizer/creator themselves). Lets a trusted participant help
+// score without giving them any other management access.
+model TournamentScorer {
+  id           String   @id @default(uuid())
+  tournamentId String
+  userId       String
+  createdAt    DateTime @default(now())
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tournamentId, userId])
+  @@index([userId])
 }
 
 model TournamentPlayer {

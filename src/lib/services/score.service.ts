@@ -8,7 +8,7 @@ import { recomputeAfterMatch } from "@/lib/services/recompute";
 import type { Side, StageType } from "@/lib/domain/constants";
 import type { SubmitScoreInput } from "@/lib/validation/schemas";
 import type { AuthUser } from "@/lib/auth/authorize";
-import { assertOrgAccess } from "@/lib/auth/tenancy";
+import { assertCanScoreTournament } from "@/lib/services/tournament.service";
 
 type Tx = Prisma.TransactionClient;
 
@@ -164,11 +164,13 @@ export async function submitScore(
         participants: true,
         stage: true,
         games: true,
-        tournament: { select: { organizationId: true } },
+        tournament: { select: { id: true, organizerId: true, createdById: true } },
       },
     });
     if (!match) throw Errors.notFound("Match");
-    assertOrgAccess(actor, match.tournament.organizationId);
+    // Only the organizer/creator, a platform admin, or a nominated scorer may
+    // enter scores; everyone else is view-only (item 5).
+    await assertCanScoreTournament(actor, match.tournament, tx);
     if (match.status === "cancelled") {
       throw Errors.invalidState("Cannot score a cancelled match");
     }

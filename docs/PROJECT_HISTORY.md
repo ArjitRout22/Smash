@@ -115,6 +115,19 @@ Tailwind CSS v4 · Vitest · Playwright.
   status, so the dashboard/Discover CTA shows **Pending / Joined / Invited**
   instead of a stale "Request to join". Casual matches: **removed Reopen** — a
   completed result both players confirmed is final.
+- **Mobile + polish:** iOS input-focus auto-zoom fixed (≥16px form fields);
+  shuttlecock favicon + OG metadata; a **Share** button (native share sheet /
+  copy link) for the app and public tournaments; a branded rotating-message
+  loader on slow navigations; self-service **name change** on the profile.
+- **Casual matches → team-based:** any player on a side can report the score;
+  the opposing team (whoever didn't report) accepts/rejects.
+- **Tournament scoring (item 5):** a scored tournament match **auto-locks**
+  (no edits until the organizer reopens). Only the organizer/creator, a platform
+  admin, or a **nominated scorer** may enter scores (`TournamentScorer`; managed
+  from tournament Settings) — everyone else is view-only.
+- **Admin cleanup:** platform-admin-only `/admin` screen to review accounts and
+  **soft-delete** test users (hides them from directory + leaderboard, revokes
+  login; reversible), plus `admin.service`.
 - **Match lifecycle + close/lock** (tournament matches): explicit **Start** /
   **Cancel** controls (status was only changing implicitly via scoring), and a
   **Close** action that finalizes a completed result — a new `Match.closedAt`
