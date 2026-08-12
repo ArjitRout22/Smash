@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db/prisma";
 import { permissionsForRole } from "@/lib/auth/permissions";
 import type { AuthUser } from "@/lib/auth/authorize";
 import { createTournament, addTournamentPlayers, getTournamentLeaderboard } from "@/lib/services/tournament.service";
-import { createMatch } from "@/lib/services/match.service";
+import { createMatch, updateMatch } from "@/lib/services/match.service";
 import { submitScore } from "@/lib/services/score.service";
 
 /**
@@ -99,6 +99,8 @@ d("scoring → leaderboard → correction (integration)", () => {
   });
 
   it("recomputes consistently when the score is corrected (winner flips)", async () => {
+    // Completing a match auto-locks it; reopen before correcting the score.
+    await updateMatch(matchId, { closed: false }, actor);
     const current = await prisma.match.findUniqueOrThrow({ where: { id: matchId } });
     const res = await submitScore(
       matchId,
@@ -128,6 +130,8 @@ d("scoring → leaderboard → correction (integration)", () => {
   });
 
   it("rejects a stale (concurrent) score update via optimistic version", async () => {
+    // Reopen so the closed-lock guard doesn't mask the optimistic-version check.
+    await updateMatch(matchId, { closed: false }, actor);
     await expect(
       submitScore(matchId, { games: [{ scoreA: 21, scoreB: 0 }], expectedVersion: 0 }, actor)
     ).rejects.toMatchObject({ code: "CONCURRENCY_CONFLICT" });

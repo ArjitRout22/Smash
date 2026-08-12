@@ -76,7 +76,9 @@ async function propagateWinner(
     });
     await tx.match.update({
       where: { id: next.id },
-      data: { status: "scheduled", winnerSide: null, version: { increment: 1 } },
+      // Also clear the auto-lock: an invalidated downstream match must be
+      // re-scorable without a manual reopen.
+      data: { status: "scheduled", winnerSide: null, closedAt: null, version: { increment: 1 } },
     });
     // Cascade: the now-undecided downstream match feeds nothing forward.
     await propagateWinner(tx, next, null);
