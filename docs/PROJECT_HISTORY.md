@@ -201,6 +201,45 @@ Tailwind CSS v4 · Vitest · Playwright.
 
 ---
 
+### Phase 6 — Profiles get contactable, matches get social, venue discovery
+- **Profile location + phone (self-service):** `Player` gained `locationName` +
+  `locationLat/Lng` (OSM place picker) and the profile now edits **phone** and
+  **home location** via `PUT /api/me/player` (extended `UpdateOwnPlayerSchema` +
+  `updateOwnPlayer`). Phone is treated as private contact info — `getPlayer` only
+  returns it to the player themselves or a platform admin (nulled for the public
+  directory); location is shown publicly with a **View on map** link.
+- **"View on map" as a real CTA:** new `ViewOnMapButton` (button-styled `<a>`,
+  renders nothing when there's no resolvable location) in `LocationPicker`.
+  Profile shows a **"View my map"** CTA; the tournament Overview and public
+  player profile use it too. Compact map *chips* on dashboard/discover cards kept.
+- **Casual matches carry a real location (item 3):** the New Challenge modal uses
+  the OSM `LocationPicker`; `CasualMatch` gained `locationLat/Lng`; challenge
+  cards show a **View on map** CTA.
+- **Match comments (all matches):** a polymorphic `MatchComment`
+  (`entityType` = `match` | `casual_match`, keyed by `entityId`, no FK — either
+  match type can be deleted freely) with `comment.service` + REST under
+  `/api/(matches|casual-matches)/[id]/comments[/[commentId]]`. Access **mirrors
+  match visibility**: tournament-match comments use `loadViewableTournament`
+  (owner / public / participant may read+post; organizer/creator/admin moderate);
+  casual-match comments are restricted to the (≤4) participants (non-participants
+  get 404, no existence leak). Reusable `<MatchComments basePath>` collapsible
+  thread on Challenge cards and tournament match rows.
+- **Nearby badminton venues (item 5):** dashboard `NearbyVenues` carousel does a
+  live OSM (Nominatim) search bounded to a ~15km box around the player's saved
+  coordinates (browser-side, like the picker); prompts to set a location if none.
+- **Item 6 (ops, not code):** `scripts/cleanup_reset_stats.sql` — a reviewed,
+  single-transaction **clean-slate stats reset** (wipes all matches, casual
+  matches, ledger, leaderboards, rankings, comments) **+ hard-delete of throwaway
+  test accounts** (`%@t.test`, `hero-%`, `probe-%`, `deploy-check-%`) and their
+  tournaments. Prints before/after NOTICE counts; left uncommitted for an
+  explicit COMMIT/ROLLBACK. Validated locally (rolled back); **run on prod Neon**.
+- Migration `20260812200000_profile_location_casual_coords_comments` (auto-applies
+  on deploy). Typecheck + lint + 48 unit tests + production build all green;
+  features verified live on a local Postgres (profile save round-trip, venue
+  carousel with real OSM results, comment access-control + tenancy).
+
+---
+
 ## Key decisions
 
 - **Enum-like columns as strings** (validated by Zod + TS unions) instead of DB

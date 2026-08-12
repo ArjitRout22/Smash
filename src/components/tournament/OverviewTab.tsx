@@ -2,7 +2,7 @@
 
 import { MapPin } from "lucide-react";
 import { Card, CardHeader, Badge, statusColor } from "@/components/ui/primitives";
-import { mapUrl } from "@/components/LocationPicker";
+import { ViewOnMapButton } from "@/components/LocationPicker";
 import { formatDate, titleCase } from "@/lib/client/format";
 import type { TournamentDetail } from "./types";
 
@@ -39,12 +39,14 @@ export function OverviewTab({ tournament: t }: { tournament: TournamentDetail })
 
 function LocationValue({ location, lat, lng }: { location: string | null; lat: number | null; lng: number | null }) {
   if (!location) return <>—</>;
-  const url = mapUrl(location, lat, lng);
   return (
-    <a href={url ?? "#"} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline">
-      <MapPin className="h-3.5 w-3.5 shrink-0" />
-      <span className="line-clamp-2">{location}</span>
-    </a>
+    <div className="flex flex-col items-start gap-2">
+      <span className="flex items-start gap-1">
+        <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted" />
+        <span className="line-clamp-2">{location}</span>
+      </span>
+      <ViewOnMapButton location={location} lat={lat} lng={lng} />
+    </div>
   );
 }
 

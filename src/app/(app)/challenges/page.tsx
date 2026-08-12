@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import useSWR from "swr";
-import { Zap, Plus, Search } from "lucide-react";
+import { Zap, Plus, Search, MessageSquare } from "lucide-react";
 import { api, ApiClientError, swrFetcher } from "@/lib/client/api";
 import { PageHeader, EmptyState, ErrorState, ListSkeleton } from "@/components/ui/states";
 import { Button, Card, Badge, Field, Select, Input } from "@/components/ui/primitives";
@@ -10,6 +10,8 @@ import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { useAuth } from "@/components/AuthProvider";
 import { ScoreEntryModal, type ScorableMatch } from "@/components/ScoreEntryModal";
+import { LocationPicker, ViewOnMapButton, type PlaceValue } from "@/components/LocationPicker";
+import { MatchComments } from "@/components/MatchComments";
 import { formatDateTime } from "@/lib/client/format";
 
 type Party = { userId: string; playerId: string; name: string; fullName: string };
@@ -21,6 +23,8 @@ type CasualMatch = {
   bestOf: number;
   scheduledAt: string | null;
   location: string | null;
+  locationLat: number | null;
+  locationLng: number | null;
   challenger: Party;
   opponent: Party;
   challengerPartner: PartnerLite;
@@ -246,9 +250,11 @@ function ChallengeCard({
   const oppLabel = sideLabel(m.opponent.name, m.opponentPartner);
   const otherLabel = m.isChallenger ? oppLabel : chalLabel;
   const busyAny = busy?.startsWith(m.id) ?? false;
+  const [showComments, setShowComments] = useState(false);
 
   return (
-    <Card className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+    <Card className="p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <span className={m.winnerSide === "A" ? "font-bold" : "font-medium"}>{chalLabel}</span>
@@ -302,6 +308,20 @@ function ChallengeCard({
           <Button size="sm" variant="ghost" disabled={busyAny} onClick={onCancel}>Cancel</Button>
         )}
       </div>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <ViewOnMapButton location={m.location} lat={m.locationLat} lng={m.locationLng} />
+        <button
+          type="button"
+          onClick={() => setShowComments((v) => !v)}
+          className="inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-sm font-medium text-foreground transition hover:bg-surface-2"
+        >
+          <MessageSquare className="h-4 w-4 text-muted" />
+          {showComments ? "Hide comments" : "Comments"}
+        </button>
+      </div>
+      {showComments && <MatchComments basePath={`/api/casual-matches/${m.id}`} />}
     </Card>
   );
 }
@@ -370,7 +390,7 @@ function NewChallengeModal({ onClose, onCreated }: { onClose: () => void; onCrea
   const [partner, setPartner] = useState<Opponent | null>(null);
   const [oppPartner, setOppPartner] = useState<Opponent | null>(null);
   const [bestOf, setBestOf] = useState("3");
-  const [location, setLocation] = useState("");
+  const [place, setPlace] = useState<PlaceValue>({ name: "", lat: null, lng: null });
   const [scheduledAt, setScheduledAt] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -388,7 +408,9 @@ function NewChallengeModal({ onClose, onCreated }: { onClose: () => void; onCrea
         challengerPartnerPlayerId: isDoubles ? partner!.id : undefined,
         opponentPartnerPlayerId: isDoubles ? oppPartner!.id : undefined,
         bestOf: Number(bestOf),
-        location: location || undefined,
+        location: place.name.trim() ? place.name.trim() : undefined,
+        locationLat: place.name.trim() ? place.lat : undefined,
+        locationLng: place.name.trim() ? place.lng : undefined,
         scheduledAt: scheduledAt || undefined,
       });
       toast.success("Challenge sent");
@@ -438,7 +460,7 @@ function NewChallengeModal({ onClose, onCreated }: { onClose: () => void; onCrea
           </Field>
         </div>
         <Field label="Location (optional)">
-          <Input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="e.g. Court 3, City Sports Hall" />
+          <LocationPicker value={place} onChange={setPlace} placeholder="Search a court, club or address…" />
         </Field>
       </div>
     </Modal>

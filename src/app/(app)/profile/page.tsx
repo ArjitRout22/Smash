@@ -8,6 +8,7 @@ import { api, ApiClientError, swrFetcher } from "@/lib/client/api";
 import { PageHeader, EmptyState, CardGridSkeleton, BrandedLoader } from "@/components/ui/states";
 import { Button, Card, CardHeader, Badge, Select, Input, Field, Avatar } from "@/components/ui/primitives";
 import { ShareButton } from "@/components/ShareButton";
+import { LocationPicker, ViewOnMapButton, type PlaceValue } from "@/components/LocationPicker";
 import { useToast } from "@/components/ui/Toast";
 import { useAuth } from "@/components/AuthProvider";
 import { titleCase, pct } from "@/lib/client/format";
@@ -44,10 +45,16 @@ export default function ProfilePage() {
     playerId ? `/api/players/${playerId}/statistics` : null,
     swrFetcher
   );
-  const { data: player, mutate: mutatePlayer } = useSWR<{ skillLevel: string | null; fullName: string; displayName: string; photoUrl: string | null }>(
-    playerId ? `/api/players/${playerId}` : null,
-    swrFetcher
-  );
+  const { data: player, mutate: mutatePlayer } = useSWR<{
+    skillLevel: string | null;
+    fullName: string;
+    displayName: string;
+    photoUrl: string | null;
+    phone: string | null;
+    locationName: string | null;
+    locationLat: number | null;
+    locationLng: number | null;
+  }>(playerId ? `/api/players/${playerId}` : null, swrFetcher);
 
   if (isLoading) {
     return <BrandedLoader />;
@@ -117,10 +124,21 @@ export default function ProfilePage() {
         />
         <dl className="divide-y divide-[var(--border)]">
           <Row label="Email" value={user.email ?? "—"} />
-          <Row label="Phone" value={user.phone ?? "—"} />
           <Row label="Role" value={<Badge color="blue">{titleCase(user.role)}</Badge>} />
         </dl>
       </Card>
+
+      {playerId && (
+        <div className="mt-6">
+          <ContactLocationCard
+            phone={player?.phone ?? ""}
+            locationName={player?.locationName ?? ""}
+            locationLat={player?.locationLat ?? null}
+            locationLng={player?.locationLng ?? null}
+            onSaved={() => mutatePlayer()}
+          />
+        </div>
+      )}
 
       {playerId && (
         <div className="mt-6">
@@ -206,6 +224,76 @@ function NameCard({ fullName, displayName, onSaved }: { fullName: string; displa
       </div>
       <div className="flex justify-end border-t border-[var(--border)] px-5 py-3">
         <Button size="sm" onClick={save} loading={saving} disabled={!dirty || !valid}>Save name</Button>
+      </div>
+    </Card>
+  );
+}
+
+function ContactLocationCard({
+  phone,
+  locationName,
+  locationLat,
+  locationLng,
+  onSaved,
+}: {
+  phone: string;
+  locationName: string;
+  locationLat: number | null;
+  locationLng: number | null;
+  onSaved: () => void;
+}) {
+  const toast = useToast();
+  const [phoneVal, setPhoneVal] = useState(phone);
+  const [place, setPlace] = useState<PlaceValue>({ name: locationName, lat: locationLat, lng: locationLng });
+  const [saving, setSaving] = useState(false);
+
+  // Sync once the fetched values arrive.
+  const fingerprint = `${phone}|${locationName}|${locationLat}|${locationLng}`;
+  const [synced, setSynced] = useState(fingerprint);
+  if (fingerprint !== synced) {
+    setSynced(fingerprint);
+    setPhoneVal(phone);
+    setPlace({ name: locationName, lat: locationLat, lng: locationLng });
+  }
+
+  const dirty =
+    phoneVal.trim() !== phone.trim() ||
+    place.name.trim() !== locationName.trim() ||
+    place.lat !== locationLat ||
+    place.lng !== locationLng;
+
+  async function save() {
+    setSaving(true);
+    try {
+      await api.put("/api/me/player", {
+        phone: phoneVal.trim() === "" ? null : phoneVal.trim(),
+        locationName: place.name.trim() === "" ? null : place.name.trim(),
+        locationLat: place.name.trim() === "" ? null : place.lat,
+        locationLng: place.name.trim() === "" ? null : place.lng,
+      });
+      toast.success("Contact & location updated");
+      onSaved();
+    } catch (err) {
+      toast.error(err instanceof ApiClientError ? err.message : "Could not update");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card className="overflow-hidden">
+      <CardHeader title="Contact & location" subtitle="Add a phone number and your home location so others can find and reach you." />
+      <div className="grid grid-cols-1 gap-4 px-5 py-4 sm:grid-cols-2">
+        <Field label="Phone (optional)">
+          <Input type="tel" value={phoneVal} onChange={(e) => setPhoneVal(e.target.value)} placeholder="e.g. +91 98765 43210" />
+        </Field>
+        <Field label="Location (optional)">
+          <LocationPicker value={place} onChange={setPlace} placeholder="Search your city or club…" />
+        </Field>
+      </div>
+      <div className="flex items-center justify-between gap-3 border-t border-[var(--border)] px-5 py-3">
+        <ViewOnMapButton location={place.name || null} lat={place.lat} lng={place.lng} label="View my map" />
+        <Button size="sm" onClick={save} loading={saving} disabled={!dirty}>Save</Button>
       </div>
     </Card>
   );

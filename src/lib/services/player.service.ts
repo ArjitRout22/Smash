@@ -6,7 +6,7 @@ import { skipTake, type Pagination } from "@/lib/api/pagination";
 import { winPercentage } from "@/lib/engines/leaderboard";
 import { GLOBAL_POINTS_PER_WIN } from "@/lib/domain/constants";
 import type { AuthUser } from "@/lib/auth/authorize";
-import { orgFilter, assertOrgAccess, ownOrgId } from "@/lib/auth/tenancy";
+import { orgFilter, assertOrgAccess, ownOrgId, isPlatformAdmin } from "@/lib/auth/tenancy";
 import type { CreatePlayerSchema, UpdatePlayerSchema, UpdateOwnPlayerInput } from "@/lib/validation/schemas";
 
 type CreateInput = z.infer<typeof CreatePlayerSchema>;
@@ -48,13 +48,16 @@ export async function listPlayers(
  * workspace-scoped (see updatePlayer). The `actor` is kept for signature
  * symmetry / future per-field privacy, but no org check is applied to viewing.
  */
-export async function getPlayer(_actor: AuthUser, id: string) {
+export async function getPlayer(actor: AuthUser, id: string) {
   const player = await prisma.player.findFirst({
     where: { id, deletedAt: null },
     include: { ranking: true },
   });
   if (!player) throw Errors.notFound("Player");
-  return player;
+  // Phone is private contact info — expose it only to the player themselves or a
+  // platform admin. Everyone else (the global directory) gets it nulled out.
+  const canSeePhone = actor.playerId === id || isPlatformAdmin(actor);
+  return { ...player, phone: canSeePhone ? player.phone : null };
 }
 
 export async function createPlayer(input: CreateInput, actor: AuthUser) {
@@ -111,7 +114,11 @@ export async function updateOwnPlayer(actor: AuthUser, input: UpdateOwnPlayerInp
       fullName: input.fullName ?? undefined,
       displayName: input.displayName ?? undefined,
       city: input.city === undefined ? undefined : input.city,
+      phone: input.phone === undefined ? undefined : input.phone,
       skillLevel: input.skillLevel === undefined ? undefined : input.skillLevel,
+      locationName: input.locationName === undefined ? undefined : input.locationName,
+      locationLat: input.locationLat === undefined ? undefined : input.locationLat,
+      locationLng: input.locationLng === undefined ? undefined : input.locationLng,
     },
     include: { ranking: true },
   });
