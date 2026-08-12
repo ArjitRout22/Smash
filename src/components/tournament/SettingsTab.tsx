@@ -6,6 +6,7 @@ import useSWR from "swr";
 import { X } from "lucide-react";
 import { api, ApiClientError, swrFetcher } from "@/lib/client/api";
 import { Card, CardHeader, Button, Input, Textarea, Select, Field } from "@/components/ui/primitives";
+import { LocationPicker } from "@/components/LocationPicker";
 import { ConfirmDialog } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { useAuth } from "@/components/AuthProvider";
@@ -25,6 +26,8 @@ export function SettingsTab({ tournament, onChanged }: { tournament: TournamentD
     name: tournament.name,
     description: tournament.description ?? "",
     location: tournament.location ?? "",
+    locationLat: tournament.locationLat ?? null,
+    locationLng: tournament.locationLng ?? null,
     status: tournament.status,
     visibility: tournament.visibility,
   });
@@ -43,6 +46,8 @@ export function SettingsTab({ tournament, onChanged }: { tournament: TournamentD
         name: form.name,
         description: form.description || null,
         location: form.location || null,
+        locationLat: form.location ? form.locationLat : null,
+        locationLng: form.location ? form.locationLng : null,
         status: form.status,
         visibility: form.visibility,
       });
@@ -87,7 +92,12 @@ export function SettingsTab({ tournament, onChanged }: { tournament: TournamentD
                 </Select>
               </Field>
             </div>
-            <Field label="Location"><Input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} /></Field>
+            <Field label="Location" hint="Search for a venue, or just type an address.">
+              <LocationPicker
+                value={{ name: form.location, lat: form.locationLat, lng: form.locationLng }}
+                onChange={(v) => setForm((f) => ({ ...f, location: v.name, locationLat: v.lat, locationLng: v.lng }))}
+              />
+            </Field>
             <Field label="Description"><Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field>
             <div className="flex justify-end">
               <Button onClick={save} loading={saving} disabled={form.name.trim().length < 2}>Save changes</Button>

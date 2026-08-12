@@ -220,6 +220,8 @@ model Tournament {
   name           String
   description    String?
   location       String?
+  locationLat    Float? // selected place coordinates (OpenStreetMap search)
+  locationLng    Float?
   startDate      DateTime?
   endDate        DateTime?
   organizerId    String

@@ -3,6 +3,8 @@ export type TournamentDetail = {
   name: string;
   description: string | null;
   location: string | null;
+  locationLat: number | null;
+  locationLng: number | null;
   startDate: string | null;
   endDate: string | null;
   status: string;

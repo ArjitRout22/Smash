@@ -1,6 +1,8 @@
 "use client";
 
+import { MapPin } from "lucide-react";
 import { Card, CardHeader, Badge, statusColor } from "@/components/ui/primitives";
+import { mapUrl } from "@/components/LocationPicker";
 import { formatDate, titleCase } from "@/lib/client/format";
 import type { TournamentDetail } from "./types";
 
@@ -14,7 +16,7 @@ export function OverviewTab({ tournament: t }: { tournament: TournamentDetail })
           <dl className="grid grid-cols-2 gap-4 text-sm">
             <Info label="Format" value={titleCase(t.format)} />
             <Info label="Status" value={<Badge color={statusColor(t.status)}>{titleCase(t.status)}</Badge>} />
-            <Info label="Location" value={t.location || "—"} />
+            <Info label="Location" value={<LocationValue location={t.location} lat={t.locationLat} lng={t.locationLng} />} />
             <Info label="Organizer" value={t.organizer?.name || t.organizer?.phone || "—"} />
             <Info label="Start date" value={formatDate(t.startDate)} />
             <Info label="End date" value={formatDate(t.endDate)} />
@@ -32,6 +34,17 @@ export function OverviewTab({ tournament: t }: { tournament: TournamentDetail })
         </div>
       </Card>
     </div>
+  );
+}
+
+function LocationValue({ location, lat, lng }: { location: string | null; lat: number | null; lng: number | null }) {
+  if (!location) return <>—</>;
+  const url = mapUrl(location, lat, lng);
+  return (
+    <a href={url ?? "#"} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline">
+      <MapPin className="h-3.5 w-3.5 shrink-0" />
+      <span className="line-clamp-2">{location}</span>
+    </a>
   );
 }
 

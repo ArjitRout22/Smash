@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { api, ApiClientError } from "@/lib/client/api";
 import { PageHeader } from "@/components/ui/states";
 import { Card, Button, Input, Textarea, Select, Field } from "@/components/ui/primitives";
+import { LocationPicker } from "@/components/LocationPicker";
 import { useToast } from "@/components/ui/Toast";
 import { TOURNAMENT_FORMATS } from "@/lib/domain/constants";
 import { titleCase } from "@/lib/client/format";
@@ -17,6 +18,8 @@ export default function CreateTournamentPage() {
     name: "",
     description: "",
     location: "",
+    locationLat: null as number | null,
+    locationLng: null as number | null,
     startDate: "",
     endDate: "",
     format: "singles",
@@ -34,6 +37,8 @@ export default function CreateTournamentPage() {
         name: form.name.trim(),
         description: form.description.trim() || undefined,
         location: form.location.trim() || undefined,
+        locationLat: form.locationLat ?? undefined,
+        locationLng: form.locationLng ?? undefined,
         startDate: form.startDate || undefined,
         endDate: form.endDate || undefined,
         format: form.format,
@@ -73,8 +78,12 @@ export default function CreateTournamentPage() {
           <Field label="Description" htmlFor="description">
             <Textarea id="description" value={form.description} onChange={set("description")} placeholder="Optional details about the event…" />
           </Field>
-          <Field label="Location" htmlFor="location">
-            <Input id="location" value={form.location} onChange={set("location")} placeholder="City Sports Arena, Court 3" />
+          <Field label="Location" hint="Search for a venue, or just type an address.">
+            <LocationPicker
+              value={{ name: form.location, lat: form.locationLat, lng: form.locationLng }}
+              onChange={(v) => setForm((f) => ({ ...f, location: v.name, locationLat: v.lat, locationLng: v.lng }))}
+              placeholder="City Sports Arena…"
+            />
           </Field>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Start date" htmlFor="startDate">
