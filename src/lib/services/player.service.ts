@@ -108,13 +108,19 @@ export async function updateOwnPlayer(actor: AuthUser, input: UpdateOwnPlayerInp
   const updated = await prisma.player.update({
     where: { id: actor.playerId },
     data: {
+      fullName: input.fullName ?? undefined,
       displayName: input.displayName ?? undefined,
       city: input.city === undefined ? undefined : input.city,
       skillLevel: input.skillLevel === undefined ? undefined : input.skillLevel,
     },
     include: { ranking: true },
   });
-  await audit({ actorUserId: actor.id, action: "player.self_updated", entityType: "Player", entityId: actor.playerId, newValue: { skillLevel: updated.skillLevel, city: updated.city, displayName: updated.displayName } });
+  // Keep the account name in sync with the player's full name (it's what shows
+  // in the header + dashboard greeting).
+  if (input.fullName) {
+    await prisma.user.update({ where: { id: actor.id }, data: { name: input.fullName } });
+  }
+  await audit({ actorUserId: actor.id, action: "player.self_updated", entityType: "Player", entityId: actor.playerId, newValue: { fullName: updated.fullName, displayName: updated.displayName, city: updated.city, skillLevel: updated.skillLevel } });
   return updated;
 }
 

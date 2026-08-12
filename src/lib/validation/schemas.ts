@@ -33,6 +33,7 @@ export const UpdatePlayerSchema = CreatePlayerSchema.partial();
 
 // What a user may edit on THEIR OWN linked player profile (self-service).
 export const UpdateOwnPlayerSchema = z.object({
+  fullName: z.string().trim().min(2).max(120).optional(),
   displayName: z.string().trim().min(1).max(60).optional(),
   city: z.string().trim().max(120).nullable().optional(),
   skillLevel: z.enum(SKILL_LEVELS).nullable().optional(),

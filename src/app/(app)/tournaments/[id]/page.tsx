@@ -6,6 +6,7 @@ import useSWR from "swr";
 import { swrFetcher } from "@/lib/client/api";
 import { PageHeader, ErrorState, ListSkeleton } from "@/components/ui/states";
 import { Badge, statusColor } from "@/components/ui/primitives";
+import { ShareButton } from "@/components/ShareButton";
 import { titleCase } from "@/lib/client/format";
 import { OverviewTab } from "@/components/tournament/OverviewTab";
 import { PlayersTab } from "@/components/tournament/PlayersTab";
@@ -53,6 +54,16 @@ export default function TournamentDetailPage() {
           </span>
         }
         subtitle={`${titleCase(data.format)} · ${data._count.tournamentPlayers} players · ${data._count.matches} matches`}
+        actions={
+          data.visibility === "public" ? (
+            <ShareButton
+              url={typeof window !== "undefined" ? `${window.location.origin}/discover/${id}` : `/discover/${id}`}
+              title={`${data.name} · Smash`}
+              text={`Join "${data.name}" on Smash.`}
+              label="Share"
+            />
+          ) : undefined
+        }
       />
 
       <div className="mb-6 flex gap-1 overflow-x-auto border-b border-[var(--border)]">

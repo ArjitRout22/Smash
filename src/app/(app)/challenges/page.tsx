@@ -31,7 +31,6 @@ type CasualMatch = {
   reportedByUserId: string | null;
   role: "challenger" | "opponent";
   isChallenger: boolean;
-  isCaptain: boolean;
   canRespond: boolean;
   canReport: boolean;
   canConfirm: boolean;

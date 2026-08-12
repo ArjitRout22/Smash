@@ -1,8 +1,45 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { clsx } from "clsx";
 import { Inbox, AlertTriangle } from "lucide-react";
 import { Skeleton, Button } from "./primitives";
+
+const LOADING_MESSAGES = [
+  "Warming up the shuttles…",
+  "Chalking the court lines…",
+  "Stringing the rackets…",
+  "Tossing for serve…",
+  "Lining up the rally…",
+];
+
+function ShuttleSpinner() {
+  return (
+    <div className="relative h-14 w-14" role="status" aria-label="Loading">
+      <div className="absolute inset-0 animate-spin rounded-full border-2 border-[var(--surface-2)] border-t-[var(--primary)]" />
+      <div className="absolute inset-0 flex items-center justify-center text-2xl">🏸</div>
+    </div>
+  );
+}
+
+/**
+ * Full-height branded loader for meaningful waits (initial app load, slow
+ * pages). Cycles through playful badminton messages so a slow load feels alive.
+ */
+export function BrandedLoader({ message, className }: { message?: string; className?: string }) {
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    if (message) return;
+    const t = setInterval(() => setI((n) => (n + 1) % LOADING_MESSAGES.length), 1600);
+    return () => clearInterval(t);
+  }, [message]);
+  return (
+    <div className={clsx("flex min-h-[50vh] flex-col items-center justify-center gap-4 text-center", className)}>
+      <ShuttleSpinner />
+      <p className="animate-pulse text-sm font-medium text-muted">{message ?? LOADING_MESSAGES[i]}</p>
+    </div>
+  );
+}
 
 export function PageHeader({
   title,

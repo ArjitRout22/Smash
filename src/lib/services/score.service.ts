@@ -203,6 +203,9 @@ export async function submitScore(
       data: {
         status: result.complete ? "completed" : "in_progress",
         winnerSide: result.winnerSide,
+        // Lock the result as soon as a match completes — a scored tournament
+        // match can't be edited until an organizer deliberately reopens it.
+        closedAt: result.complete ? new Date() : null,
         version: { increment: 1 },
       },
     });

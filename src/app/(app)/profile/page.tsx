@@ -5,11 +5,14 @@ import Link from "next/link";
 import useSWR from "swr";
 import { User } from "lucide-react";
 import { api, ApiClientError, swrFetcher } from "@/lib/client/api";
-import { PageHeader, EmptyState, CardGridSkeleton } from "@/components/ui/states";
-import { Button, Card, CardHeader, Badge, Select, Spinner } from "@/components/ui/primitives";
+import { PageHeader, EmptyState, CardGridSkeleton, BrandedLoader } from "@/components/ui/states";
+import { Button, Card, CardHeader, Badge, Select, Input, Field } from "@/components/ui/primitives";
+import { ShareButton } from "@/components/ShareButton";
 import { useToast } from "@/components/ui/Toast";
 import { useAuth } from "@/components/AuthProvider";
 import { titleCase, pct } from "@/lib/client/format";
+
+const APP_SHARE_URL = "https://smashhero.app";
 
 const SKILL_OPTIONS = [
   { value: "", label: "Not set" },
@@ -33,7 +36,7 @@ type Statistics = {
 };
 
 export default function ProfilePage() {
-  const { user, isLoading, logout } = useAuth();
+  const { user, isLoading, logout, refresh } = useAuth();
   const [loggingOut, setLoggingOut] = useState(false);
 
   const playerId = user?.playerId ?? null;
@@ -41,17 +44,13 @@ export default function ProfilePage() {
     playerId ? `/api/players/${playerId}/statistics` : null,
     swrFetcher
   );
-  const { data: player, mutate: mutatePlayer } = useSWR<{ skillLevel: string | null }>(
+  const { data: player, mutate: mutatePlayer } = useSWR<{ skillLevel: string | null; fullName: string; displayName: string }>(
     playerId ? `/api/players/${playerId}` : null,
     swrFetcher
   );
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Spinner />
-      </div>
-    );
+    return <BrandedLoader />;
   }
 
   if (!user) {
@@ -74,9 +73,31 @@ export default function ProfilePage() {
 
   return (
     <div>
-      <PageHeader title="Profile" subtitle="Your account details." />
+      <PageHeader
+        title="Profile"
+        subtitle="Your account details."
+        actions={
+          <ShareButton
+            url={APP_SHARE_URL}
+            title="Smash — Badminton Tournaments & Matches"
+            text="Run badminton tournaments, casual matches and a global leaderboard on Smash."
+            label="Share Smash"
+          />
+        }
+      />
 
-      <Card className="overflow-hidden">
+      {playerId && (
+        <NameCard
+          fullName={player?.fullName ?? user.name ?? ""}
+          displayName={player?.displayName ?? ""}
+          onSaved={() => {
+            mutatePlayer();
+            refresh();
+          }}
+        />
+      )}
+
+      <Card className="mt-6 overflow-hidden">
         <CardHeader
           title="Account"
           action={
@@ -86,7 +107,6 @@ export default function ProfilePage() {
           }
         />
         <dl className="divide-y divide-[var(--border)]">
-          <Row label="Name" value={user.name ?? "—"} />
           <Row label="Email" value={user.email ?? "—"} />
           <Row label="Phone" value={user.phone ?? "—"} />
           <Row label="Role" value={<Badge color="blue">{titleCase(user.role)}</Badge>} />
@@ -132,6 +152,53 @@ export default function ProfilePage() {
         </div>
       )}
     </div>
+  );
+}
+
+function NameCard({ fullName, displayName, onSaved }: { fullName: string; displayName: string; onSaved: () => void }) {
+  const toast = useToast();
+  const [name, setName] = useState(fullName);
+  const [display, setDisplay] = useState(displayName);
+  const [saving, setSaving] = useState(false);
+  // Sync once the fetched values arrive.
+  const [synced, setSynced] = useState(fullName + "|" + displayName);
+  if (fullName + "|" + displayName !== synced) {
+    setSynced(fullName + "|" + displayName);
+    setName(fullName);
+    setDisplay(displayName);
+  }
+  const dirty = name.trim() !== fullName || display.trim() !== displayName;
+  const valid = name.trim().length >= 2 && display.trim().length >= 1;
+
+  async function save() {
+    if (!valid) return;
+    setSaving(true);
+    try {
+      await api.put("/api/me/player", { fullName: name.trim(), displayName: display.trim() });
+      toast.success("Name updated");
+      onSaved();
+    } catch (err) {
+      toast.error(err instanceof ApiClientError ? err.message : "Could not update name");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card className="overflow-hidden">
+      <CardHeader title="Your name" subtitle="Shown across matches, tournaments and the leaderboard." />
+      <div className="grid grid-cols-1 gap-4 px-5 py-4 sm:grid-cols-2">
+        <Field label="Full name">
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Arjit Rout" />
+        </Field>
+        <Field label="Display name">
+          <Input value={display} onChange={(e) => setDisplay(e.target.value)} placeholder="e.g. Arjit" />
+        </Field>
+      </div>
+      <div className="flex justify-end border-t border-[var(--border)] px-5 py-3">
+        <Button size="sm" onClick={save} loading={saving} disabled={!dirty || !valid}>Save name</Button>
+      </div>
+    </Card>
   );
 }
 

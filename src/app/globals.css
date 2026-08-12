@@ -63,3 +63,15 @@ body {
   background: var(--primary);
   color: var(--primary-foreground);
 }
+
+/* Prevent iOS Safari from auto-zooming the page when a form field is focused.
+   Safari zooms whenever the focused control's font-size is under 16px, which
+   was shifting the layout + hiding content on mobile. Force ≥16px on phones
+   (pinch-zoom stays enabled for accessibility). */
+@media (max-width: 640px) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}

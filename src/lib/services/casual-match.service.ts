@@ -40,14 +40,22 @@ function participantUserIds(m: RawCasualMatch): (string | null)[] {
   return [m.challengerUserId, m.opponentUserId, m.challengerPartnerUserId, m.opponentPartnerUserId];
 }
 
+/** Which side ("A" challenger / "B" opponent) a user plays on, if any. */
+function sideOfUser(m: RawCasualMatch, userId: string | null): "A" | "B" | null {
+  if (!userId) return null;
+  if (userId === m.challengerUserId || userId === m.challengerPartnerUserId) return "A";
+  if (userId === m.opponentUserId || userId === m.opponentPartnerUserId) return "B";
+  return null;
+}
+
 /** Serialize a casual match FROM THE PERSPECTIVE of the current user. */
 function serialize(m: RawCasualMatch, actor: AuthUser) {
-  // Only the two captains drive the flow; partners are participants who watch.
-  const isChallengerCaptain = m.challengerUserId === actor.id;
-  const isOpponentCaptain = m.opponentUserId === actor.id;
-  const isCaptain = isChallengerCaptain || isOpponentCaptain;
-  const onChallengerSide = isChallengerCaptain || m.challengerPartnerUserId === actor.id;
-  const isReporter = m.reportedByUserId === actor.id;
+  // Permissions are per-SIDE: any player on a side can act for their team. The
+  // opposing team (whoever didn't report) accepts/rejects the reported score.
+  const actorSide = sideOfUser(m, actor.id);
+  const reporterSide = sideOfUser(m, m.reportedByUserId);
+  const onChallengerSide = actorSide === "A";
+  const onOpponentSide = actorSide === "B";
   const games = (m.games as GameScore[] | null) ?? [];
 
   return {
@@ -78,15 +86,15 @@ function serialize(m: RawCasualMatch, actor: AuthUser) {
     // The viewer's relationship + what they can do right now.
     role: onChallengerSide ? ("challenger" as const) : ("opponent" as const),
     isChallenger: onChallengerSide,
-    isCaptain,
     // Action hints so the UI never shows a control the server would reject.
-    // Only captains act; the challenged captain is the one who accepts/declines.
-    canRespond: isOpponentCaptain && m.status === "pending",
+    // Any player on a side can act for their team; the OTHER team confirms.
+    canRespond: onOpponentSide && m.status === "pending",
     canReport:
-      isCaptain &&
-      (m.status === "accepted" || (m.status === "awaiting_confirmation" && isReporter)),
-    canConfirm: isCaptain && m.status === "awaiting_confirmation" && !isReporter,
-    canCancel: isCaptain && ["pending", "accepted", "awaiting_confirmation"].includes(m.status),
+      m.status === "accepted" ||
+      (m.status === "awaiting_confirmation" && actorSide === reporterSide),
+    canConfirm:
+      m.status === "awaiting_confirmation" && reporterSide != null && actorSide !== reporterSide,
+    canCancel: ["pending", "accepted", "awaiting_confirmation"].includes(m.status),
     version: m.version,
     createdAt: m.createdAt,
     respondedAt: m.respondedAt,
@@ -234,11 +242,12 @@ export async function reportCasualScore(
 ) {
   const m = await loadParticipantMatch(actor, id);
   assertVersion(m, input.expectedVersion);
-  const isCaptain = m.challengerUserId === actor.id || m.opponentUserId === actor.id;
-  if (!isCaptain) throw Errors.forbidden("Only a team captain can enter the result.");
-  const isReporter = m.reportedByUserId === actor.id;
+  // Any player on either side can enter the result once the match is accepted;
+  // while awaiting confirmation only the side that reported may amend it.
+  const actorSide = sideOfUser(m, actor.id);
+  const reporterSide = sideOfUser(m, m.reportedByUserId);
   const canReport =
-    m.status === "accepted" || (m.status === "awaiting_confirmation" && isReporter);
+    m.status === "accepted" || (m.status === "awaiting_confirmation" && actorSide === reporterSide);
   if (!canReport) {
     throw Errors.invalidState(
       m.status === "pending"
@@ -289,16 +298,15 @@ export async function actOnCasualMatch(
 ) {
   const m = await loadParticipantMatch(actor, id);
   assertVersion(m, input.expectedVersion);
-  // Only the two captains can drive state; partners are watch-only.
-  const isCaptain = m.challengerUserId === actor.id || m.opponentUserId === actor.id;
-  if (!isCaptain) throw Errors.forbidden("Only a team captain can do that.");
+  // Any player on a side can act for their team (participation already checked).
+  const actorSide = sideOfUser(m, actor.id);
 
   let data: Prisma.CasualMatchUpdateInput;
   switch (input.action) {
     case "accept":
     case "decline": {
-      // Only the challenged captain (opponent) may accept/decline.
-      if (actor.id !== m.opponentUserId) throw Errors.forbidden("Only the challenged player can respond.");
+      // Any player on the challenged (opponent) team may accept/decline.
+      if (actorSide !== "B") throw Errors.forbidden("Only the challenged team can respond.");
       if (m.status !== "pending") throw Errors.invalidState("This challenge has already been answered.");
       data = {
         status: input.action === "accept" ? "accepted" : "declined",
@@ -312,8 +320,9 @@ export async function actOnCasualMatch(
       if (m.status !== "awaiting_confirmation") {
         throw Errors.invalidState("There is no reported result to confirm.");
       }
-      if (m.reportedByUserId === actor.id) {
-        throw Errors.forbidden("The other player must confirm the result you reported.");
+      // The OPPOSING team (whoever didn't report) confirms or rejects.
+      if (actorSide === sideOfUser(m, m.reportedByUserId)) {
+        throw Errors.forbidden("The other team must confirm the reported result.");
       }
       data =
         input.action === "confirm"
