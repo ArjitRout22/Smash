@@ -163,6 +163,41 @@ Tailwind CSS v4 · Vitest · Playwright.
   Progression to a knockout is then "pick the group qualifiers → Generate bracket".
   Also hardened the UI: the tournament management page redirects non-owners to the
   read-only public page (management was already blocked server-side).
+- **Nominated scorers:** only the organizer/creator, a platform admin, or a
+  **nominated scorer** (`TournamentScorer`, managed in the tournament Settings tab)
+  can enter scores; everyone else is view-only. `assertCanScoreTournament`
+  replaced the plain org check in `score.service`.
+- **Doubles casual matches:** `CasualMatch` gained partner columns + `matchType`;
+  the challenger picks both pairs, the opposing captain accepts, all four need
+  accounts; partners are watch-only, only captains act.
+- **Faster score saves (perf):** the score transaction no longer rewrites *every*
+  player's global rank (was an O(all-players) write). `recomputeAfterMatch` only
+  touches the tournament's leaderboard + the players in the match; **ranks are
+  computed on-read** (global leaderboard ranks live; `getPlayerStatistics` derives
+  currentRank; dashboard top-players use position order). `recomputeGlobalRanks`
+  is kept but no longer called on the write path. Remaining lever: pooled Neon URL.
+- **Join status everywhere:** `getTournament` + `listPublicTournaments` return the
+  viewer's own `viewerStatus`, so Discover cards / detail / dashboard show
+  Pending / Joined / Invited instead of a stale "Request to join".
+- **Team invites (cross-workspace):** `TeamPlayer.status` (active|invited) — own-
+  workspace players join active; a player from another workspace (with an account)
+  is invited and accepts from a dashboard card; a team with a pending member can't
+  play. Standalone teams no longer hard-require your workspace.
+- **Admin cleanup + Help:** platform-admin `/admin` screen soft-deletes test
+  accounts (reversible); a `/help` "How it works" reference page (nav item)
+  documents the flows. Prod test-row purge SQL is in this doc's checklist.
+- **Location place search:** the tournament location field is an OpenStreetMap /
+  Nominatim autocomplete (free, no key) storing name + `locationLat`/`locationLng`;
+  a **"View on map"** link shows on the tournament Overview, Discover cards, and
+  the dashboard discover card (`LocationPicker` + `mapUrl` in `components/`).
+- **Removed profile photo-by-URL** (not useful without real uploads) but kept the
+  `Avatar` component (initials fallback) across the app; `photoUrl` column retained
+  for a future real-upload feature.
+- **CI fix:** the tournament-match auto-lock broke two DB-gated integration tests
+  and exposed a real bug — `propagateWinner` now clears `closedAt` when it
+  invalidates a downstream bracket match (else it became "scheduled but locked").
+  Run `RUN_DB_TESTS=1 DATABASE_URL=<badminton_test> npx vitest run tests/integration`
+  locally before pushing scoring/match changes (they're skipped in plain `npm test`).
 
 ---
 
