@@ -324,21 +324,21 @@ type ChallengeLite = {
   challengerPartner: { name: string } | null;
   opponentPartner: { name: string } | null;
   isChallenger: boolean;
-  canRespond: boolean;
+  canReject: boolean;
   canConfirm: boolean;
 };
 
 const pairName = (name: string, partner: { name: string } | null) =>
   partner ? `${name} & ${partner.name}` : name;
 
-// Surfaces only the casual matches that need THIS user to act right now
-// (a challenge to accept, or a reported result to confirm).
+// Surfaces the casual matches worth THIS user's attention right now: a new
+// challenge you can play or reject, or a reported result to confirm.
 function ChallengesCard() {
   const toast = useToast();
   const [busy, setBusy] = useState<string | null>(null);
   const { data, mutate } = useSWR<ChallengeLite[]>("/api/casual-matches", swrFetcher);
 
-  const actionable = (data ?? []).filter((m) => m.canRespond || m.canConfirm);
+  const actionable = (data ?? []).filter((m) => m.canReject || m.canConfirm);
 
   async function act(m: ChallengeLite, action: string, msg: string) {
     setBusy(m.id);
@@ -371,14 +371,14 @@ function ChallengesCard() {
               <div>
                 <p className="text-sm font-medium">{chal} vs {opp}</p>
                 <p className="text-xs text-muted">
-                  {m.canRespond ? `${other} challenged you to a match` : `${other} reported a result — confirm it`}
+                  {m.canReject ? `${other} challenged you — ready to play` : `${other} reported a result — confirm it`}
                 </p>
               </div>
               <div className="flex shrink-0 gap-2">
-                {m.canRespond && (
+                {m.canReject && (
                   <>
-                    <Button size="sm" loading={busy === m.id} onClick={() => act(m, "accept", "Challenge accepted")}>Accept</Button>
-                    <Button size="sm" variant="ghost" disabled={busy === m.id} onClick={() => act(m, "decline", "Challenge declined")}>Decline</Button>
+                    <Link href="/challenges" className="inline-flex h-8 items-center rounded-lg border border-[var(--border)] bg-surface px-3 text-sm font-medium hover:bg-surface-2">Enter result</Link>
+                    <Button size="sm" variant="ghost" disabled={busy === m.id} onClick={() => act(m, "decline", "Challenge rejected")}>Reject</Button>
                   </>
                 )}
                 {m.canConfirm && (

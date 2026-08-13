@@ -10,7 +10,7 @@ const SECTIONS: { title: string; items: Item[] }[] = [
     items: [
       {
         q: "Two kinds of player",
-        a: "Add players you manage via Players → Add player (no login needed — you register them and enter their scores). People who sign up get an account and can do more (accept challenges/invites, be nominated to score, join teams across workspaces, play casual matches).",
+        a: "Add players you manage via Players → Add player (no login needed — you register them and enter their scores). People who sign up get an account and can do more (play casual matches, accept invites, be nominated to score, join teams across workspaces).",
       },
       {
         q: "Teams",
@@ -123,7 +123,7 @@ const SECTIONS: { title: string; items: Item[] }[] = [
     items: [
       {
         q: "Challenge someone",
-        a: "Challenges tab → New challenge. Singles or doubles (all four players need accounts). The person you challenge must accept before any score can be entered.",
+        a: "Challenges tab → New challenge. Singles or doubles (all four players need accounts). No acceptance needed — the match is ready to play as soon as you send it. If the other player can't play, they can Reject it, which cancels the match.",
       },
       {
         q: "Agreeing on the result",
