@@ -240,6 +240,33 @@ Tailwind CSS v4 · Vitest · Playwright.
 
 ---
 
+### Phase 7 — Unified tournament player onboarding
+- **Invite list is now status-aware (bug fix).** The old invite/add modals hid any
+  player already in the tournament via a client-side, status-blind filter, so
+  invited/declined players vanished and couldn't be re-invited. The single invite
+  modal now annotates every candidate with its tournament status — **Available /
+  Invited / Joined / Requested / Declined** — and only offers an action to players
+  who can actually be (re-)invited. The roster shows `invited` rows too and derives
+  the badge from `status` (was hard-coded "registered").
+- **One flow — dropped the separate "Add players".** "Invite players" is the single
+  entry point and is **account-aware** (`inviteToTournament`): a player WITH an
+  account is `invited` (they accept from their dashboard); a managed player WITHOUT
+  an account is `registered` directly (nobody to accept otherwise, so club players
+  stay rosterable); an existing join `requested` row is accepted rather than
+  re-invited.
+- **Create Player dedupes by email (email now mandatory).** `createPlayer` takes a
+  required email and never creates a duplicate: it reuses an existing account's
+  player, or a previously pre-created managed player (`Player.invitedEmail`, unique),
+  otherwise creates a managed player storing that email. Returns `{ player, linked }`.
+- **Deferred (documented):** sending invite/signup emails and linking a later signup
+  to the pre-created managed player — until wired, a brand-new invited email that
+  self-registers still mints a second player. See Pending follow-ups.
+- Migration `20260813090000_player_invited_email`. Verified: typecheck, lint,
+  48 unit + 7 integration tests, prod build, and live API + UI checks. Shipped to
+  prod via PR #2.
+
+---
+
 ## Key decisions
 
 - **Enum-like columns as strings** (validated by Zod + TS unions) instead of DB
@@ -275,6 +302,9 @@ Tailwind CSS v4 · Vitest · Playwright.
 - ✅ **Item-6 clean-slate reset executed on prod** (`scripts/cleanup_reset_stats.sql`):
   all matches / casual matches / ledger / leaderboards / rankings / comments wiped
   and throwaway test accounts hard-deleted. Stats start fresh.
+- ✅ **Phase 7 live** (PR #2): unified player onboarding — status-aware invite
+  list, single invite flow (account-aware), mandatory-email dedupe on Create
+  Player. Migration applied on deploy.
 - ✅ CI green on every push; 48 unit + 7 integration tests.
 - ✅ **Custom domain live:** https://smashhero.app (HTTPS; Vercel primary = `www`,
   apex 308-redirects to it).
@@ -299,6 +329,11 @@ Tailwind CSS v4 · Vitest · Playwright.
 - 🔐 **Rotate secrets that were shared in chat:** the GitHub PAT (revoke) and the
   Neon DB password (reset → update Vercel URLs → redeploy). Steps in
   `docs/OPS_ROTATE_AND_POOL.md` (bundled with PR #1).
+- 📨 **Finish player onboarding (deferred from Phase 7):** when Create-Player is
+  given a new email, send a signup-invite email and, on that person's signup, link
+  the account to the pre-created managed player (`Player.invitedEmail`) instead of
+  minting a duplicate. Needs an `EmailProvider` template + a change to the
+  `register` service (`src/lib/auth/service.ts`) to claim by email in its tx.
 - 💡 Later: Redis-backed rate limiter for scale (the current limiter is in-memory
   per serverless instance); casual head-to-head record on profiles; "Challenge"
   button on player-directory profiles; client-side caching of OSM venue searches.
