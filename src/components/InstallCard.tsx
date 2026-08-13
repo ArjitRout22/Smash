@@ -1,16 +1,19 @@
 "use client";
 
+import { useState } from "react";
 import { Download, Check, Share } from "lucide-react";
 import { Card, CardHeader, Button } from "@/components/ui/primitives";
 import { useInstall } from "@/lib/client/useInstall";
+import { IosInstallGuide } from "@/components/InstallGuide";
 
 /**
  * Permanent "Install the app" card (Profile page) — always visible, not
  * dismissible, adapts to the platform. Complements the transient InstallPrompt
- * banner; both share `useInstall`.
+ * banner; both share `useInstall`. On iOS it opens the step-by-step guide.
  */
 export function InstallCard() {
   const { mode, promptInstall } = useInstall();
+  const [guideOpen, setGuideOpen] = useState(false);
 
   return (
     <Card className="overflow-hidden">
@@ -28,10 +31,12 @@ export function InstallCard() {
           </Button>
         )}
         {mode === "ios" && (
-          <p className="text-muted">
-            On iPhone/iPad: tap the <Share className="inline h-4 w-4 -translate-y-0.5" aria-label="Share" /> Share button in
-            Safari, then <b className="text-foreground">Add to Home Screen</b>.
-          </p>
+          <div className="flex flex-col items-start gap-2">
+            <p className="text-muted">Add Smash to your Home Screen from Safari&apos;s Share menu — it only takes a moment.</p>
+            <Button size="sm" onClick={() => setGuideOpen(true)}>
+              <Share className="h-4 w-4" /> Show me how
+            </Button>
+          </div>
         )}
         {mode === "other" && (
           <p className="text-muted">
@@ -40,6 +45,7 @@ export function InstallCard() {
           </p>
         )}
       </div>
+      <IosInstallGuide open={guideOpen} onClose={() => setGuideOpen(false)} />
     </Card>
   );
 }
