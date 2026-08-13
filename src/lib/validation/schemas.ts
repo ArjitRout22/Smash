@@ -104,6 +104,10 @@ export const UpdateTeamSchema = z.object({
   teamType: z.enum(["doubles", "mixed"]).optional(),
   playerIds: z.array(z.string().uuid()).min(2).max(2).optional(),
 });
+// Randomly pair a tournament's unassigned registered players into doubles teams.
+export const RandomTeamsSchema = z.object({
+  tournamentId: z.string().uuid(),
+});
 
 // --- Stages -----------------------------------------------------------------
 export const CreateStageSchema = z.object({
@@ -274,5 +278,6 @@ export type CreateCommentInput = z.infer<typeof CreateCommentSchema>;
 export type CreatePlayerInput = z.infer<typeof CreatePlayerSchema>;
 export type CreateTournamentInput = z.infer<typeof CreateTournamentSchema>;
 export type CreateTeamInput = z.infer<typeof CreateTeamSchema>;
+export type RandomTeamsInput = z.infer<typeof RandomTeamsSchema>;
 export type CreateMatchInput = z.infer<typeof CreateMatchSchema>;
 export type SubmitScoreInput = z.infer<typeof SubmitScoreSchema>;
