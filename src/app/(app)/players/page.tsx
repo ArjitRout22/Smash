@@ -213,12 +213,14 @@ function CreatePlayerModal({
   const [city, setCity] = useState("");
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [fieldError, setFieldError] = useState<string | undefined>();
+  const [emailError, setEmailError] = useState<string | undefined>();
   const [submitting, setSubmitting] = useState(false);
 
   function reset() {
     setFullName("");
     setDisplayName("");
     setEmail("");
+    setEmailError(undefined);
     setPhone("");
     setGender("");
     setCity("");
@@ -231,13 +233,18 @@ function CreatePlayerModal({
       setFieldError("Full name must be at least 2 characters.");
       return;
     }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setEmailError("Enter a valid email address.");
+      return;
+    }
+    setEmailError(undefined);
     setFieldError(undefined);
     setSubmitting(true);
     try {
       const res = await api.post<{ linked: boolean }>("/api/players", {
         fullName: fullName.trim(),
         displayName: displayName.trim() || undefined,
-        email: email.trim() || undefined,
+        email: email.trim(),
         phone: phone.trim() || undefined,
         gender: gender || undefined,
         city: city.trim() || undefined,
@@ -275,7 +282,7 @@ function CreatePlayerModal({
         <Field label="Display name" htmlFor="displayName" hint="Optional — shown on leaderboards.">
           <Input id="displayName" value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Jane" />
         </Field>
-        <Field label="Email" htmlFor="email" hint="Optional — links to their account if they already have one, so you never create a duplicate.">
+        <Field label="Email" htmlFor="email" required error={emailError} hint="Links to their account if they already have one, so you never create a duplicate.">
           <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="jane@example.com" />
         </Field>
         <Field label="Phone" htmlFor="phone">
