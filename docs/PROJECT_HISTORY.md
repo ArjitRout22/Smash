@@ -274,10 +274,12 @@ Tailwind CSS v4 · Vitest · Playwright.
 - **Email notifications (Phase 1).** `src/lib/email/notifications.ts` layered on the
   existing `EmailProvider` (Resend): an **invite email** goes out when an
   account-holder is invited to a tournament (in `inviteToTournament`, best-effort).
-  A **daily reminder cron** (`vercel.json` → `GET /api/cron/reminders`, guarded by
-  `CRON_SECRET`) emails registered players about tournaments starting within 24h
-  (`reminders.service.ts`). Sends never throw — a delivery failure is logged.
-  Follow-ups: in-app notification center + Web Push (iOS needs an installed PWA).
+  Reminders are an **on-demand admin action** (PR #5) — a "Send reminders" button
+  on `/admin` → `POST /api/admin/reminders` → `triggerRemindersAsAdmin`
+  (admin-guarded) → emails registered players about tournaments starting within 24h
+  (`reminders.service.ts`). Chosen over a Vercel cron to avoid a scheduled job.
+  Sends never throw — a delivery failure is logged. Follow-ups: in-app notification
+  center + Web Push (iOS needs an installed PWA).
 - **Dropped tournament `draft`.** New tournaments default to **`upcoming`**; the
   state machine starts there; migration `20260813120000_drop_tournament_draft`
   flips existing `draft`→`upcoming` and resets the column default. The list is
@@ -334,9 +336,9 @@ Tailwind CSS v4 · Vitest · Playwright.
 - ✅ **Phase 7 live** (PR #2): unified player onboarding — status-aware invite
   list, single invite flow (account-aware), mandatory-email dedupe on Create
   Player. Migration applied on deploy.
-- ✅ **Phase 8 live** (PR #4): invite/reminder emails + reminder cron, dropped
-  tournament `draft`, cancel-invite polish, global nav loader. **Set `CRON_SECRET`
-  in Vercel** to protect the reminder cron (route is open until then).
+- ✅ **Phase 8 live** (PR #4 + #5): invite emails + an on-demand admin "Send
+  reminders" button (cron dropped), dropped tournament `draft`, cancel-invite
+  polish, global nav loader. No new env vars needed.
 - ✅ CI green on every push; 48 unit + 7 integration tests.
 - ✅ **Custom domain live:** https://smashhero.app (HTTPS; Vercel primary = `www`,
   apex 308-redirects to it).
@@ -370,7 +372,7 @@ Tailwind CSS v4 · Vitest · Playwright.
   table + bell/unread badge) and **Web Push** (service worker + VAPID; works on
   Chrome/Firefox/Edge desktop + Android — iOS only when installed as a PWA). Also
   more email triggers (result-to-confirm, match scheduled) + a per-send dedupe so
-  reminders can't repeat. Set `CRON_SECRET` in Vercel now to protect the cron.
+  reminders can't repeat. (Reminders are a manual admin button today, not a cron.)
 - 💡 Later: Redis-backed rate limiter for scale (the current limiter is in-memory
   per serverless instance); casual head-to-head record on profiles; "Challenge"
   button on player-directory profiles; client-side caching of OSM venue searches.
