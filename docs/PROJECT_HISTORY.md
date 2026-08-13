@@ -322,6 +322,28 @@ Tailwind CSS v4 · Vitest · Playwright.
 
 ---
 
+### Phase 10 — Growth cluster: WhatsApp share, QR, PWA (1 of 3 batches)
+Kicking off a 7-feature growth push. Batch 1 (PR #8):
+- **WhatsApp share** — `ShareButton` leads with a prefilled `wa.me` link (our
+  audience lives on WhatsApp), alongside native share + copy, everywhere it appears.
+- **Tournament QR** — `QrButton` (qrcode.react) renders a scannable QR for a
+  tournament's public link; in the tournament header. Print / show at the court →
+  scan → open → join.
+- **PWA / installable** — `app/manifest.ts` + generated 192/512/apple PNG icons
+  (from the shuttlecock SVG via sharp) + a conservative service worker
+  (`public/sw.js`: network-first navigations, cache-first hashed static, never
+  `/api`) with `offline.html`, registered in prod via `<ServiceWorker/>`, plus
+  `appleWebApp` metadata. Middleware matcher updated so `sw.js` /
+  `manifest.webmanifest` / `offline.html` load without auth. Unlocks iOS Web Push
+  once installed.
+- Verified live on prod (PWA files serve 200 unauthenticated; QR + WhatsApp render).
+- **Still queued** (requested, not yet built): finish invite-by-email→claim (#6),
+  player identity/rivalry — H2H, streak, last-5, badges (#5), public no-login
+  tournament pages (#2, needs a public route/API pass), live scoring / spectator
+  (#4, needs a realtime-transport decision — likely lightweight polling on Vercel).
+
+---
+
 ## Key decisions
 
 - **Enum-like columns as strings** (validated by Zod + TS unions) instead of DB
