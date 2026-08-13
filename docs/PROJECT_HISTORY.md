@@ -406,9 +406,13 @@ Batch 3 (PRs #11, #12):
 - ✅ **Phase 9 live** (PR #6): public read-only Players + Matches tabs on the
   tournament page (roster visible to all, registered-only for non-managers), and
   the admin reminder CTA now picks a tournament + specific recipients.
-- ✅ **Phase 10 live** (growth cluster, PRs #8–#12): WhatsApp share, tournament QR,
-  installable PWA, invite-by-email→claim, player identity/rivalry (form/streak/H2H/
-  badges), public no-login `/t/[id]` pages, and live scoring + spectator view.
+- ✅ **Phase 10 live** (growth cluster, PRs #8–#14): WhatsApp share, tournament QR,
+  installable PWA (manifest + service worker + Install banner **and** a permanent
+  Install card on Profile), invite-by-email→claim, player identity/rivalry
+  (form/streak/H2H/badges on `/players/[id]`), public no-login `/t/[id]` pages, and
+  live scoring + spectator ("Live now"). PR #13 fixed WhatsApp prefill (anchor, not
+  window.open) + surfaced all of it (Public-page link, live scoreboard on scheduled
+  matches, always-visible Form card).
 - ✅ CI green on every push; 48 unit + 7 integration tests.
 - ✅ **Custom domain live:** https://smashhero.app (HTTPS; Vercel primary = `www`,
   apex 308-redirects to it).
@@ -420,6 +424,21 @@ Batch 3 (PRs #11, #12):
   (not the billable Maps/Places API); no embedded tiles. Queried browser-side
   (distributed IPs) with debounce + OSM attribution — stays within OSM fair-use.
 - 🔜 To revisit: multi-tenant **scenarios** / product refinements.
+
+### Where each feature lives (UX map)
+- **Public tournament page:** `smashhero.app/t/<id>` — only for tournaments with
+  visibility **Public** (Settings tab). Share / QR / "Public page" link appear in
+  the tournament header for public ones; private ones show a hint.
+- **WhatsApp / Share / QR:** tournament header (public), profile "Share", public page.
+- **Install app:** dismissible banner at top of the app + permanent card on
+  **Profile**. iOS = manual Share→Add to Home Screen; Android = Install button.
+- **Live scoring:** tournament **Matches** tab — a match with both players shows a
+  +/- live scoreboard ("Tap to start" when scheduled, "Live" when in progress).
+  Spectators watch on the public page's **"Live now"** strip (auto-refresh).
+- **Player identity (form/streak/H2H/badges):** public player profile
+  `/players/<id>` — needs completed matches to populate (Form card always shows).
+- **Admin reminders:** `/admin` → "Send reminders" (pick tournament + recipients,
+  incl. invited-not-responded players).
 
 ## Pending follow-ups
 
@@ -433,16 +452,14 @@ Batch 3 (PRs #11, #12):
 - 🔐 **Rotate secrets that were shared in chat:** the GitHub PAT (revoke) and the
   Neon DB password (reset → update Vercel URLs → redeploy). Steps in
   `docs/OPS_ROTATE_AND_POOL.md` (bundled with PR #1).
-- 📨 **Finish player onboarding (deferred from Phase 7):** when Create-Player is
-  given a new email, send a signup-invite email and, on that person's signup, link
-  the account to the pre-created managed player (`Player.invitedEmail`) instead of
-  minting a duplicate. Needs an `EmailProvider` template + a change to the
-  `register` service (`src/lib/auth/service.ts`) to claim by email in its tx.
 - 🔔 **Notifications, next phases:** an in-app notification center (a `Notification`
-  table + bell/unread badge) and **Web Push** (service worker + VAPID; works on
-  Chrome/Firefox/Edge desktop + Android — iOS only when installed as a PWA). Also
-  more email triggers (result-to-confirm, match scheduled) + a per-send dedupe so
-  reminders can't repeat. (Reminders are a manual admin button today, not a cron.)
+  table + bell/unread badge) and **Web Push** (add VAPID keys + push handlers to
+  the existing `public/sw.js`; works on Chrome/Firefox/Edge desktop + Android, and
+  on iOS now that the app is installable as a PWA). Also more email triggers
+  (result-to-confirm, match scheduled) + a per-send dedupe so reminders can't
+  repeat. (Reminders are a manual admin button today, not a cron.)
+- 🖼️ **Shareable result/leaderboard images** (OG images) to pair with WhatsApp
+  sharing — a suggested growth follow-up, not built.
 - 💡 Later: Redis-backed rate limiter for scale (the current limiter is in-memory
   per serverless instance); casual head-to-head record on profiles; "Challenge"
   button on player-directory profiles; client-side caching of OSM venue searches.
