@@ -48,11 +48,11 @@ export function PlayersTab({ tournamentId }: { tournamentId: string }) {
     }
   }
 
-  async function remove(playerId: string) {
+  async function remove(playerId: string, wasInvite = false) {
     setBusy(playerId);
     try {
       await api.del(`/api/tournaments/${tournamentId}/players/${playerId}`);
-      toast.success("Player removed");
+      toast.success(wasInvite ? "Invitation cancelled" : "Player removed");
       mutate();
     } catch (err) {
       toast.error(err instanceof ApiClientError ? err.message : "Could not remove");
@@ -110,8 +110,8 @@ export function PlayersTab({ tournamentId }: { tournamentId: string }) {
                   {tp.player.ranking && <span>{tp.player.ranking.wins}W · {tp.player.ranking.losses}L</span>}
                   <StatusBadge status={tp.status} />
                   {canManage && (
-                    <button onClick={() => remove(tp.player.id)} disabled={busy === tp.player.id} className="text-xs text-muted hover:text-[var(--danger)] disabled:opacity-50">
-                      {tp.status === "invited" ? "Cancel" : "Remove"}
+                    <button onClick={() => remove(tp.player.id, tp.status === "invited")} disabled={busy === tp.player.id} className="text-xs text-muted hover:text-[var(--danger)] disabled:opacity-50">
+                      {tp.status === "invited" ? "Cancel invite" : "Remove"}
                     </button>
                   )}
                 </div>

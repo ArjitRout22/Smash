@@ -6,8 +6,9 @@
 export const ROLES = ["ADMIN", "ORGANIZER", "PLAYER"] as const;
 export type RoleName = (typeof ROLES)[number];
 
+// Tournaments start as "upcoming" (no draft stage). Kept in display order:
+// upcoming → ongoing → completed → cancelled.
 export const TOURNAMENT_STATUSES = [
-  "draft",
   "upcoming",
   "ongoing",
   "completed",
@@ -15,9 +16,16 @@ export const TOURNAMENT_STATUSES = [
 ] as const;
 export type TournamentStatus = (typeof TOURNAMENT_STATUSES)[number];
 
+// Display/grouping priority for lists (lower = shown first).
+export const TOURNAMENT_STATUS_ORDER: Record<string, number> = {
+  upcoming: 0,
+  ongoing: 1,
+  completed: 2,
+  cancelled: 3,
+};
+
 // Allowed status transitions for a tournament (state machine).
 export const TOURNAMENT_TRANSITIONS: Record<TournamentStatus, TournamentStatus[]> = {
-  draft: ["upcoming", "ongoing", "cancelled"],
   upcoming: ["ongoing", "cancelled"],
   ongoing: ["completed", "cancelled"],
   completed: [],

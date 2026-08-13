@@ -12,10 +12,10 @@ import {
 
 describe("state machines", () => {
   it("allows valid tournament transitions and blocks invalid ones", () => {
-    expect(TOURNAMENT_TRANSITIONS.draft).toContain("upcoming");
+    expect(TOURNAMENT_TRANSITIONS.upcoming).toContain("ongoing");
     expect(TOURNAMENT_TRANSITIONS.ongoing).toContain("completed");
     expect(TOURNAMENT_TRANSITIONS.completed).toHaveLength(0); // terminal
-    expect(TOURNAMENT_TRANSITIONS.draft).not.toContain("completed");
+    expect(TOURNAMENT_TRANSITIONS.upcoming).not.toContain("completed");
   });
 
   it("permits re-opening a completed match for score correction", () => {
