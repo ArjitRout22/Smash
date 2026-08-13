@@ -360,6 +360,39 @@ Batch 3 (PRs #11, #12):
   shared link (no login). Polling, not WebSockets (Vercel serverless). Saving the
   real result clears the live score.
 
+### Phase 11 — Unified Matches tab + League (Sunday) scoring (PR #15)
+Two changes from field feedback.
+
+- **One Matches tab (was Matches + Stages + Bracket).** The three tabs confused
+  everyone ("no one understands properly"). They're now a single **Matches** tab:
+  a **List ↔ Bracket** view switch, one toolbar with **Generate fixtures /
+  Generate bracket / Add stage / Create match**, and **stage-filter chips** over
+  the list (derived from the matches, no extra fetch). Manage-page tabs 8 → 6;
+  the public/discover page drops its standalone Bracket tab too. The three
+  draw-building modals moved from `StagesTab.tsx` into `FixtureModals.tsx`;
+  `StagesTab.tsx` is deleted. `MatchesTab` is still permission-gated, so it
+  doubles as the read-only public view.
+- **League (Sunday) scoring — now the default for new tournaments.** Win = 3;
+  lose but reach 15 points = 1; lose under 15 = 0. Selectable per tournament in
+  **Settings → Scoring system** (Standard 10/2 + knockout bonuses still there).
+  The points engine gained a score-based consolation floor: `pointsForMatch`
+  takes the side's best single-game score, threaded through both the score-save
+  path (`score.service`) and the leaderboard recompute (`recompute` now includes
+  `games`). Switching the system **rescores the standings from stored results**
+  in the same transaction (`updateTournament`). The Leaderboard shows the active
+  rule as a caption. Existing tournaments (null `pointsConfig`) stay **Standard**
+  — the code-level default fallback is unchanged; new tournaments are stamped
+  with the League preset at create time, so nothing switches underneath anyone.
+  (League presets carry explicit zero stage-bonuses so the partial-override merge
+  in `resolvePointsConfig` can't re-add knockout bonuses.)
+- **Help** rewritten: unified-tab guidance, an **all match scenarios** section
+  (single match, round-robin, groups, knockout, group→knockout, doubles, live
+  scoring, walkover/cancel, correction, casual), and the two scoring systems.
+- Verified: `tsc` · `lint` · 54 unit · 11 integration (added League default /
+  15-floor inclusive / switch-rescore) · `build` · live smoke on local pg
+  (merged tab, bracket view, leaderboard caption, Settings scoring card) and a
+  prod smoke after deploy.
+
 ---
 
 ## Key decisions
@@ -413,7 +446,11 @@ Batch 3 (PRs #11, #12):
   live scoring + spectator ("Live now"). PR #13 fixed WhatsApp prefill (anchor, not
   window.open) + surfaced all of it (Public-page link, live scoreboard on scheduled
   matches, always-visible Form card).
-- ✅ CI green on every push; 48 unit + 7 integration tests.
+- ✅ **Phase 11 live** (PR #15): Matches/Stages/Bracket unified into one **Matches**
+  tab (List↔Bracket switch, one build toolbar, stage-filter chips); **League
+  (Sunday) scoring** (win 3 / close-loss 1 / heavy-loss 0) is the new default and
+  is selectable per tournament in Settings. Existing tournaments stay Standard.
+- ✅ CI green on every push; 54 unit + 11 integration tests.
 - ✅ **Custom domain live:** https://smashhero.app (HTTPS; Vercel primary = `www`,
   apex 308-redirects to it).
 - ✅ **Email delivery live:** `smashhero.app` verified in Resend (DKIM/SPF/MX),
@@ -439,6 +476,11 @@ Batch 3 (PRs #11, #12):
   `/players/<id>` — needs completed matches to populate (Form card always shows).
 - **Admin reminders:** `/admin` → "Send reminders" (pick tournament + recipients,
   incl. invited-not-responded players).
+- **The draw (fixtures/stages/bracket):** all in the tournament **Matches** tab —
+  the toolbar's Generate fixtures / Generate bracket / Add stage / Create match,
+  the List↔Bracket switch, and stage-filter chips. (No more separate Stages/Bracket tabs.)
+- **Scoring system:** tournament **Settings → Scoring system** — League (Sunday,
+  default) or Standard. The active rule shows as a caption on the **Leaderboard**.
 
 ## Pending follow-ups
 
