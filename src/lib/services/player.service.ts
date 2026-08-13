@@ -187,6 +187,77 @@ export async function getPlayerStatistics(actor: AuthUser, id: string) {
   };
 }
 
+/**
+ * Lightweight "identity" signals for a player profile: recent form (last 5),
+ * current win/loss streak, top head-to-head rivalries (singles), and derived
+ * achievement badges. All computed from completed match history + ranking.
+ */
+export async function getPlayerInsights(actor: AuthUser, id: string) {
+  const player = await getPlayer(actor, id);
+  const r = player.ranking;
+
+  const parts = await prisma.matchParticipant.findMany({
+    where: {
+      playerId: id,
+      match: { status: "completed", deletedAt: null, tournament: { deletedAt: null } },
+    },
+    orderBy: { match: { createdAt: "desc" } },
+    include: {
+      match: {
+        select: {
+          matchType: true,
+          participants: {
+            select: { isWinner: true, playerId: true, player: { select: { id: true, displayName: true } } },
+          },
+        },
+      },
+    },
+  });
+
+  // Recent form, newest first (W/L per completed match).
+  const form = parts.map((p) => (p.isWinner ? "W" : "L")) as ("W" | "L")[];
+  const last5 = form.slice(0, 5);
+  // Current streak = leading run of the same result.
+  let streak = { type: form[0] ?? null as "W" | "L" | null, count: 0 };
+  for (const res of form) {
+    if (res === form[0]) streak = { type: res, count: streak.count + 1 };
+    else break;
+  }
+
+  // Head-to-head (singles only): tally wins/losses per opponent.
+  const h2h = new Map<string, { name: string; wins: number; losses: number }>();
+  for (const p of parts) {
+    if (p.match.matchType !== "singles") continue;
+    const opp = p.match.participants.find((pp) => pp.playerId && pp.playerId !== id);
+    if (!opp?.playerId || !opp.player) continue;
+    const rec = h2h.get(opp.playerId) ?? { name: opp.player.displayName, wins: 0, losses: 0 };
+    if (p.isWinner) rec.wins += 1;
+    else rec.losses += 1;
+    h2h.set(opp.playerId, rec);
+  }
+  const headToHead = [...h2h.entries()]
+    .map(([playerId, v]) => ({ playerId, ...v, played: v.wins + v.losses }))
+    .sort((a, b) => b.played - a.played)
+    .slice(0, 5);
+
+  // Derived achievement badges (only earned ones are returned).
+  const wins = r?.wins ?? 0;
+  const played = r?.matchesPlayed ?? 0;
+  const titles = r?.titles ?? 0;
+  const best = r?.bestRank ?? null;
+  const badges: { key: string; label: string; icon: string }[] = [];
+  if (titles >= 1) badges.push({ key: "champion", label: `Champion ×${titles}`, icon: "🏆" });
+  if (best != null && best <= 3) badges.push({ key: "podium", label: `Top-3 (best #${best})`, icon: "🥇" });
+  if (streak.type === "W" && streak.count >= 3) badges.push({ key: "onfire", label: `${streak.count}-win streak`, icon: "🔥" });
+  if (wins >= 100) badges.push({ key: "legend", label: "100 wins", icon: "👑" });
+  else if (wins >= 50) badges.push({ key: "w50", label: "50 wins", icon: "⭐" });
+  else if (wins >= 10) badges.push({ key: "w10", label: "10 wins", icon: "✨" });
+  else if (wins >= 1) badges.push({ key: "w1", label: "First win", icon: "🎉" });
+  if (played >= 100) badges.push({ key: "veteran", label: "100 matches", icon: "🎖️" });
+
+  return { last5, streak, headToHead, badges };
+}
+
 /** Paginated match history for a player (singles + doubles via team). */
 export async function getPlayerMatches(actor: AuthUser, id: string, p: Pagination) {
   await getPlayer(actor, id);

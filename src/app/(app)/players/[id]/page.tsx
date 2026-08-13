@@ -56,6 +56,13 @@ type TournamentRow = {
   position: number | null;
 };
 
+type Insights = {
+  last5: ("W" | "L")[];
+  streak: { type: "W" | "L" | null; count: number };
+  headToHead: { playerId: string; name: string; wins: number; losses: number; played: number }[];
+  badges: { key: string; label: string; icon: string }[];
+};
+
 export default function PlayerDetailPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
@@ -68,6 +75,7 @@ export default function PlayerDetailPage() {
     id ? `/api/players/${id}/statistics` : null,
     swrFetcher
   );
+  const { data: insights } = useSWR<Insights>(id ? `/api/players/${id}/insights` : null, swrFetcher);
   const { data: matches, isLoading: matchesLoading } = useSWR<{ data: MatchRow[] }>(
     id ? `/api/players/${id}/matches?page=1&pageSize=20` : null,
     swrFetcherWithMeta
@@ -136,6 +144,50 @@ export default function PlayerDetailPage() {
           <Stat label="Current rank" value={stats.currentRank ?? "—"} />
           <Stat label="Best rank" value={stats.bestRank ?? "—"} />
           <Stat label="Titles" value={stats.titles} />
+        </div>
+      )}
+
+      {insights && (insights.last5.length > 0 || insights.badges.length > 0 || insights.headToHead.length > 0) && (
+        <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <Card className="p-5">
+            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">Recent form</h2>
+            {insights.last5.length > 0 ? (
+              <div className="flex items-center gap-2">
+                {[...insights.last5].reverse().map((r, i) => (
+                  <span key={i} className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold ${r === "W" ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" : "bg-red-500/15 text-red-600 dark:text-red-400"}`}>{r}</span>
+                ))}
+                {insights.streak.type && insights.streak.count >= 2 && (
+                  <span className="ml-2 text-sm text-muted">{insights.streak.count}-{insights.streak.type === "W" ? "win" : "loss"} streak{insights.streak.type === "W" ? " 🔥" : ""}</span>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-muted">No completed matches yet.</p>
+            )}
+            {insights.badges.length > 0 && (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {insights.badges.map((b) => (
+                  <span key={b.key} className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-surface-2 px-3 py-1 text-xs font-medium">
+                    <span aria-hidden="true">{b.icon}</span> {b.label}
+                  </span>
+                ))}
+              </div>
+            )}
+          </Card>
+          {insights.headToHead.length > 0 && (
+            <Card className="p-5">
+              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">Head-to-head</h2>
+              <div className="space-y-2">
+                {insights.headToHead.map((h) => (
+                  <div key={h.playerId} className="flex items-center justify-between text-sm">
+                    <Link href={`/players/${h.playerId}`} className="font-medium hover:underline">{h.name}</Link>
+                    <span className="font-mono text-muted">
+                      <span className="text-emerald-600 dark:text-emerald-400">{h.wins}W</span> · <span className="text-red-600 dark:text-red-400">{h.losses}L</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
         </div>
       )}
 
