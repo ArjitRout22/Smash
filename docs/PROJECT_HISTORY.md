@@ -310,9 +310,13 @@ Tailwind CSS v4 · Vitest · Playwright.
   `/discover/[id]` (reuses `MatchesTab`, read-only for non-managers). Previously the
   public view only had Overview/Leaderboard/Bracket.
 - **Admin picks reminder recipients.** The admin reminder CTA is now a picker
-  modal: `GET /api/admin/reminders` lists upcoming tournaments + their registered
-  account-holders; `POST { tournamentId, playerIds? }` sends to the chosen players
-  (all registered if none given). Replaces the blanket "send to everything due".
+  modal: `GET /api/admin/reminders` lists upcoming tournaments + their emailable
+  players; `POST { tournamentId, playerIds? }` sends to the chosen players.
+  Recipients include **invited (not-yet-responded)** players as well as registered
+  ones — registered get a "coming up" reminder, invited get a nudge to accept
+  (`remindersSent` + `nudgesSent`). Reworked into a branded, email-client-safe
+  template (header band, date + location rows, table CTA) shared by the invite /
+  invite-reminder / reminder emails.
 - Shipped via PR #6. Verified: typecheck, lint, 48 unit + 7 integration, build,
   and live (owner vs stranger roster, private 403, matches 200, targeted send).
 
