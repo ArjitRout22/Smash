@@ -35,7 +35,7 @@ type CasualMatch = {
   reportedByUserId: string | null;
   role: "challenger" | "opponent";
   isChallenger: boolean;
-  canRespond: boolean;
+  canReject: boolean;
   canReport: boolean;
   canConfirm: boolean;
   canCancel: boolean;
@@ -81,9 +81,10 @@ export default function ChallengesPage() {
   }
 
   const matches = data ?? [];
-  // Actionable-for-you items float to the top.
-  const actionable = matches.filter((m) => m.canRespond || m.canConfirm || (m.status === "accepted"));
-  const waiting = matches.filter((m) => !actionable.includes(m) && (m.status === "pending" || m.status === "awaiting_confirmation"));
+  // Actionable-for-you items float to the top: a match ready to play (either
+  // side), or a reported result awaiting your confirmation.
+  const actionable = matches.filter((m) => m.canConfirm || m.status === "accepted");
+  const waiting = matches.filter((m) => !actionable.includes(m) && m.status === "awaiting_confirmation");
   const finished = matches.filter((m) => ["completed", "declined", "cancelled"].includes(m.status));
 
   return (
@@ -113,7 +114,7 @@ export default function ChallengesPage() {
           {data && matches.length === 0 && (
             <EmptyState
               title="No challenges yet"
-              message="Challenge another player to an individual match. They'll need to accept before you can record a result."
+              message="Challenge another player to an individual match — it's ready to play straight away. Record the result after; the other player can reject it if they can't play."
               icon={Zap}
               action={<Button onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> New challenge</Button>}
             />
@@ -124,7 +125,7 @@ export default function ChallengesPage() {
               <Section title="Needs your attention" items={actionable} empty="Nothing needs your attention right now.">
                 {(m) => (
                   <ChallengeCard key={m.id} m={m} busy={busy}
-                    onRespond={(a) => act(m, a, a === "accept" ? "Challenge accepted" : "Challenge declined")}
+                    onRejectChallenge={() => act(m, "decline", "Challenge rejected — match cancelled")}
                     onReport={() => setScoreFor(m)}
                     onConfirm={() => act(m, "confirm", "Result confirmed")}
                     onReject={() => act(m, "reject", "Result rejected — play it again")}
@@ -137,7 +138,7 @@ export default function ChallengesPage() {
                 <Section title="Waiting on the other player" items={waiting} empty="">
                   {(m) => (
                     <ChallengeCard key={m.id} m={m} busy={busy}
-                      onRespond={(a) => act(m, a, a === "accept" ? "Challenge accepted" : "Challenge declined")}
+                      onRejectChallenge={() => act(m, "decline", "Challenge rejected — match cancelled")}
                       onReport={() => setScoreFor(m)}
                       onConfirm={() => act(m, "confirm", "Result confirmed")}
                       onReject={() => act(m, "reject", "Result rejected — play it again")}
@@ -151,7 +152,7 @@ export default function ChallengesPage() {
                 <Section title="History" items={finished} empty="">
                   {(m) => (
                     <ChallengeCard key={m.id} m={m} busy={busy}
-                      onRespond={(a) => act(m, a, a === "accept" ? "Challenge accepted" : "Challenge declined")}
+                      onRejectChallenge={() => act(m, "decline", "Challenge rejected — match cancelled")}
                       onReport={() => setScoreFor(m)}
                       onConfirm={() => act(m, "confirm", "Result confirmed")}
                       onReject={() => act(m, "reject", "Result rejected — play it again")}
@@ -229,7 +230,7 @@ function scoreLine(m: CasualMatch): string {
 function ChallengeCard({
   m,
   busy,
-  onRespond,
+  onRejectChallenge,
   onReport,
   onConfirm,
   onReject,
@@ -237,7 +238,7 @@ function ChallengeCard({
 }: {
   m: CasualMatch;
   busy: string | null;
-  onRespond: (action: "accept" | "decline") => void;
+  onRejectChallenge: () => void;
   onReport: () => void;
   onConfirm: () => void;
   onReject: () => void;
@@ -283,28 +284,30 @@ function ChallengeCard({
       </div>
 
       <div className="flex shrink-0 flex-wrap gap-2">
-        {m.canRespond && (
-          <>
-            <Button size="sm" loading={busy === m.id + "accept"} disabled={busyAny} onClick={() => onRespond("accept")}>Accept</Button>
-            <Button size="sm" variant="ghost" disabled={busyAny} onClick={() => onRespond("decline")}>Decline</Button>
-          </>
-        )}
+        {/* Ready to play — either side can record the result. */}
         {m.status === "accepted" && m.canReport && (
           <Button size="sm" variant="outline" disabled={busyAny} onClick={onReport}>Enter result</Button>
         )}
+        {/* The challenged side can reject (cancels the match) before any result. */}
+        {m.canReject && (
+          <Button size="sm" variant="ghost" loading={busy === m.id + "decline"} disabled={busyAny} onClick={onRejectChallenge}>Reject</Button>
+        )}
+        {/* The challenger can call off their own ready-to-play challenge. */}
+        {m.isChallenger && m.status === "accepted" && (
+          <Button size="sm" variant="ghost" disabled={busyAny} onClick={onCancel}>Cancel</Button>
+        )}
+        {/* Reported score — the OTHER side confirms or rejects. */}
         {m.canConfirm && (
           <>
             <Button size="sm" loading={busy === m.id + "confirm"} disabled={busyAny} onClick={onConfirm}>Confirm</Button>
             <Button size="sm" variant="ghost" disabled={busyAny} onClick={onReject}>Reject</Button>
           </>
         )}
+        {/* Reporter can amend before it's confirmed; either side can cancel. */}
         {m.status === "awaiting_confirmation" && m.canReport && (
           <Button size="sm" variant="outline" disabled={busyAny} onClick={onReport}>Edit result</Button>
         )}
-        {m.canCancel && m.status !== "pending" && !m.canReport && !m.canConfirm && !m.canRespond && (
-          <Button size="sm" variant="ghost" disabled={busyAny} onClick={onCancel}>Cancel</Button>
-        )}
-        {m.canCancel && m.status === "pending" && m.isChallenger && (
+        {m.status === "awaiting_confirmation" && m.canCancel && !m.canConfirm && !m.canReport && (
           <Button size="sm" variant="ghost" disabled={busyAny} onClick={onCancel}>Cancel</Button>
         )}
       </div>
@@ -413,7 +416,7 @@ function NewChallengeModal({ onClose, onCreated }: { onClose: () => void; onCrea
         locationLng: place.name.trim() ? place.lng : undefined,
         scheduledAt: scheduledAt || undefined,
       });
-      toast.success("Challenge sent");
+      toast.success("Challenge sent — ready to play");
       onCreated();
       onClose();
     } catch (err) {
@@ -444,9 +447,9 @@ function NewChallengeModal({ onClose, onCreated }: { onClose: () => void; onCrea
         </Field>
 
         {isDoubles && <PlayerPicker label="Your partner" selected={partner} onSelect={setPartner} excludeIds={picked} />}
-        <PlayerPicker label={isDoubles ? "Opponent (accepts the challenge)" : "Opponent"} selected={opponent} onSelect={setOpponent} excludeIds={picked} />
+        <PlayerPicker label="Opponent" selected={opponent} onSelect={setOpponent} excludeIds={picked} />
         {isDoubles && <PlayerPicker label="Opponent's partner" selected={oppPartner} onSelect={setOppPartner} excludeIds={picked} />}
-        {isDoubles && <p className="text-xs text-muted">All four players must have an account. The opponent you pick accepts on behalf of their pair.</p>}
+        {isDoubles && <p className="text-xs text-muted">All four players must have an account. Anyone on the other side can reject the challenge.</p>}
 
         <div className="grid grid-cols-2 gap-4">
           <Field label="Format">

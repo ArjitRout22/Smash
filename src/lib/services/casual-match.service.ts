@@ -15,9 +15,11 @@ import type {
  * Casual (individual) matches: player-vs-player games played OUTSIDE any
  * tournament. They live in their own table and never write to the point ledger
  * or rankings, so they are structurally excluded from ranked leaderboards and
- * stats. Both participants must have login accounts — the opponent accepts the
- * challenge, and BOTH must agree on the final score (one reports, the other
- * confirms) before it is marked completed.
+ * stats. Both participants must have login accounts. A challenge is ready to
+ * play as soon as it's created (NO accept step) — the challenged side can
+ * REJECT it (which cancels the match) if they can't play. Scoring still needs
+ * agreement: one side reports the result, the OTHER confirms (or rejects to
+ * replay) before it is marked completed.
  */
 
 const playerSelect = { select: { id: true, displayName: true, fullName: true } } as const;
@@ -90,7 +92,9 @@ function serialize(m: RawCasualMatch, actor: AuthUser) {
     isChallenger: onChallengerSide,
     // Action hints so the UI never shows a control the server would reject.
     // Any player on a side can act for their team; the OTHER team confirms.
-    canRespond: onOpponentSide && m.status === "pending",
+    // The challenged side can reject a ready-to-play match (before a result is
+    // entered) — that cancels it. No "accept" step exists anymore.
+    canReject: onOpponentSide && m.status === "accepted" && m.reportedByUserId == null,
     canReport:
       m.status === "accepted" ||
       (m.status === "awaiting_confirmation" && actorSide === reporterSide),
@@ -219,7 +223,8 @@ export async function createCasualMatch(actor: AuthUser, input: CreateCasualMatc
       location: input.location,
       locationLat: input.locationLat ?? null,
       locationLng: input.locationLng ?? null,
-      status: "pending",
+      // Ready to play immediately — no accept step. The opponent can reject.
+      status: "accepted",
     },
     include: withPlayers,
   });
@@ -254,11 +259,9 @@ export async function reportCasualScore(
     m.status === "accepted" || (m.status === "awaiting_confirmation" && actorSide === reporterSide);
   if (!canReport) {
     throw Errors.invalidState(
-      m.status === "pending"
-        ? "The opponent must accept the challenge before a score can be entered."
-        : m.status === "awaiting_confirmation"
-          ? "A result is already awaiting the other player's confirmation."
-          : `Cannot report a score for a ${m.status} match.`
+      m.status === "awaiting_confirmation"
+        ? "A result is already awaiting the other player's confirmation."
+        : `Cannot report a score for a ${m.status} match.`
     );
   }
 
@@ -292,8 +295,8 @@ export async function reportCasualScore(
 }
 
 /**
- * Drive a state transition: accept/decline a challenge, confirm/reject a
- * reported result, cancel, or reopen a completed match to correct it.
+ * Drive a state transition: reject a challenge (challenged side → cancels it),
+ * confirm/reject a reported result, or cancel the match.
  */
 export async function actOnCasualMatch(
   actor: AuthUser,
@@ -307,16 +310,14 @@ export async function actOnCasualMatch(
 
   let data: Prisma.CasualMatchUpdateInput;
   switch (input.action) {
-    case "accept":
     case "decline": {
-      // Any player on the challenged (opponent) team may accept/decline.
-      if (actorSide !== "B") throw Errors.forbidden("Only the challenged team can respond.");
-      if (m.status !== "pending") throw Errors.invalidState("This challenge has already been answered.");
-      data = {
-        status: input.action === "accept" ? "accepted" : "declined",
-        respondedAt: new Date(),
-        version: { increment: 1 },
-      };
+      // The challenged (opponent) team rejects a ready-to-play match → cancel it.
+      // (There is no accept step; matches are playable the moment they're created.)
+      if (actorSide !== "B") throw Errors.forbidden("Only the challenged team can reject this challenge.");
+      if (m.status !== "accepted" || m.reportedByUserId != null) {
+        throw Errors.invalidState("This challenge can no longer be rejected.");
+      }
+      data = { status: "cancelled", respondedAt: new Date(), version: { increment: 1 } };
       break;
     }
     case "confirm":

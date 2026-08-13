@@ -247,10 +247,12 @@ export const CreateCasualMatchSchema = z
     { message: "Doubles matches need a partner on each side", path: ["challengerPartnerPlayerId"] }
   );
 
-// State transitions the two captains can drive (see casual-match.service).
+// State transitions the two sides can drive (see casual-match.service).
+// "decline" = the challenged side rejects a ready-to-play match (cancels it);
+// "confirm"/"reject" act on a reported score; "cancel" calls the match off.
 // A completed casual match is final — no reopen (both players already agreed).
 export const CasualMatchActionSchema = z.object({
-  action: z.enum(["accept", "decline", "confirm", "reject", "cancel"]),
+  action: z.enum(["decline", "confirm", "reject", "cancel"]),
   expectedVersion: z.number().int().min(0).optional(),
 });
 
