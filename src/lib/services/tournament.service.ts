@@ -7,6 +7,8 @@ import { TOURNAMENT_TRANSITIONS, type TournamentStatus } from "@/lib/domain/cons
 import type { AuthUser } from "@/lib/auth/authorize";
 import { orgFilter, assertOrgAccess, ownOrgId, isPlatformAdmin } from "@/lib/auth/tenancy";
 import { sendTournamentInviteEmail } from "@/lib/email/notifications";
+import { LEAGUE_POINTS_CONFIG } from "@/lib/engines/points";
+import { recomputeTournamentLeaderboard } from "@/lib/services/recompute";
 import type {
   CreateTournamentSchema,
   UpdateTournamentSchema,
@@ -107,7 +109,9 @@ export async function createTournament(input: CreateInput, actor: AuthUser) {
       organizerId: input.organizerId ?? actor.id,
       createdById: actor.id,
       organizationId: ownOrgId(actor),
-      pointsConfig: input.pointsConfig ?? undefined,
+      // New tournaments default to the Sunday-league system (win 3 / close-loss
+      // 1 / heavy-loss 0). Organizers can switch to Standard in Settings.
+      pointsConfig: input.pointsConfig ?? LEAGUE_POINTS_CONFIG,
       status: "upcoming",
     },
   });
@@ -129,22 +133,33 @@ export async function updateTournament(id: string, input: UpdateInput, actor: Au
     }
   }
 
-  const updated = await prisma.tournament.update({
-    where: { id },
-    data: {
-      name: input.name ?? undefined,
-      description: input.description === undefined ? undefined : input.description,
-      location: input.location === undefined ? undefined : input.location,
-      locationLat: input.locationLat === undefined ? undefined : input.locationLat,
-      locationLng: input.locationLng === undefined ? undefined : input.locationLng,
-      startDate: input.startDate === undefined ? undefined : input.startDate,
-      endDate: input.endDate === undefined ? undefined : input.endDate,
-      format: input.format ?? undefined,
-      status: input.status ?? undefined,
-      visibility: input.visibility ?? undefined,
-      organizerId: input.organizerId ?? undefined,
-      pointsConfig: input.pointsConfig === undefined ? undefined : input.pointsConfig ?? undefined,
-    },
+  // The scoring system drives the per-tournament standings, which are DERIVED
+  // from stored results — so when it changes we recompute the leaderboard in the
+  // same transaction, and the points table reflects the new rules immediately.
+  const scoringChanged =
+    input.pointsConfig !== undefined &&
+    JSON.stringify(input.pointsConfig ?? null) !== JSON.stringify(existing.pointsConfig ?? null);
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const row = await tx.tournament.update({
+      where: { id },
+      data: {
+        name: input.name ?? undefined,
+        description: input.description === undefined ? undefined : input.description,
+        location: input.location === undefined ? undefined : input.location,
+        locationLat: input.locationLat === undefined ? undefined : input.locationLat,
+        locationLng: input.locationLng === undefined ? undefined : input.locationLng,
+        startDate: input.startDate === undefined ? undefined : input.startDate,
+        endDate: input.endDate === undefined ? undefined : input.endDate,
+        format: input.format ?? undefined,
+        status: input.status ?? undefined,
+        visibility: input.visibility ?? undefined,
+        organizerId: input.organizerId ?? undefined,
+        pointsConfig: input.pointsConfig === undefined ? undefined : input.pointsConfig ?? undefined,
+      },
+    });
+    if (scoringChanged) await recomputeTournamentLeaderboard(tx, id);
+    return row;
   });
   await audit({
     actorUserId: actor.id,

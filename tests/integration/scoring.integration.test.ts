@@ -2,9 +2,10 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { prisma } from "@/lib/db/prisma";
 import { permissionsForRole } from "@/lib/auth/permissions";
 import type { AuthUser } from "@/lib/auth/authorize";
-import { createTournament, addTournamentPlayers, getTournamentLeaderboard } from "@/lib/services/tournament.service";
+import { createTournament, addTournamentPlayers, getTournamentLeaderboard, updateTournament } from "@/lib/services/tournament.service";
 import { createMatch, updateMatch } from "@/lib/services/match.service";
 import { submitScore } from "@/lib/services/score.service";
+import { STANDARD_POINTS_CONFIG, LEAGUE_POINTS_CONFIG } from "@/lib/engines/points";
 
 /**
  * Real service + DB integration for the consistency-critical scoring path.
@@ -49,7 +50,12 @@ d("scoring → leaderboard → correction (integration)", () => {
     playerA = pa.id;
     playerB = pb.id;
 
-    const t = await createTournament({ name: `IT ${Date.now()}`, format: "singles", visibility: "private" }, actor);
+    // This suite verifies the Standard scoring path, so pin it explicitly
+    // (new tournaments now default to the League system).
+    const t = await createTournament(
+      { name: `IT ${Date.now()}`, format: "singles", visibility: "private", pointsConfig: STANDARD_POINTS_CONFIG },
+      actor
+    );
     tournamentId = t.id;
     await addTournamentPlayers(tournamentId, [playerA, playerB], actor);
 
@@ -135,5 +141,81 @@ d("scoring → leaderboard → correction (integration)", () => {
     await expect(
       submitScore(matchId, { games: [{ scoreA: 21, scoreB: 0 }], expectedVersion: 0 }, actor)
     ).rejects.toMatchObject({ code: "CONCURRENCY_CONFLICT" });
+  });
+});
+
+d("league (Sunday) scoring — default + 15-point floor (integration)", () => {
+  let actor: AuthUser;
+  let tournamentId: string;
+  let playerA: string;
+  let playerB: string;
+  let matchId: string;
+
+  beforeAll(async () => {
+    const role = await prisma.role.upsert({ where: { name: "ADMIN" }, update: {}, create: { name: "ADMIN", description: "admin" } });
+    const user = await prisma.user.create({ data: { email: `it-lg-${Date.now()}@smash.test`, name: "IT LG", roleId: role.id } });
+    actor = {
+      id: user.id, email: user.email, emailVerified: true, phone: user.phone, name: user.name,
+      role: "ADMIN", organizationId: null, playerId: null, permissions: permissionsForRole("ADMIN"),
+    };
+    const pa = await prisma.player.create({ data: { fullName: "LG Alice", displayName: "LGA" } });
+    const pb = await prisma.player.create({ data: { fullName: "LG Bob", displayName: "LGB" } });
+    playerA = pa.id;
+    playerB = pb.id;
+
+    // No pointsConfig → should default to the League system.
+    const t = await createTournament({ name: `IT LG ${Date.now()}`, format: "singles", visibility: "private" }, actor);
+    tournamentId = t.id;
+    await addTournamentPlayers(tournamentId, [playerA, playerB], actor);
+
+    const match = await createMatch(
+      { tournamentId, matchType: "singles", bestOf: 1, sideA: { playerId: playerA }, sideB: { playerId: playerB } },
+      actor
+    );
+    matchId = match.id;
+  });
+
+  afterAll(async () => {
+    await prisma.tournament.deleteMany({ where: { id: tournamentId } });
+    await prisma.player.deleteMany({ where: { id: { in: [playerA, playerB] } } });
+    await prisma.user.deleteMany({ where: { id: actor.id } });
+    await prisma.$disconnect();
+  });
+
+  async function pointsFor(id: string) {
+    const lb = await getTournamentLeaderboard(actor, tournamentId);
+    return lb.find((r) => r.entity?.id === id)!.points;
+  }
+
+  it("defaults new tournaments to League: win = 3, close loss (16) = 1", async () => {
+    await submitScore(matchId, { games: [{ scoreA: 21, scoreB: 16 }] }, actor);
+    expect(await pointsFor(playerA)).toBe(3); // win
+    expect(await pointsFor(playerB)).toBe(1); // lost but reached 15
+  });
+
+  it("a heavy loss below the floor earns 0", async () => {
+    await updateMatch(matchId, { closed: false }, actor);
+    const cur = await prisma.match.findUniqueOrThrow({ where: { id: matchId } });
+    await submitScore(matchId, { games: [{ scoreA: 21, scoreB: 9 }], expectedVersion: cur.version }, actor);
+    expect(await pointsFor(playerA)).toBe(3);
+    expect(await pointsFor(playerB)).toBe(0); // 9 < 15
+  });
+
+  it("the floor is inclusive: exactly 15 still earns 1", async () => {
+    await updateMatch(matchId, { closed: false }, actor);
+    const cur = await prisma.match.findUniqueOrThrow({ where: { id: matchId } });
+    await submitScore(matchId, { games: [{ scoreA: 21, scoreB: 15 }], expectedVersion: cur.version }, actor);
+    expect(await pointsFor(playerB)).toBe(1);
+  });
+
+  it("switching to Standard rescores the existing standings immediately", async () => {
+    await updateTournament(tournamentId, { pointsConfig: STANDARD_POINTS_CONFIG }, actor);
+    expect(await pointsFor(playerA)).toBe(10); // matchWin
+    expect(await pointsFor(playerB)).toBe(2); // matchLoss (score no longer matters)
+
+    // …and back to League.
+    await updateTournament(tournamentId, { pointsConfig: LEAGUE_POINTS_CONFIG }, actor);
+    expect(await pointsFor(playerA)).toBe(3);
+    expect(await pointsFor(playerB)).toBe(1); // 15 reached
   });
 });

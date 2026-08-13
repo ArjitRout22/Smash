@@ -14,9 +14,7 @@ import { OverviewTab } from "@/components/tournament/OverviewTab";
 import { PlayersTab } from "@/components/tournament/PlayersTab";
 import { TeamsTab } from "@/components/tournament/TeamsTab";
 import { MatchesTab } from "@/components/tournament/MatchesTab";
-import { StagesTab } from "@/components/tournament/StagesTab";
 import { LeaderboardTab } from "@/components/tournament/LeaderboardTab";
-import { BracketTab } from "@/components/tournament/BracketTab";
 import { SettingsTab } from "@/components/tournament/SettingsTab";
 import type { TournamentDetail } from "@/components/tournament/types";
 
@@ -25,9 +23,7 @@ const TABS = [
   "Players",
   "Teams",
   "Matches",
-  "Stages",
   "Leaderboard",
-  "Bracket",
   "Settings",
 ] as const;
 type Tab = (typeof TABS)[number];
@@ -113,9 +109,7 @@ export default function TournamentDetailPage() {
       {tab === "Players" && <PlayersTab tournamentId={id} />}
       {tab === "Teams" && <TeamsTab tournamentId={id} />}
       {tab === "Matches" && <MatchesTab tournamentId={id} format={data.format} />}
-      {tab === "Stages" && <StagesTab tournamentId={id} format={data.format} />}
-      {tab === "Leaderboard" && <LeaderboardTab tournamentId={id} />}
-      {tab === "Bracket" && <BracketTab tournamentId={id} />}
+      {tab === "Leaderboard" && <LeaderboardTab tournamentId={id} pointsConfig={data.pointsConfig} />}
       {tab === "Settings" && <SettingsTab tournament={data} onChanged={() => mutate()} />}
     </div>
   );

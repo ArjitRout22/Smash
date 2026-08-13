@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import useSWR from "swr";
-import { Plus, Pencil, Play, Ban, Lock, LockOpen, MessageSquare } from "lucide-react";
+import { Plus, Pencil, Play, Ban, Lock, LockOpen, MessageSquare, CalendarRange, GitBranch, Layers, ListChecks, Trophy } from "lucide-react";
 import { api, ApiClientError, swrFetcher, swrFetcherWithMeta } from "@/lib/client/api";
 import { Card, Button, Badge, statusColor, Select, Input, Field } from "@/components/ui/primitives";
 import { EmptyState, ErrorState, ListSkeleton } from "@/components/ui/states";
@@ -12,13 +12,34 @@ import { useAuth } from "@/components/AuthProvider";
 import { PERMS } from "@/lib/client/perms";
 import { ScoreEntryModal, type ScorableMatch } from "@/components/ScoreEntryModal";
 import { MatchComments } from "@/components/MatchComments";
+import { BracketTab } from "./BracketTab";
+import { CreateStageModal, GenerateFixturesModal, GenerateBracketModal } from "./FixtureModals";
 import { formatDateTime, titleCase } from "@/lib/client/format";
 import type { MatchDTO, StageDTO, TournamentPlayerDTO, TeamDTO } from "./types";
 
+type View = "list" | "bracket";
+
+const EMPTY_MATCHES: MatchDTO[] = [];
+
+/**
+ * The unified draw-and-play tab. Folds what used to be three separate tabs
+ * (Matches, Stages, Bracket) into one: the "Generate fixtures / bracket" and
+ * "Add stage / Create match" builders live here, a List↔Bracket switch picks
+ * the view, and stage chips filter the list. Management actions are gated by
+ * permission, so this same component is also the read-only public view.
+ */
 export function MatchesTab({ tournamentId, format }: { tournamentId: string; format: string }) {
   const { can } = useAuth();
   const toast = useToast();
+  const canManage = can(PERMS.MATCH_MANAGE);
+  const canStage = can(PERMS.STAGE_MANAGE);
+
+  const [view, setView] = useState<View>("list");
+  const [stageFilter, setStageFilter] = useState<string>("all"); // stage id or "all"
   const [creating, setCreating] = useState(false);
+  const [addingStage, setAddingStage] = useState(false);
+  const [genFixtures, setGenFixtures] = useState(false);
+  const [genBracket, setGenBracket] = useState(false);
   const [scoreMatch, setScoreMatch] = useState<ScorableMatch | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -28,6 +49,18 @@ export function MatchesTab({ tournamentId, format }: { tournamentId: string; for
     // Poll while a match is in progress so the live score stays fresh for everyone.
     { refreshInterval: (latest) => (latest?.data?.some((m) => m.status === "in_progress") ? 4000 : 0) }
   );
+
+  const matches = data?.data ?? EMPTY_MATCHES;
+
+  // Distinct stages present, in stage order — drives both the filter chips and
+  // the stage summary. Derived from the matches so no extra fetch is needed.
+  const stages = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; order: number; status: string }>();
+    for (const m of matches) if (m.stage) map.set(m.stage.id, { id: m.stage.id, name: m.stage.name, order: m.stage.order, status: m.status });
+    return [...map.values()].sort((a, b) => a.order - b.order);
+  }, [matches]);
+
+  const visibleMatches = stageFilter === "all" ? matches : matches.filter((m) => m.stage?.id === stageFilter);
 
   async function patchMatch(m: MatchDTO, body: Record<string, unknown>, successMsg: string) {
     setBusyId(m.id);
@@ -44,27 +77,69 @@ export function MatchesTab({ tournamentId, format }: { tournamentId: string; for
 
   return (
     <div>
-      <div className="mb-4 flex justify-end">
-        {can(PERMS.MATCH_MANAGE) && <Button onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> Create match</Button>}
+      {/* Toolbar: view switch on the left, builders (organizer-only) on the right. */}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="inline-flex rounded-lg border border-[var(--border)] p-0.5">
+          <ViewButton active={view === "list"} onClick={() => setView("list")} icon={ListChecks} label="List" />
+          <ViewButton active={view === "bracket"} onClick={() => setView("bracket")} icon={Trophy} label="Bracket" />
+        </div>
+        {(canManage || canStage) && (
+          <div className="flex flex-wrap gap-2">
+            {canStage && <Button variant="outline" size="sm" onClick={() => setGenFixtures(true)}><CalendarRange className="h-4 w-4" /> Generate fixtures</Button>}
+            {canStage && <Button variant="outline" size="sm" onClick={() => setGenBracket(true)}><GitBranch className="h-4 w-4" /> Generate bracket</Button>}
+            {canStage && <Button variant="ghost" size="sm" onClick={() => setAddingStage(true)}><Layers className="h-4 w-4" /> Add stage</Button>}
+            {canManage && <Button size="sm" onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> Create match</Button>}
+          </div>
+        )}
       </div>
 
-      {isLoading && <ListSkeleton rows={4} />}
-      {error && <ErrorState onRetry={() => mutate()} />}
-      {data && data.data.length === 0 && <EmptyState title="No matches yet" message="Create a match or generate a bracket from the Stages tab." />}
-
-      {data && data.data.length > 0 && (
-        <div className="space-y-2">
-          {data.data.map((m) => (
-            <MatchRow
-              key={m.id}
-              m={m}
-              busy={busyId === m.id}
-              onScore={() => setScoreMatch(m)}
-              onPatch={patchMatch}
-              onRefresh={() => mutate()}
+      {view === "bracket" ? (
+        <BracketTab tournamentId={tournamentId} />
+      ) : (
+        <>
+          {isLoading && <ListSkeleton rows={4} />}
+          {error && <ErrorState onRetry={() => mutate()} />}
+          {data && matches.length === 0 && (
+            <EmptyState
+              title="No matches yet"
+              message={
+                canStage
+                  ? "Use “Generate fixtures” for a round-robin or group stage, “Generate bracket” for a knockout, or “Create match” for a single game."
+                  : "The organizer hasn’t added any matches yet."
+              }
+              icon={CalendarRange}
             />
-          ))}
-        </div>
+          )}
+
+          {data && matches.length > 0 && (
+            <div className="space-y-3">
+              {stages.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <FilterChip active={stageFilter === "all"} onClick={() => setStageFilter("all")}>All matches</FilterChip>
+                  {stages.map((s) => (
+                    <FilterChip key={s.id} active={stageFilter === s.id} onClick={() => setStageFilter(s.id)}>{s.name}</FilterChip>
+                  ))}
+                </div>
+              )}
+
+              <div className="space-y-2">
+                {visibleMatches.map((m) => (
+                  <MatchRow
+                    key={m.id}
+                    m={m}
+                    busy={busyId === m.id}
+                    onScore={() => setScoreMatch(m)}
+                    onPatch={patchMatch}
+                    onRefresh={() => mutate()}
+                  />
+                ))}
+                {visibleMatches.length === 0 && (
+                  <p className="py-6 text-center text-sm text-muted">No matches in this stage.</p>
+                )}
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {creating && (
@@ -75,9 +150,48 @@ export function MatchesTab({ tournamentId, format }: { tournamentId: string; for
           onCreated={() => mutate()}
         />
       )}
+      {addingStage && (
+        <CreateStageModal tournamentId={tournamentId} onClose={() => setAddingStage(false)} onCreated={() => mutate()} />
+      )}
+      {genFixtures && (
+        <GenerateFixturesModal tournamentId={tournamentId} format={format} onClose={() => setGenFixtures(false)} onDone={() => mutate()} />
+      )}
+      {genBracket && (
+        <GenerateBracketModal tournamentId={tournamentId} format={format} onClose={() => setGenBracket(false)} onDone={() => mutate()} />
+      )}
 
       <ScoreEntryModal open={Boolean(scoreMatch)} match={scoreMatch} onClose={() => setScoreMatch(null)} onSaved={() => mutate()} />
     </div>
+  );
+}
+
+function ViewButton({ active, onClick, icon: Icon, label }: { active: boolean; onClick: () => void; icon: typeof ListChecks; label: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition ${
+        active ? "bg-surface-2 text-foreground" : "text-muted hover:text-foreground"
+      }`}
+    >
+      <Icon className="h-4 w-4" /> {label}
+    </button>
+  );
+}
+
+function FilterChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+        active
+          ? "border-[var(--primary)] bg-[var(--primary)]/10 text-foreground"
+          : "border-[var(--border)] text-muted hover:text-foreground"
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 

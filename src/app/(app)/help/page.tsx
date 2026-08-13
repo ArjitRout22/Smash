@@ -32,25 +32,82 @@ const SECTIONS: { title: string; items: Item[] }[] = [
     ],
   },
   {
-    title: "Fixtures, stages & brackets",
+    title: "The Matches tab (everything in one place)",
     items: [
       {
+        q: "One tab for the whole draw",
+        a: "Matches, Stages and Bracket are now a single Matches tab. Use the “Generate fixtures” / “Generate bracket” / “Add stage” / “Create match” buttons to build the draw, the List ↔ Bracket switch to change the view, and the stage chips to filter the list to one stage.",
+      },
+      {
         q: "Generate fixtures (round-robin / groups)",
-        a: "Stages tab → Generate fixtures. Choose “All play all” (everyone plays everyone) or “Groups (cross-play)” (assign teams to Group A/B/… and only cross-group matches are created). Pick once or twice (double round-robin). E.g. 2 groups of 3, twice = 18 matches.",
+        a: "Matches tab → Generate fixtures. Choose “All play all” (everyone plays everyone) or “Groups (cross-play)” (assign players/teams to Group A/B/… and only cross-group matches are created). Pick once or twice (double round-robin). E.g. 2 groups of 3, twice = 18 matches.",
       },
       {
         q: "Generate bracket (knockout)",
-        a: "Stages tab → Generate bracket builds a single-elimination knockout from the participants you pick (seeded, byes for odd counts). Winners auto-advance.",
-      },
-      {
-        q: "Group → knockout",
-        a: "Play the group fixtures, read the per-group standings on the Leaderboard tab, then Generate bracket with the qualifiers you want to advance (e.g. top 2 of each group) into the semifinals/final.",
+        a: "Matches tab → Generate bracket builds a single-elimination knockout from the participants you pick, in seeding order (top seed first). Odd counts get automatic byes; winners auto-advance to the next round. See it drawn under the Bracket view.",
       },
     ],
   },
   {
-    title: "Scoring",
+    title: "Match scenarios — what you can run",
     items: [
+      {
+        q: "A single one-off match",
+        a: "Create match → pick the two sides and best-of-1 or best-of-3. Good for a friendly, a decider, or a match that isn't part of a stage.",
+      },
+      {
+        q: "Round-robin (all play all)",
+        a: "Generate fixtures → All play all. Everyone plays everyone once (or twice, home & away). The Leaderboard ranks them by points.",
+      },
+      {
+        q: "Group stage (cross-play)",
+        a: "Generate fixtures → Groups. Assign entrants to Group A/B/C/D; only cross-group matches are created and the Leaderboard shows a separate table per group.",
+      },
+      {
+        q: "Knockout bracket",
+        a: "Generate bracket for straight single-elimination. Seeds decide who meets whom, byes cover odd numbers, and each winner advances automatically until the final.",
+      },
+      {
+        q: "Group → knockout (hybrid)",
+        a: "Play the group fixtures, read the per-group standings on Leaderboard, then Generate bracket with the qualifiers (e.g. top 2 of each group) to run semifinals/final.",
+      },
+      {
+        q: "Singles vs doubles / teams",
+        a: "Singles tournaments match player-vs-player. Doubles/mixed match team-vs-team — build teams first (Teams tab); a team with a pending cross-workspace member can't be used until they accept.",
+      },
+      {
+        q: "Best of 1 vs best of 3",
+        a: "Best of 1 is a single game; best of 3 is first to two games. Standard badminton rules apply: to 21, win by 2, hard cap at 30.",
+      },
+      {
+        q: "Live scoring",
+        a: "For a scheduled/in-progress match, scorers tap +/- to run the score live; on a public tournament it shows under “Live now” for spectators. Saving the final score supersedes the live tally.",
+      },
+      {
+        q: "Cancelling / walkover",
+        a: "Use Cancel on a match that won't be played (no-show / walkover). Cancelled matches are skipped and don't award points.",
+      },
+      {
+        q: "Correcting a result",
+        a: "Finishing a match locks it. To fix a wrong score, the organizer clicks Reopen, edits, and re-saves — standings recompute automatically.",
+      },
+      {
+        q: "Casual matches (outside a tournament)",
+        a: "The Challenges tab runs one-off casual matches between registered users. They never count toward tournament standings or global rankings.",
+      },
+    ],
+  },
+  {
+    title: "Scoring & points",
+    items: [
+      {
+        q: "Two scoring systems",
+        a: "Set this per tournament in Settings → Scoring system. “League (Sunday)” is the default: win = 3, lose but reach 15 points = 1, lose under 15 = 0. “Standard” is 10 per win, 2 per loss, plus knockout-stage win bonuses. Switching rescores the standings from the stored results, so the points table updates immediately.",
+      },
+      {
+        q: "How the League 15-point floor is judged",
+        a: "The floor looks at your best single game in the match. In best-of-3, if you reach 15 in any game you lost, you still earn the consolation point. Win the match and you always get the full win points.",
+      },
       {
         q: "Who can enter scores",
         a: "Only the tournament's organizer — plus anyone they nominate. Add nominated scorers in the tournament's Settings tab → Scorers. Everyone else is view-only.",
@@ -83,7 +140,7 @@ const SECTIONS: { title: string; items: Item[] }[] = [
       },
       {
         q: "Per-tournament & per-group",
-        a: "Each tournament has its own Leaderboard tab. If you used Groups when generating fixtures, it shows a separate ranked table per group.",
+        a: "Each tournament has its own Leaderboard tab, scored by the system chosen in Settings (League by default). If you used Groups when generating fixtures, it shows a separate ranked table per group.",
       },
     ],
   },

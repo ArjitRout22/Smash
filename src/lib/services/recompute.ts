@@ -47,7 +47,7 @@ export async function recomputeTournamentLeaderboard(tx: Tx, tournamentId: strin
 
   const matches = await tx.match.findMany({
     where: { tournamentId, status: "completed", deletedAt: null },
-    include: { participants: true, stage: true },
+    include: { participants: true, stage: true, games: true },
   });
 
   type Agg = {
@@ -87,10 +87,14 @@ export async function recomputeTournamentLeaderboard(tx: Tx, tournamentId: strin
     const stageType = (m.stage?.type ?? null) as StageType | null;
     const stageOrder = m.stage?.order ?? -1;
     const stageName = m.stage?.name ?? null;
+    // Each side's highest single-game score, for the league consolation floor.
+    const maxScoreA = m.games.length ? Math.max(...m.games.map((g) => g.scoreA)) : 0;
+    const maxScoreB = m.games.length ? Math.max(...m.games.map((g) => g.scoreB)) : 0;
     for (const p of m.participants) {
       const key = p.teamId ?? p.playerId;
       if (!key) continue;
-      const pts = sumAwards(pointsForMatch({ config, isWinner: p.isWinner, stageType }));
+      const sideScore = p.side === "A" ? maxScoreA : maxScoreB;
+      const pts = sumAwards(pointsForMatch({ config, isWinner: p.isWinner, stageType, sideScore }));
       bump(key, Boolean(p.teamId), p.isWinner, pts, stageOrder, stageName);
     }
   }
