@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { Button } from "@/components/ui/primitives";
+import { NavProgress } from "@/components/NavProgress";
 import { api } from "@/lib/client/api";
 
 const NAV = [
@@ -49,6 +50,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen">
+      <NavProgress />
       {/* Desktop sidebar */}
       <aside className="hidden w-60 shrink-0 flex-col border-r border-[var(--border)] bg-surface p-4 md:flex">
         <Brand />

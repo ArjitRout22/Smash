@@ -76,7 +76,7 @@ export function SettingsTab({ tournament, onChanged }: { tournament: TournamentD
     <div className="space-y-6">
       {canEdit && (
         <Card>
-          <CardHeader title="Tournament settings" subtitle="Status changes follow allowed transitions (e.g. draft → upcoming → ongoing → completed)." />
+          <CardHeader title="Tournament settings" subtitle="Status changes follow allowed transitions (upcoming → ongoing → completed)." />
           <div className="space-y-4 p-5">
             <Field label="Name"><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

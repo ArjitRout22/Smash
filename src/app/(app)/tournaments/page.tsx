@@ -10,7 +10,7 @@ import { Card, Badge, statusColor, Button, Select, Input } from "@/components/ui
 import { useAuth } from "@/components/AuthProvider";
 import { PERMS } from "@/lib/client/perms";
 import { formatDate, titleCase } from "@/lib/client/format";
-import { TOURNAMENT_STATUSES } from "@/lib/domain/constants";
+import { TOURNAMENT_STATUSES, TOURNAMENT_STATUS_ORDER } from "@/lib/domain/constants";
 
 type Tournament = {
   id: string;
@@ -85,7 +85,18 @@ export default function TournamentsPage() {
 
       {data && data.data.length > 0 && (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {data.data.map((t) => (
+          {[...data.data]
+            .sort((a, b) => {
+              // Group by status (upcoming → ongoing → completed → cancelled),
+              // then upcoming/ongoing by soonest date, finished by most recent.
+              const byStatus = (TOURNAMENT_STATUS_ORDER[a.status] ?? 9) - (TOURNAMENT_STATUS_ORDER[b.status] ?? 9);
+              if (byStatus !== 0) return byStatus;
+              const at = a.startDate ? new Date(a.startDate).getTime() : 0;
+              const bt = b.startDate ? new Date(b.startDate).getTime() : 0;
+              const upcoming = a.status === "upcoming" || a.status === "ongoing";
+              return upcoming ? at - bt : bt - at;
+            })
+            .map((t) => (
             <Link key={t.id} href={`/tournaments/${t.id}`}>
               <Card className="h-full p-5 transition hover:border-[var(--primary)]">
                 <div className="mb-2 flex items-start justify-between gap-2">

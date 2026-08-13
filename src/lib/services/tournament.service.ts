@@ -6,6 +6,7 @@ import { skipTake, type Pagination } from "@/lib/api/pagination";
 import { TOURNAMENT_TRANSITIONS, type TournamentStatus } from "@/lib/domain/constants";
 import type { AuthUser } from "@/lib/auth/authorize";
 import { orgFilter, assertOrgAccess, ownOrgId, isPlatformAdmin } from "@/lib/auth/tenancy";
+import { sendTournamentInviteEmail } from "@/lib/email/notifications";
 import type {
   CreateTournamentSchema,
   UpdateTournamentSchema,
@@ -107,7 +108,7 @@ export async function createTournament(input: CreateInput, actor: AuthUser) {
       createdById: actor.id,
       organizationId: ownOrgId(actor),
       pointsConfig: input.pointsConfig ?? undefined,
-      status: "draft",
+      status: "upcoming",
     },
   });
   await audit({ actorUserId: actor.id, action: "tournament.created", entityType: "Tournament", entityId: t.id, newValue: t });
@@ -374,10 +375,10 @@ export async function removeParticipant(actor: AuthUser, tournamentId: string, p
  * row (its `status` tells the UI whether it invited or added).
  */
 export async function inviteToTournament(actor: AuthUser, tournamentId: string, playerId: string) {
-  await loadOwnedTournament(actor, tournamentId);
+  const tournament = await loadOwnedTournament(actor, tournamentId);
   const player = await prisma.player.findFirst({
     where: { id: playerId, deletedAt: null },
-    select: { id: true, user: { select: { id: true } } },
+    select: { id: true, displayName: true, user: { select: { id: true, email: true } } },
   });
   if (!player) throw Errors.validation("Player not found");
   const hasAccount = Boolean(player.user);
@@ -403,6 +404,16 @@ export async function inviteToTournament(actor: AuthUser, tournamentId: string, 
     entityId: tournamentId,
     newValue: { playerId, status },
   });
+
+  // Notify the invitee by email (best-effort; never blocks the invite).
+  if (status === "invited" && player.user?.email) {
+    await sendTournamentInviteEmail({
+      to: player.user.email,
+      playerName: player.displayName,
+      tournamentName: tournament.name,
+      invitedByName: actor.name,
+    });
+  }
   return tp;
 }
 
@@ -443,7 +454,7 @@ export async function respondToInvitation(actor: AuthUser, tournamentId: string,
 export async function loadOwnedTournament(actor: AuthUser, tournamentId: string) {
   const t = await prisma.tournament.findFirst({
     where: { id: tournamentId, deletedAt: null },
-    select: { id: true, organizationId: true, format: true },
+    select: { id: true, organizationId: true, format: true, name: true },
   });
   if (!t) throw Errors.notFound("Tournament");
   assertOrgAccess(actor, t.organizationId);
