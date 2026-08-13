@@ -15,7 +15,7 @@ export function BracketTab({ tournamentId }: { tournamentId: string }) {
   if (isLoading) return <ListSkeleton rows={4} />;
   if (error) return <ErrorState onRetry={() => mutate()} />;
   if (!data || data.length === 0)
-    return <EmptyState title="No bracket yet" message="Generate a knockout bracket from the Stages tab to see it here." />;
+    return <EmptyState title="No bracket yet" message="Use “Generate bracket” above to build a knockout draw — it appears here." />;
 
   const roundName = (round: number, total: number) => {
     const fromFinal = total - round;

@@ -2,82 +2,29 @@
 
 import { useState } from "react";
 import useSWR from "swr";
-import { Plus, GitBranch, Layers, CalendarRange } from "lucide-react";
 import { api, ApiClientError, swrFetcher } from "@/lib/client/api";
-import { Card, Button, Badge, statusColor, Select, Input, Field } from "@/components/ui/primitives";
-import { EmptyState, ErrorState, ListSkeleton } from "@/components/ui/states";
+import { Button, Select, Input, Field } from "@/components/ui/primitives";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
-import { useAuth } from "@/components/AuthProvider";
-import { PERMS } from "@/lib/client/perms";
 import { STAGE_TYPES } from "@/lib/domain/constants";
 import { titleCase } from "@/lib/client/format";
-import type { StageDTO, TournamentPlayerDTO, TeamDTO } from "./types";
+import type { TournamentPlayerDTO, TeamDTO } from "./types";
 
-export function StagesTab({ tournamentId, format }: { tournamentId: string; format: string }) {
-  const { can } = useAuth();
-  const [creating, setCreating] = useState(false);
-  const [bracket, setBracket] = useState(false);
-  const [fixtures, setFixtures] = useState(false);
+/**
+ * The three "build the draw" flows — Add stage, Generate fixtures (round-robin /
+ * groups) and Generate bracket (knockout). Extracted so the unified Matches tab
+ * can host them directly (they used to live on a separate Stages tab).
+ */
 
-  const { data, error, isLoading, mutate } = useSWR<StageDTO[]>(
-    `/api/tournaments/${tournamentId}/stages`,
-    swrFetcher
-  );
-
-  return (
-    <div>
-      <div className="mb-4 flex flex-wrap justify-end gap-2">
-        {can(PERMS.STAGE_MANAGE) && (
-          <>
-            <Button variant="outline" onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> Add stage</Button>
-            <Button variant="outline" onClick={() => setFixtures(true)}><CalendarRange className="h-4 w-4" /> Generate fixtures</Button>
-            <Button onClick={() => setBracket(true)}><GitBranch className="h-4 w-4" /> Generate bracket</Button>
-          </>
-        )}
-      </div>
-
-      {isLoading && <ListSkeleton rows={3} />}
-      {error && <ErrorState onRetry={() => mutate()} />}
-      {data && data.length === 0 && (
-        <EmptyState
-          title="No stages yet"
-          message="Use Generate fixtures for a round-robin or group stage, Generate bracket for a knockout, or Add stage to build phases yourself."
-          icon={Layers}
-        />
-      )}
-
-      {data && data.length > 0 && (
-        <div className="space-y-2">
-          {data.map((s) => (
-            <Card key={s.id} className="flex items-center justify-between p-4">
-              <div className="flex items-center gap-3">
-                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-2 text-sm font-semibold">{s.order + 1}</span>
-                <div>
-                  <p className="font-medium">{s.name}</p>
-                  <p className="text-xs text-muted">{titleCase(s.type)} · {s._count.matches} matches</p>
-                </div>
-              </div>
-              <Badge color={statusColor(s.status)}>{titleCase(s.status)}</Badge>
-            </Card>
-          ))}
-        </div>
-      )}
-
-      {creating && (
-        <CreateStageModal tournamentId={tournamentId} onClose={() => setCreating(false)} onCreated={() => { mutate(); }} />
-      )}
-      {bracket && (
-        <GenerateBracketModal tournamentId={tournamentId} format={format} onClose={() => setBracket(false)} onDone={() => { mutate(); }} />
-      )}
-      {fixtures && (
-        <GenerateFixturesModal tournamentId={tournamentId} format={format} onClose={() => setFixtures(false)} onDone={() => { mutate(); }} />
-      )}
-    </div>
-  );
-}
-
-function CreateStageModal({ tournamentId, onClose, onCreated }: { tournamentId: string; onClose: () => void; onCreated: () => void }) {
+export function CreateStageModal({
+  tournamentId,
+  onClose,
+  onCreated,
+}: {
+  tournamentId: string;
+  onClose: () => void;
+  onCreated: () => void;
+}) {
   const toast = useToast();
   const [name, setName] = useState("");
   const [type, setType] = useState("group");
@@ -110,7 +57,17 @@ function CreateStageModal({ tournamentId, onClose, onCreated }: { tournamentId: 
 
 const GROUP_LABELS = ["A", "B", "C", "D"];
 
-function GenerateFixturesModal({ tournamentId, format, onClose, onDone }: { tournamentId: string; format: string; onClose: () => void; onDone: () => void }) {
+export function GenerateFixturesModal({
+  tournamentId,
+  format,
+  onClose,
+  onDone,
+}: {
+  tournamentId: string;
+  format: string;
+  onClose: () => void;
+  onDone: () => void;
+}) {
   const toast = useToast();
   const isTeam = format !== "singles";
   const matchType = isTeam ? "doubles" : "singles";
@@ -243,7 +200,17 @@ function GenerateFixturesModal({ tournamentId, format, onClose, onDone }: { tour
   );
 }
 
-function GenerateBracketModal({ tournamentId, format, onClose, onDone }: { tournamentId: string; format: string; onClose: () => void; onDone: () => void }) {
+export function GenerateBracketModal({
+  tournamentId,
+  format,
+  onClose,
+  onDone,
+}: {
+  tournamentId: string;
+  format: string;
+  onClose: () => void;
+  onDone: () => void;
+}) {
   const toast = useToast();
   const isTeam = format !== "singles";
   const [name, setName] = useState("Knockout");

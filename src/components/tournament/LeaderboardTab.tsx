@@ -5,10 +5,11 @@ import useSWR from "swr";
 import { swrFetcher } from "@/lib/client/api";
 import { Card, CardHeader } from "@/components/ui/primitives";
 import { EmptyState, ErrorState, ListSkeleton } from "@/components/ui/states";
+import { resolvePointsConfig, describePointsSystem } from "@/lib/engines/points";
 import { titleCase } from "@/lib/client/format";
 import type { LeaderboardRow } from "./types";
 
-export function LeaderboardTab({ tournamentId }: { tournamentId: string }) {
+export function LeaderboardTab({ tournamentId, pointsConfig }: { tournamentId: string; pointsConfig?: unknown }) {
   const { data, error, isLoading, mutate } = useSWR<LeaderboardRow[]>(
     `/api/tournaments/${tournamentId}/leaderboard`,
     swrFetcher
@@ -19,24 +20,29 @@ export function LeaderboardTab({ tournamentId }: { tournamentId: string }) {
   if (!data || data.length === 0)
     return <EmptyState title="No standings yet" message="Standings update automatically as match results come in." />;
 
+  const scoringRule = describePointsSystem(resolvePointsConfig(pointsConfig ?? undefined));
+
   // If participants were assigned groups (via Generate fixtures → Groups), show
   // a separate standings table per group; otherwise one combined table.
   const groups = Array.from(new Set(data.map((r) => r.group).filter((g): g is string => Boolean(g)))).sort();
 
-  if (groups.length > 0) {
-    return (
-      <div className="space-y-6">
-        {groups.map((g) => (
-          <StandingsTable key={g} title={`Group ${g}`} rows={data.filter((r) => r.group === g)} />
-        ))}
-        {data.some((r) => !r.group) && (
-          <StandingsTable title="Ungrouped" rows={data.filter((r) => !r.group)} />
-        )}
-      </div>
-    );
-  }
-
-  return <StandingsTable rows={data} />;
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-muted">Scoring: {scoringRule}</p>
+      {groups.length > 0 ? (
+        <div className="space-y-6">
+          {groups.map((g) => (
+            <StandingsTable key={g} title={`Group ${g}`} rows={data.filter((r) => r.group === g)} />
+          ))}
+          {data.some((r) => !r.group) && (
+            <StandingsTable title="Ungrouped" rows={data.filter((r) => !r.group)} />
+          )}
+        </div>
+      ) : (
+        <StandingsTable rows={data} />
+      )}
+    </div>
+  );
 }
 
 function StandingsTable({ title, rows }: { title?: string; rows: LeaderboardRow[] }) {

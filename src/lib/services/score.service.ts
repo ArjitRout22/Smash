@@ -251,10 +251,16 @@ export async function submitScore(
       const config = resolvePointsConfig(tournament?.pointsConfig ?? undefined);
       const stageType = (match.stage?.type ?? null) as StageType | null;
 
+      // Each side's representative score = the highest it reached in any game.
+      // Used to test the league consolation floor (e.g. "lost but reached 15").
+      const maxScoreA = Math.max(0, ...input.games.map((g) => g.scoreA));
+      const maxScoreB = Math.max(0, ...input.games.map((g) => g.scoreB));
+
       const ledgerRows: Prisma.PointTransactionCreateManyInput[] = [];
       for (const part of [sideA, sideB]) {
         const isWinner = result.winnerSide === part.side;
-        const awards = pointsForMatch({ config, isWinner, stageType });
+        const sideScore = part.side === "A" ? maxScoreA : maxScoreB;
+        const awards = pointsForMatch({ config, isWinner, stageType, sideScore });
         const playerIds = await sidePlayerIds(tx, part);
         for (const playerId of playerIds) {
           for (const a of awards) {

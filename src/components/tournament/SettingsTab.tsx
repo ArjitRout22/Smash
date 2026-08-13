@@ -12,6 +12,14 @@ import { useToast } from "@/components/ui/Toast";
 import { useAuth } from "@/components/AuthProvider";
 import { PERMS } from "@/lib/client/perms";
 import { TOURNAMENT_STATUSES } from "@/lib/domain/constants";
+import {
+  STANDARD_POINTS_CONFIG,
+  LEAGUE_POINTS_CONFIG,
+  resolvePointsConfig,
+  pointsSystemOf,
+  describePointsSystem,
+  type PointsSystem,
+} from "@/lib/engines/points";
 import { titleCase } from "@/lib/client/format";
 import type { TournamentDetail, TournamentPlayerDTO } from "./types";
 
@@ -106,6 +114,8 @@ export function SettingsTab({ tournament, onChanged }: { tournament: TournamentD
         </Card>
       )}
 
+      {canEdit && <ScoringCard tournament={tournament} onChanged={onChanged} />}
+
       {canEdit && <ScorersCard tournamentId={tournament.id} />}
 
       {canDelete && (
@@ -132,6 +142,73 @@ export function SettingsTab({ tournament, onChanged }: { tournament: TournamentD
         loading={deleting}
       />
     </div>
+  );
+}
+
+const SCORING_OPTIONS: { value: PointsSystem; title: string; hint: string }[] = [
+  { value: "league", title: "League (Sunday)", hint: describePointsSystem(LEAGUE_POINTS_CONFIG) },
+  { value: "standard", title: "Standard", hint: describePointsSystem(STANDARD_POINTS_CONFIG) },
+];
+
+/**
+ * Choose how the per-tournament points table is scored. Switching recomputes the
+ * standings from stored results, so the table updates immediately.
+ */
+function ScoringCard({ tournament, onChanged }: { tournament: TournamentDetail; onChanged: () => void }) {
+  const toast = useToast();
+  const current = pointsSystemOf(resolvePointsConfig(tournament.pointsConfig ?? undefined));
+  const [system, setSystem] = useState<PointsSystem>(current);
+  const [saving, setSaving] = useState(false);
+  const dirty = system !== current;
+
+  async function save() {
+    setSaving(true);
+    try {
+      await api.put(`/api/tournaments/${tournament.id}`, {
+        pointsConfig: system === "league" ? LEAGUE_POINTS_CONFIG : STANDARD_POINTS_CONFIG,
+      });
+      toast.success("Scoring updated — standings recomputed");
+      onChanged();
+    } catch (err) {
+      toast.error(err instanceof ApiClientError ? err.message : "Could not update scoring");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader
+        title="Scoring system"
+        subtitle="How the Leaderboard (points table) awards points. Changing this rescores the existing standings."
+      />
+      <div className="space-y-3 p-5">
+        <div className="grid gap-3 sm:grid-cols-2">
+          {SCORING_OPTIONS.map((o) => {
+            const active = system === o.value;
+            return (
+              <button
+                key={o.value}
+                type="button"
+                onClick={() => setSystem(o.value)}
+                className={`rounded-xl border p-4 text-left transition ${
+                  active ? "border-[var(--primary)] bg-[var(--primary)]/5" : "border-[var(--border)] hover:bg-surface-2"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-foreground">{o.title}</span>
+                  <span className={`h-4 w-4 rounded-full border-2 ${active ? "border-[var(--primary)] bg-[var(--primary)]" : "border-[var(--border)]"}`} />
+                </div>
+                <p className="mt-1 text-xs text-muted">{o.hint}</p>
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex justify-end">
+          <Button onClick={save} loading={saving} disabled={!dirty}>Save scoring</Button>
+        </div>
+      </div>
+    </Card>
   );
 }
 
