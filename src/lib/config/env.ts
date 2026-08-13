@@ -23,11 +23,6 @@ const EnvSchema = z.object({
   RESEND_API_KEY: z.string().optional(),
   EMAIL_FROM: z.string().default("Smash <onboarding@resend.dev>"),
   PASSWORD_RESET_TTL_SECONDS: z.coerce.number().int().positive().default(3600),
-
-  // Shared secret guarding the reminder cron route. Vercel Cron auto-sends it as
-  // `Authorization: Bearer $CRON_SECRET` when set. If unset, the route is open
-  // (fine for local dev; set it in production).
-  CRON_SECRET: z.string().optional(),
 });
 
 export type Env = z.infer<typeof EnvSchema>;
