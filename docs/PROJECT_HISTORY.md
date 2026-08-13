@@ -393,6 +393,19 @@ Two changes from field feedback.
   (merged tab, bracket view, leaderboard caption, Settings scoring card) and a
   prod smoke after deploy.
 
+### Phase 12 — Challenges: no accept step, reject-to-cancel (PR #16)
+Field feedback: casual **Challenges** shouldn't gate play behind the opponent
+accepting. Now a challenge is created directly in the playable **accepted**
+state; the challenged side instead gets a **Reject** that **cancels** the match
+if they can't play. The score flow is unchanged (one side reports, the other
+confirms/rejects). `casual-match.service`: create → `accepted`; the `decline`
+action now means "challenged side rejects a ready-to-play match → cancelled"
+(the `accept` action + pending gate are gone); DTO exposes `canReject` (was
+`canRespond`). Action enum drops `accept`. Challenges page + dashboard card show
+**Enter result / Cancel** (challenger) and **Enter result / Reject** (opponent).
+Added a casual-match integration test for the new state machine. `tsc`/lint/54
+unit/17 integration/build green; prod smoke after deploy.
+
 ---
 
 ## Key decisions
@@ -450,7 +463,10 @@ Two changes from field feedback.
   tab (List↔Bracket switch, one build toolbar, stage-filter chips); **League
   (Sunday) scoring** (win 3 / close-loss 1 / heavy-loss 0) is the new default and
   is selectable per tournament in Settings. Existing tournaments stay Standard.
-- ✅ CI green on every push; 54 unit + 11 integration tests.
+- ✅ **Phase 12 live** (PR #16): Challenges dropped the accept step — ready to play
+  immediately; the opponent can **Reject** (→ cancels the match). Score
+  report→confirm unchanged.
+- ✅ CI green on every push; 54 unit + 17 integration tests.
 - ✅ **Custom domain live:** https://smashhero.app (HTTPS; Vercel primary = `www`,
   apex 308-redirects to it).
 - ✅ **Email delivery live:** `smashhero.app` verified in Resend (DKIM/SPF/MX),
