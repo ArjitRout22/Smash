@@ -7,6 +7,7 @@ import { swrFetcher } from "@/lib/client/api";
 import { PageHeader, ErrorState, ListSkeleton } from "@/components/ui/states";
 import { Badge, statusColor } from "@/components/ui/primitives";
 import { ShareButton } from "@/components/ShareButton";
+import { QrButton } from "@/components/QrButton";
 import { titleCase } from "@/lib/client/format";
 import { OverviewTab } from "@/components/tournament/OverviewTab";
 import { PlayersTab } from "@/components/tournament/PlayersTab";
@@ -64,12 +65,19 @@ export default function TournamentDetailPage() {
         subtitle={`${titleCase(data.format)} · ${data._count.tournamentPlayers} players · ${data._count.matches} matches`}
         actions={
           data.visibility === "public" ? (
-            <ShareButton
-              url={typeof window !== "undefined" ? `${window.location.origin}/discover/${id}` : `/discover/${id}`}
-              title={`${data.name} · Smash`}
-              text={`Join "${data.name}" on Smash.`}
-              label="Share"
-            />
+            <div className="flex flex-wrap gap-2">
+              <ShareButton
+                url={typeof window !== "undefined" ? `${window.location.origin}/discover/${id}` : `/discover/${id}`}
+                title={`${data.name} · Smash`}
+                text={`Join "${data.name}" on Smash.`}
+                label="Share"
+              />
+              <QrButton
+                url={typeof window !== "undefined" ? `${window.location.origin}/discover/${id}` : `/discover/${id}`}
+                title={`${data.name} — scan to join`}
+                caption="Players can scan this to open the tournament and join."
+              />
+            </div>
           ) : undefined
         }
       />
