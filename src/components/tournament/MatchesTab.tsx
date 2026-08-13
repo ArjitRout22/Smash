@@ -253,7 +253,10 @@ function MatchRow({
               <Play className="h-3.5 w-3.5" /> Start
             </Button>
           )}
-          {canManage && (m.status === "scheduled" || m.status === "in_progress") && (
+          {/* Cancel is only offered before a match starts — once it's in
+              progress or completed the CTA drops away (a started match runs to a
+              result). */}
+          {canManage && m.status === "scheduled" && (
             <Button size="sm" variant="ghost" loading={busy} onClick={() => onPatch(m, { status: "cancelled" }, "Match cancelled")}>
               <Ban className="h-3.5 w-3.5" /> Cancel
             </Button>
