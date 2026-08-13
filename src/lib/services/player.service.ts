@@ -4,7 +4,7 @@ import { Errors } from "@/lib/errors";
 import { audit } from "@/lib/audit";
 import { skipTake, type Pagination } from "@/lib/api/pagination";
 import { winPercentage } from "@/lib/engines/leaderboard";
-import { GLOBAL_POINTS_PER_WIN } from "@/lib/domain/constants";
+import { globalRankingPoints } from "@/lib/engines/points";
 import type { AuthUser } from "@/lib/auth/authorize";
 import { orgFilter, assertOrgAccess, ownOrgId, isPlatformAdmin } from "@/lib/auth/tenancy";
 import { sendPlayerClaimInviteEmail } from "@/lib/email/notifications";
@@ -164,22 +164,26 @@ export async function getPlayerStatistics(actor: AuthUser, id: string) {
   const player = await getPlayer(actor, id);
   const r = player.ranking;
   const wins = r?.wins ?? 0;
+  const losses = r?.losses ?? 0;
   const hasPlayed = (r?.matchesPlayed ?? 0) > 0;
+  const myPoints = globalRankingPoints(wins, losses);
   // Global rank computed on-read (we no longer rewrite everyone's rank on each
-  // score). Global points = wins × 10, so rank by wins: 1 + how many players
-  // have more wins.
-  const currentRank = hasPlayed
-    ? (await prisma.playerRanking.count({ where: { wins: { gt: wins } } })) + 1
-    : null;
+  // score). Global points use International scoring (win 10 / loss 2), so rank =
+  // 1 + how many players have more global points. Cheap at this app's scale.
+  let currentRank: number | null = null;
+  if (hasPlayed) {
+    const all = await prisma.playerRanking.findMany({ select: { wins: true, losses: true } });
+    currentRank = 1 + all.filter((x) => globalRankingPoints(x.wins, x.losses) > myPoints).length;
+  }
   return {
     playerId: id,
     displayName: player.displayName,
     matchesPlayed: r?.matchesPlayed ?? 0,
     wins,
-    losses: r?.losses ?? 0,
+    losses,
     winPercentage: r?.winPercentage ?? winPercentage(wins, r?.matchesPlayed ?? 0),
-    // Headline points mirror the global leaderboard: a flat 10 per win.
-    totalPoints: wins * GLOBAL_POINTS_PER_WIN,
+    // Headline points mirror the global leaderboard: International win 10 / loss 2.
+    totalPoints: myPoints,
     tournamentsPlayed: r?.tournamentsPlayed ?? 0,
     titles: r?.titles ?? 0,
     currentRank,

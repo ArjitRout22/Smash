@@ -109,8 +109,8 @@ export async function createTournament(input: CreateInput, actor: AuthUser) {
       organizerId: input.organizerId ?? actor.id,
       createdById: actor.id,
       organizationId: ownOrgId(actor),
-      // New tournaments default to the Sunday-league system (win 3 / close-loss
-      // 1 / heavy-loss 0). Organizers can switch to Standard in Settings.
+      // New tournaments default to the League system (win 3 / close-loss 1 /
+      // heavy-loss 0). Organizers can switch to International in Settings.
       pointsConfig: input.pointsConfig ?? LEAGUE_POINTS_CONFIG,
       status: "upcoming",
     },

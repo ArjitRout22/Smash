@@ -7,6 +7,7 @@ import {
   pointsForMatch,
   pointsSystemOf,
   sumAwards,
+  globalRankingPoints,
 } from "@/lib/engines/points";
 
 describe("points engine", () => {
@@ -86,6 +87,19 @@ describe("points engine", () => {
       const resolved = resolvePointsConfig(LEAGUE_POINTS_CONFIG);
       expect(pointsSystemOf(resolved)).toBe("league");
       expect(Object.values(resolved.stageWinBonus).every((v) => (v ?? 0) === 0)).toBe(true);
+    });
+  });
+
+  describe("global ranking points (International: win 10 / loss 2)", () => {
+    it("counts wins and losses, no stage bonuses", () => {
+      expect(globalRankingPoints(0, 0)).toBe(0);
+      expect(globalRankingPoints(1, 0)).toBe(10);
+      expect(globalRankingPoints(0, 5)).toBe(10); // 5 losses = one win's worth
+      expect(globalRankingPoints(3, 2)).toBe(34); // 30 + 4
+    });
+
+    it("matches the International (Standard) preset's match points", () => {
+      expect(globalRankingPoints(1, 1)).toBe(STANDARD_POINTS_CONFIG.matchWin + STANDARD_POINTS_CONFIG.matchLoss);
     });
   });
 });

@@ -146,8 +146,8 @@ export function SettingsTab({ tournament, onChanged }: { tournament: TournamentD
 }
 
 const SCORING_OPTIONS: { value: PointsSystem; title: string; hint: string }[] = [
-  { value: "league", title: "League (Sunday)", hint: describePointsSystem(LEAGUE_POINTS_CONFIG) },
-  { value: "standard", title: "Standard", hint: describePointsSystem(STANDARD_POINTS_CONFIG) },
+  { value: "league", title: "League", hint: describePointsSystem(LEAGUE_POINTS_CONFIG) },
+  { value: "standard", title: "International", hint: describePointsSystem(STANDARD_POINTS_CONFIG) },
 ];
 
 /**

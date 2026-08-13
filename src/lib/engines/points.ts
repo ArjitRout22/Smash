@@ -27,7 +27,7 @@ export type PointsConfig = {
   lossBonusPoints: number | null;
 };
 
-/** Classic scoring: 10 per win, 2 per loss, with knockout-stage bonuses. */
+/** International (BWF-style) scoring: 10 per win, 2 per loss, plus knockout-stage bonuses. */
 export const STANDARD_POINTS_CONFIG: PointsConfig = {
   matchWin: 10,
   matchLoss: 2,
@@ -43,9 +43,9 @@ export const STANDARD_POINTS_CONFIG: PointsConfig = {
 };
 
 /**
- * Sunday-league scoring (the default for new tournaments): win = 3; lose but
- * reach the floor (15 points) = 1; lose below the floor = 0. No stage bonuses —
- * the explicit zeros stop the partial-override merge from re-adding them.
+ * League scoring (the default for new tournaments): win = 3; lose but reach the
+ * floor (15 points) = 1; lose below the floor = 0. No stage bonuses — the
+ * explicit zeros stop the partial-override merge from re-adding them.
  */
 export const LEAGUE_POINTS_CONFIG: PointsConfig = {
   matchWin: 3,
@@ -179,4 +179,14 @@ function prettyStage(s: StageType): string {
 
 export function sumAwards(awards: PointAward[]): number {
   return awards.reduce((t, a) => t + a.points, 0);
+}
+
+/**
+ * Points for the GLOBAL cross-workspace ranking: the International (Standard)
+ * match points applied uniformly — win 10, loss 2. Knockout-stage bonuses are
+ * tournament-scoped and deliberately excluded from the global board, so this
+ * stays derivable from a player's win/loss totals with no per-match recompute.
+ */
+export function globalRankingPoints(wins: number, losses: number): number {
+  return wins * STANDARD_POINTS_CONFIG.matchWin + losses * STANDARD_POINTS_CONFIG.matchLoss;
 }

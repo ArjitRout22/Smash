@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db/prisma";
 import { serializeMatch } from "@/lib/services/match.service";
-import { GLOBAL_POINTS_PER_WIN } from "@/lib/domain/constants";
+import { globalRankingPoints } from "@/lib/engines/points";
 import type { AuthUser } from "@/lib/auth/authorize";
 import { orgFilter, isPlatformAdmin } from "@/lib/auth/tenancy";
 
@@ -91,7 +91,7 @@ export async function getDashboard(actor: AuthUser) {
       playerId: r.playerId,
       name: r.player.displayName,
       photoUrl: r.player.photoUrl,
-      points: r.wins * GLOBAL_POINTS_PER_WIN,
+      points: globalRankingPoints(r.wins, r.losses),
       wins: r.wins,
       losses: r.losses,
       rank: i + 1, // position within this top-N (ranks are computed on-read now)
