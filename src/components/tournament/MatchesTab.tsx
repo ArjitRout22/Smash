@@ -164,12 +164,16 @@ function MatchRow({
         </div>
       </div>
 
-      {m.status === "in_progress" && (
+      {(m.status === "in_progress" || (m.status === "scheduled" && bothSet && canScore)) && (
         <div className="mt-3 flex items-center justify-center gap-3 rounded-lg bg-surface-2 py-3 sm:gap-6">
           <LiveSide label={m.sides[0]?.label ?? "A"} score={m.liveA ?? 0} canScore={canScore} onSet={(v) => setLive(v, m.liveB ?? 0)} />
-          <span className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-red-500">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" /> Live
-          </span>
+          {m.status === "in_progress" ? (
+            <span className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-red-500">
+              <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" /> Live
+            </span>
+          ) : (
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">Tap to start</span>
+          )}
           <LiveSide label={m.sides[1]?.label ?? "B"} score={m.liveB ?? 0} canScore={canScore} onSet={(v) => setLive(m.liveA ?? 0, v)} />
         </div>
       )}

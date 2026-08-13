@@ -36,9 +36,9 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   if (!t) return { title: "Tournament not found" };
   const desc = `${titleCase(t.format)} · ${t.players.length} players${t.location ? ` · ${t.location}` : ""} — follow live standings and results on Smash.`;
   return {
-    title: `${t.name} · Smash`,
+    title: t.name, // root layout template appends " · Smash"
     description: desc,
-    openGraph: { title: t.name, description: desc, url: `${APP_URL}/t/${id}`, type: "website" },
+    openGraph: { title: `${t.name} · Smash`, description: desc, url: `${APP_URL}/t/${id}`, type: "website" },
   };
 }
 

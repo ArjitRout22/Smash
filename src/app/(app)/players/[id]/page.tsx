@@ -147,7 +147,7 @@ export default function PlayerDetailPage() {
         </div>
       )}
 
-      {insights && (insights.last5.length > 0 || insights.badges.length > 0 || insights.headToHead.length > 0) && (
+      {insights && (
         <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Card className="p-5">
             <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">Recent form</h2>
