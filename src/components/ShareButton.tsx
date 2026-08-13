@@ -39,10 +39,10 @@ export function ShareButton({
   const toast = useToast();
   const [copied, setCopied] = useState(false);
 
-  function shareWhatsApp() {
-    const msg = `${text ? `${text} ` : ""}${url}`;
-    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, "_blank", "noopener,noreferrer");
-  }
+  // A plain anchor deep-links reliably into WhatsApp on mobile (window.open with
+  // noopener drops the prefilled text and lands on a blank chat).
+  const waHref = `https://wa.me/?text=${encodeURIComponent(`${text ? `${text}\n` : ""}${url}`)}`;
+  const btnCls = `inline-flex items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-surface font-medium text-foreground transition hover:bg-surface-2 ${size === "md" ? "h-10 px-4 text-sm" : "h-8 px-3 text-sm"}`;
 
   async function share() {
     const nav = typeof navigator !== "undefined" ? navigator : undefined;
@@ -67,9 +67,9 @@ export function ShareButton({
   return (
     <div className="inline-flex gap-2">
       {whatsapp && (
-        <Button variant={variant} size={size} onClick={shareWhatsApp} aria-label="Share on WhatsApp">
+        <a href={waHref} target="_blank" rel="noopener noreferrer" className={btnCls} aria-label="Share on WhatsApp">
           <WhatsAppIcon className="h-4 w-4 text-[#25D366]" /> WhatsApp
-        </Button>
+        </a>
       )}
       <Button variant={variant} size={size} onClick={share}>
         {copied ? <Check className="h-4 w-4" /> : <Share2 className="h-4 w-4" />} {label}

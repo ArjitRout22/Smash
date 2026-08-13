@@ -3,6 +3,7 @@
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import useSWR from "swr";
+import { ExternalLink } from "lucide-react";
 import { swrFetcher } from "@/lib/client/api";
 import { PageHeader, ErrorState, ListSkeleton } from "@/components/ui/states";
 import { Badge, statusColor } from "@/components/ui/primitives";
@@ -77,8 +78,18 @@ export default function TournamentDetailPage() {
                 title={`${data.name} — scan to join`}
                 caption="Players can scan this to open the tournament and join."
               />
+              <a
+                href={`/t/${id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[var(--border)] bg-surface px-3 text-sm font-medium text-foreground hover:bg-surface-2"
+              >
+                <ExternalLink className="h-4 w-4" /> Public page
+              </a>
             </div>
-          ) : undefined
+          ) : (
+            <span className="text-xs text-muted">Private — set visibility to Public in Settings for a shareable link.</span>
+          )
         }
       />
 

@@ -23,6 +23,7 @@ import {
 import { useAuth } from "@/components/AuthProvider";
 import { Button } from "@/components/ui/primitives";
 import { NavProgress } from "@/components/NavProgress";
+import { InstallPrompt } from "@/components/InstallPrompt";
 import { api } from "@/lib/client/api";
 
 const NAV = [
@@ -89,6 +90,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         <main className="mx-auto w-full max-w-6xl flex-1 p-4 sm:p-6">
           {user && !user.emailVerified && <VerifyEmailBanner email={user.email} />}
+          <InstallPrompt />
           {children}
         </main>
       </div>
