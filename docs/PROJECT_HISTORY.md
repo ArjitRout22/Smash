@@ -254,10 +254,13 @@ Tailwind CSS v4 · Vitest · Playwright.
   an account is `registered` directly (nobody to accept otherwise, so club players
   stay rosterable); an existing join `requested` row is accepted rather than
   re-invited.
-- **Create Player dedupes by email (email now mandatory).** `createPlayer` takes a
-  required email and never creates a duplicate: it reuses an existing account's
-  player, or a previously pre-created managed player (`Player.invitedEmail`, unique),
-  otherwise creates a managed player storing that email. Returns `{ player, linked }`.
+- **Create Player is keyed by a mandatory email and rejects duplicates.**
+  `createPlayer` requires an email and never creates a second player for the same
+  person: an email that already belongs to an **account** is **rejected** with a
+  409 + "log in or reset the password — or add them from Invite players" (shown
+  inline on the field); a duplicate **managed** player email is likewise rejected.
+  Only a genuinely new email creates a managed player (`Player.invitedEmail`,
+  unique). (Earlier this silently linked; changed to an explicit reject.)
 - **Deferred (documented):** sending invite/signup emails and linking a later signup
   to the pre-created managed player — until wired, a brand-new invited email that
   self-registers still mints a second player. See Pending follow-ups.
