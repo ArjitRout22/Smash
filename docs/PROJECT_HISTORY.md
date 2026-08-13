@@ -406,6 +406,18 @@ action now means "challenged side rejects a ready-to-play match → cancelled"
 Added a casual-match integration test for the new state machine. `tsc`/lint/54
 unit/17 integration/build green; prod smoke after deploy.
 
+### Phase 13 — Nav trim + cancel-only-before-start (PR #17)
+- **Teams removed from the nav.** Teams are built inside a tournament (its Teams
+  tab), so the standalone hamburger entry was redundant. The `/teams` page and
+  the per-tournament tab are unchanged; standalone cross-workspace invite logic
+  is left intact (nav-only removal).
+- **Tournament match Cancel only while Scheduled.** Once a match is In progress
+  or Completed the Cancel CTA drops away (a started match runs to a result).
+- Confirmed no change needed for tournament match SCORES — they already have no
+  accept/reject/confirm step (that's casual-Challenges only). Note: tournament
+  teams were already accept-free (members must be registered → added `active`);
+  the accept/"Pending" flow only ever applied to standalone teams.
+
 ---
 
 ## Key decisions
@@ -466,6 +478,8 @@ unit/17 integration/build green; prod smoke after deploy.
 - ✅ **Phase 12 live** (PR #16): Challenges dropped the accept step — ready to play
   immediately; the opponent can **Reject** (→ cancels the match). Score
   report→confirm unchanged.
+- ✅ **Phase 13 live** (PR #17): Teams removed from the nav (built inside a
+  tournament instead); tournament match **Cancel** shows only while Scheduled.
 - ✅ CI green on every push; 54 unit + 17 integration tests.
 - ✅ **Custom domain live:** https://smashhero.app (HTTPS; Vercel primary = `www`,
   apex 308-redirects to it).
