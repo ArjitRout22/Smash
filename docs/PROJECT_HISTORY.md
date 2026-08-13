@@ -430,6 +430,18 @@ unit/17 integration/build green; prod smoke after deploy.
   derivable from win/loss totals with no per-match recompute. Removed the unused
   `GLOBAL_POINTS_PER_WIN` constant.
 
+### Phase 15 — Polished iOS install education flow (PR #19)
+iOS Safari has no programmatic install prompt, so the plain instruction banner
+became a native-feeling onboarding experience:
+- `InstallPrompt` is now a **floating bottom card** (was inline, pushing
+  dashboard content down): value prop + X + "Install later" (dismissal
+  remembered) + a primary **Install Smash** button; safe-area padding.
+- On iOS the button opens **`InstallGuide`** — a bottom-sheet modal with three
+  visual steps using the real iOS glyphs (Share = square+up-arrow, Add to Home
+  Screen = square+plus, "Add" pill). Android still fires the native prompt;
+  hidden when standalone. Profile `InstallCard` iOS branch opens the same guide.
+- Detection unchanged (`useInstall`): iOS Safari only, never when installed.
+
 ---
 
 ## Key decisions
@@ -495,6 +507,8 @@ unit/17 integration/build green; prod smoke after deploy.
 - ✅ **Phase 14 live** (PR #18): scoring systems renamed to **League** /
   **International**; the global leaderboard now ranks by International scoring
   (win 10 / loss 2) instead of flat 10-per-win.
+- ✅ **Phase 15 live** (PR #19): polished iOS install flow — a floating bottom
+  card + a step-by-step Add-to-Home-Screen guide with real iOS glyphs.
 - ✅ CI green on every push; 54 unit + 17 integration tests.
 - ✅ **Custom domain live:** https://smashhero.app (HTTPS; Vercel primary = `www`,
   apex 308-redirects to it).
