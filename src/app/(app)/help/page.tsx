@@ -114,7 +114,7 @@ const SECTIONS: { title: string; items: Item[] }[] = [
       },
       {
         q: "Match status & closing",
-        a: "A match runs Scheduled → In progress → Completed. Use Start / Cancel on the Matches tab. Entering a final score auto-completes and locks the match so it can't be edited by accident — click Reopen (organizer) if you need to correct it.",
+        a: "A match runs Scheduled → In progress → Completed. Start it when play begins; Cancel is only available before it starts (a match that's underway runs to a result). Entering a final score auto-completes and locks the match so it can't be edited by accident — click Reopen (organizer) if you need to correct it.",
       },
     ],
   },

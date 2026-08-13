@@ -9,7 +9,6 @@ import {
   Trophy,
   Compass,
   Users,
-  UsersRound,
   Swords,
   Zap,
   BarChart3,
@@ -26,12 +25,13 @@ import { NavProgress } from "@/components/NavProgress";
 import { InstallPrompt } from "@/components/InstallPrompt";
 import { api } from "@/lib/client/api";
 
+// Teams aren't a top-level destination — they're built inside a tournament
+// (its Teams tab), so the standalone entry was dropped from the nav.
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/tournaments", label: "Tournaments", icon: Trophy },
   { href: "/discover", label: "Discover", icon: Compass },
   { href: "/players", label: "Players", icon: Users },
-  { href: "/teams", label: "Teams", icon: UsersRound },
   { href: "/matches", label: "Matches", icon: Swords },
   { href: "/challenges", label: "Challenges", icon: Zap },
   { href: "/leaderboard", label: "Leaderboard", icon: BarChart3 },
