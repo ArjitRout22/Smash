@@ -95,3 +95,33 @@ export async function getPublicTournamentView(id: string) {
 }
 
 export type PublicTournamentView = NonNullable<Awaited<ReturnType<typeof getPublicTournamentView>>>;
+
+/** In-progress matches + their live scores for a PUBLIC tournament (spectator poll). */
+export async function getPublicLiveMatches(id: string) {
+  const t = await prisma.tournament.findFirst({
+    where: { id, deletedAt: null, visibility: "public" },
+    select: { id: true },
+  });
+  if (!t) return [];
+  const matches = await prisma.match.findMany({
+    where: { tournamentId: id, status: "in_progress", deletedAt: null },
+    orderBy: { updatedAt: "desc" },
+    select: {
+      id: true,
+      liveA: true,
+      liveB: true,
+      participants: { select: { side: true, player: { select: { displayName: true } }, team: { select: { name: true } } } },
+    },
+  });
+  const label = (m: (typeof matches)[number], side: string) => {
+    const p = m.participants.find((pp) => pp.side === side);
+    return p?.team?.name ?? p?.player?.displayName ?? "TBD";
+  };
+  return matches.map((m) => ({
+    id: m.id,
+    a: m.liveA ?? 0,
+    b: m.liveB ?? 0,
+    sideA: label(m, "A"),
+    sideB: label(m, "B"),
+  }));
+}

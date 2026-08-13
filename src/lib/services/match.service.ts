@@ -7,7 +7,7 @@ import { MATCH_TRANSITIONS, type MatchStatus, type Side } from "@/lib/domain/con
 import { buildBracket, type BracketMatchInput } from "@/lib/engines/bracket";
 import type { AuthUser } from "@/lib/auth/authorize";
 import { assertOrgAccess, isPlatformAdmin } from "@/lib/auth/tenancy";
-import { loadOwnedTournament, loadViewableTournament } from "@/lib/services/tournament.service";
+import { loadOwnedTournament, loadViewableTournament, assertCanScoreTournament } from "@/lib/services/tournament.service";
 import type { CreateMatchSchema, UpdateMatchSchema, GenerateFixturesInput } from "@/lib/validation/schemas";
 
 type CreateInput = z.infer<typeof CreateMatchSchema>;
@@ -52,6 +52,8 @@ export function serializeMatch(m: Awaited<ReturnType<typeof getMatchRaw>>) {
     courtNumber: m.courtNumber,
     scheduledAt: m.scheduledAt,
     winnerSide: m.winnerSide,
+    liveA: m.liveA,
+    liveB: m.liveB,
     round: m.round,
     slot: m.slot,
     version: m.version,
@@ -81,6 +83,32 @@ export async function getMatch(actor: AuthUser, id: string) {
   const m = await getMatchRaw(id);
   assertOrgAccess(actor, m.tournament.organizationId);
   return serializeMatch(m);
+}
+
+/**
+ * Set the cosmetic live running score for an in-progress match (spectator view).
+ * Scorer-gated (same rule as saving scores). Does NOT touch the ledger — it's
+ * just the current game's tally shown live; the real result is saved separately.
+ */
+export async function setLiveScore(actor: AuthUser, id: string, a: number, b: number) {
+  const m = await getMatchRaw(id);
+  const t = await prisma.tournament.findUnique({
+    where: { id: m.tournamentId },
+    select: { id: true, organizerId: true, createdById: true },
+  });
+  if (!t) throw Errors.notFound("Tournament");
+  await assertCanScoreTournament(actor, t);
+  if (m.closedAt) throw Errors.invalidState("This match is closed.");
+  const updated = await prisma.match.update({
+    where: { id },
+    data: {
+      liveA: Math.max(0, Math.trunc(a)),
+      liveB: Math.max(0, Math.trunc(b)),
+      // Starting to score a scheduled match implicitly puts it in progress.
+      status: m.status === "scheduled" ? "in_progress" : m.status,
+    },
+  });
+  return serializeMatch({ ...m, ...updated });
 }
 
 export async function listMatches(

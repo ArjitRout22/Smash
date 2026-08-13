@@ -24,7 +24,9 @@ export function MatchesTab({ tournamentId, format }: { tournamentId: string; for
 
   const { data, error, isLoading, mutate } = useSWR<{ data: MatchDTO[] }>(
     `/api/matches?tournamentId=${tournamentId}&pageSize=100`,
-    swrFetcherWithMeta
+    swrFetcherWithMeta,
+    // Poll while a match is in progress so the live score stays fresh for everyone.
+    { refreshInterval: (latest) => (latest?.data?.some((m) => m.status === "in_progress") ? 4000 : 0) }
   );
 
   async function patchMatch(m: MatchDTO, body: Record<string, unknown>, successMsg: string) {
@@ -59,6 +61,7 @@ export function MatchesTab({ tournamentId, format }: { tournamentId: string; for
               busy={busyId === m.id}
               onScore={() => setScoreMatch(m)}
               onPatch={patchMatch}
+              onRefresh={() => mutate()}
             />
           ))}
         </div>
@@ -83,16 +86,28 @@ function MatchRow({
   busy,
   onScore,
   onPatch,
+  onRefresh,
 }: {
   m: MatchDTO;
   busy: boolean;
   onScore: () => void;
   onPatch: (m: MatchDTO, body: Record<string, unknown>, successMsg: string) => void;
+  onRefresh: () => void;
 }) {
   const { can } = useAuth();
   const [showComments, setShowComments] = useState(false);
   const bothSet = m.sides[0]?.label !== "TBD" && m.sides[1]?.label !== "TBD";
   const canManage = can(PERMS.MATCH_MANAGE);
+  const canScore = can(PERMS.SCORE_EDIT);
+
+  async function setLive(a: number, b: number) {
+    try {
+      await api.post(`/api/matches/${m.id}/live`, { a: Math.max(0, a), b: Math.max(0, b) });
+      onRefresh();
+    } catch {
+      /* transient — the next poll corrects it */
+    }
+  }
 
   return (
     <Card className="p-4">
@@ -149,6 +164,16 @@ function MatchRow({
         </div>
       </div>
 
+      {m.status === "in_progress" && (
+        <div className="mt-3 flex items-center justify-center gap-3 rounded-lg bg-surface-2 py-3 sm:gap-6">
+          <LiveSide label={m.sides[0]?.label ?? "A"} score={m.liveA ?? 0} canScore={canScore} onSet={(v) => setLive(v, m.liveB ?? 0)} />
+          <span className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-red-500">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" /> Live
+          </span>
+          <LiveSide label={m.sides[1]?.label ?? "B"} score={m.liveB ?? 0} canScore={canScore} onSet={(v) => setLive(m.liveA ?? 0, v)} />
+        </div>
+      )}
+
       <div className="mt-3">
         <button
           type="button"
@@ -166,6 +191,26 @@ function MatchRow({
 
 function SideName({ label, winner }: { label: string; winner: boolean }) {
   return <span className={`truncate ${winner ? "font-bold text-foreground" : "font-medium"}`}>{label}</span>;
+}
+
+// One side of the live scoreboard: big current score, with +/- for scorers.
+function LiveSide({ label, score, canScore, onSet }: { label: string; score: number; canScore: boolean; onSet: (v: number) => void }) {
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <span className="max-w-[8rem] truncate text-xs text-muted sm:max-w-[12rem]">{label}</span>
+      <div className="flex items-center gap-2">
+        {canScore && (
+          <button type="button" aria-label={`${label} minus`} onClick={() => onSet(Math.max(0, score - 1))}
+            className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--border)] text-lg leading-none text-muted hover:bg-surface">−</button>
+        )}
+        <span className="min-w-[2ch] text-center text-3xl font-bold tabular-nums text-foreground">{score}</span>
+        {canScore && (
+          <button type="button" aria-label={`${label} plus`} onClick={() => onSet(score + 1)}
+            className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-lg leading-none text-primary-foreground hover:opacity-90">+</button>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function CreateMatchModal({

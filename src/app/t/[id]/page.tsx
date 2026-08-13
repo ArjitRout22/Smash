@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { MapPin } from "lucide-react";
 import { getPublicTournamentView } from "@/lib/services/public.service";
 import { ShareButton } from "@/components/ShareButton";
+import { LiveNow } from "@/components/LiveNow";
 
 const APP_URL = process.env.APP_URL ?? "https://smashhero.app";
 
@@ -96,6 +97,8 @@ export default async function PublicTournamentPage({ params }: { params: Promise
             Sign in to join
           </Link>
         </div>
+
+        <LiveNow tournamentId={id} />
 
         {/* Standings */}
         {t.standings.length > 0 && (
