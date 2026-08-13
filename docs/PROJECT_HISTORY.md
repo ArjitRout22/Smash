@@ -298,6 +298,26 @@ Tailwind CSS v4 · Vitest · Playwright.
 
 ---
 
+### Phase 9 — Public roster + matches, targeted reminders
+- **"Who joined" is visible to everyone.** `listTournamentPlayers` was owner-only
+  (`loadOwnedTournament`); now it gates on `loadViewableTournament` (owner /
+  participant / anyone for a public tournament) and returns **registered-only** to
+  non-managers (pending invites/declines stay private; managers still see all).
+  A read-only **Players** tab (`RosterTab`) was added to the public tournament page
+  (`/discover/[id]`). This also closed a latent over-exposure — the roster endpoint
+  used a coarse role check with no per-tournament gate.
+- **Matches visible on the public page.** Added a **Matches** tab to
+  `/discover/[id]` (reuses `MatchesTab`, read-only for non-managers). Previously the
+  public view only had Overview/Leaderboard/Bracket.
+- **Admin picks reminder recipients.** The admin reminder CTA is now a picker
+  modal: `GET /api/admin/reminders` lists upcoming tournaments + their registered
+  account-holders; `POST { tournamentId, playerIds? }` sends to the chosen players
+  (all registered if none given). Replaces the blanket "send to everything due".
+- Shipped via PR #6. Verified: typecheck, lint, 48 unit + 7 integration, build,
+  and live (owner vs stranger roster, private 403, matches 200, targeted send).
+
+---
+
 ## Key decisions
 
 - **Enum-like columns as strings** (validated by Zod + TS unions) instead of DB
@@ -339,6 +359,9 @@ Tailwind CSS v4 · Vitest · Playwright.
 - ✅ **Phase 8 live** (PR #4 + #5): invite emails + an on-demand admin "Send
   reminders" button (cron dropped), dropped tournament `draft`, cancel-invite
   polish, global nav loader. No new env vars needed.
+- ✅ **Phase 9 live** (PR #6): public read-only Players + Matches tabs on the
+  tournament page (roster visible to all, registered-only for non-managers), and
+  the admin reminder CTA now picks a tournament + specific recipients.
 - ✅ CI green on every push; 48 unit + 7 integration tests.
 - ✅ **Custom domain live:** https://smashhero.app (HTTPS; Vercel primary = `www`,
   apex 308-redirects to it).
