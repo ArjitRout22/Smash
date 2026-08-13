@@ -166,9 +166,18 @@ export async function softDeleteTournament(id: string, actor: AuthUser) {
 }
 
 export async function listTournamentPlayers(actor: AuthUser, tournamentId: string) {
-  await loadOwnedTournament(actor, tournamentId);
+  // Any viewer (owner, participant, or anyone for a public tournament) can read
+  // the roster — so "who joined" is visible to all. Managers additionally see
+  // pending rows (invited / requested); everyone else sees only confirmed
+  // (registered) players, so invites/declines aren't leaked publicly.
+  await loadViewableTournament(actor, tournamentId);
+  const t = await prisma.tournament.findUnique({
+    where: { id: tournamentId },
+    select: { organizerId: true, createdById: true },
+  });
+  const canManage = isPlatformAdmin(actor) || actor.id === t?.organizerId || actor.id === t?.createdById;
   return prisma.tournamentPlayer.findMany({
-    where: { tournamentId },
+    where: { tournamentId, ...(canManage ? {} : { status: "registered" }) },
     include: { player: { include: { ranking: true } } },
     orderBy: { registeredAt: "asc" },
   });
