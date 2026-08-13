@@ -442,6 +442,19 @@ became a native-feeling onboarding experience:
   hidden when standalone. Profile `InstallCard` iOS branch opens the same guide.
 - Detection unchanged (`useInstall`): iOS Safari only, never when installed.
 
+### Phase 16 — Create Random Teams (PR #20)
+A tournament's **Teams** tab gained **Create random teams**: a confirmation
+("Create random teams?" — available players, Format: Doubles, teams to create,
+odd-player heads-up) → generates by shuffling all **unassigned registered**
+players and pairing them 2-per-team (**doubles only** for now). Teams render with
+Delete; leftover odd player(s) show in an **Unassigned players** section.
+Matches are **not** auto-generated — **Generate matches** appears only with ≥2
+teams (opens the existing fixtures flow), so the organizer reviews first. Delete
+frees a team's players back to unassigned. Backend `POST /api/teams/random` →
+`team.service.createRandomTeams`: server-side shuffle + atomic multi-team create,
+excludes already-assigned players, leaves existing teams/matches untouched,
+refuses when <2 available, auto-names "Team N". Integration-tested.
+
 ---
 
 ## Key decisions
@@ -509,6 +522,8 @@ became a native-feeling onboarding experience:
   (win 10 / loss 2) instead of flat 10-per-win.
 - ✅ **Phase 15 live** (PR #19): polished iOS install flow — a floating bottom
   card + a step-by-step Add-to-Home-Screen guide with real iOS glyphs.
+- ✅ **Phase 16 live** (PR #20): **Create Random Teams** in the Teams tab —
+  auto-pair unassigned players into doubles teams, review/delete before matches.
 - ✅ CI green on every push; 54 unit + 17 integration tests.
 - ✅ **Custom domain live:** https://smashhero.app (HTTPS; Vercel primary = `www`,
   apex 308-redirects to it).
