@@ -131,7 +131,7 @@ export default function AdminPage() {
   );
 }
 
-type RemindTarget = { id: string; name: string; startDate: string | null; players: { playerId: string; name: string }[] };
+type RemindTarget = { id: string; name: string; startDate: string | null; players: { playerId: string; name: string; status: string }[] };
 
 // Admin picks a tournament + which registered players get a reminder email.
 function RemindersModal({ onClose }: { onClose: () => void }) {
@@ -219,10 +219,11 @@ function RemindersModal({ onClose }: { onClose: () => void }) {
                   <label key={p.playerId} className="flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 hover:bg-surface-2">
                     <input type="checkbox" checked={selected.has(p.playerId)} onChange={() => toggle(p.playerId)} className="h-4 w-4 accent-[var(--primary)]" />
                     <span className="text-sm">{p.name}</span>
+                    <Badge color={p.status === "registered" ? "green" : "amber"}>{p.status === "registered" ? "Joined" : "Invited — not responded"}</Badge>
                   </label>
                 ))}
               </div>
-              <p className="mt-2 text-xs text-muted">Only players with an account are listed — they can receive email.</p>
+              <p className="mt-2 text-xs text-muted">Only players with an account are listed. <b>Joined</b> players get a &ldquo;coming up&rdquo; reminder; <b>Invited</b> players get a nudge to accept.</p>
             </div>
           )}
         </div>
