@@ -50,14 +50,25 @@ export async function register(
     const org = await tx.organization.create({
       data: { name: `${input.name.split(" ")[0] || input.name}'s Club`, slug: slugify(input.name) },
     });
-    const player = await tx.player.create({
-      data: {
-        fullName: input.name,
-        displayName: input.name.split(" ")[0] || input.name,
-        phone,
-        organizationId: org.id,
-      },
+    // If an organizer pre-created a managed player for this email (invite-by-
+    // email), claim that record — so the person's existing tournament entries +
+    // stats carry over — instead of minting a duplicate. Otherwise create fresh.
+    const pending = await tx.player.findFirst({
+      where: { invitedEmail: email, deletedAt: null, user: { is: null } },
     });
+    const player = pending
+      ? await tx.player.update({
+          where: { id: pending.id },
+          data: { invitedEmail: null, organizationId: org.id, phone: phone ?? pending.phone },
+        })
+      : await tx.player.create({
+          data: {
+            fullName: input.name,
+            displayName: input.name.split(" ")[0] || input.name,
+            phone,
+            organizationId: org.id,
+          },
+        });
     return tx.user.create({
       data: {
         email,

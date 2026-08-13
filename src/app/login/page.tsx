@@ -20,8 +20,9 @@ function LoginInner() {
   const router = useRouter();
   const search = useSearchParams();
 
-  const [mode, setMode] = useState<Mode>("login");
-  const [form, setForm] = useState({ name: "", email: "", password: "" });
+  // A claim-invite link arrives as ?mode=register&email=… — open on signup, prefilled.
+  const [mode, setMode] = useState<Mode>(search.get("mode") === "register" ? "register" : "login");
+  const [form, setForm] = useState({ name: "", email: search.get("email") ?? "", password: "" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
