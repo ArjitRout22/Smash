@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
-import { UserPlus, Send } from "lucide-react";
+import { Send } from "lucide-react";
 import { api, ApiClientError, swrFetcher, swrFetcherWithMeta } from "@/lib/client/api";
 import { Card, Button, Badge, Input } from "@/components/ui/primitives";
 import { EmptyState, ErrorState, ListSkeleton } from "@/components/ui/states";
@@ -18,7 +18,6 @@ type PlayerLite = { id: string; displayName: string; fullName: string };
 export function PlayersTab({ tournamentId }: { tournamentId: string }) {
   const { can } = useAuth();
   const toast = useToast();
-  const [adding, setAdding] = useState(false);
   const [inviting, setInviting] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const canManage = can(PERMS.TOURNAMENT_EDIT);
@@ -32,7 +31,9 @@ export function PlayersTab({ tournamentId }: { tournamentId: string }) {
     swrFetcher
   );
 
-  const registered = (data ?? []).filter((tp) => tp.status === "registered");
+  // The roster shows confirmed (registered) players and those still pending an
+  // invite response. Join requests get their own card; declined/removed are hidden.
+  const roster = (data ?? []).filter((tp) => tp.status === "registered" || tp.status === "invited");
 
   async function respond(playerId: string, action: "accept" | "decline") {
     setBusy(playerId);
@@ -64,10 +65,7 @@ export function PlayersTab({ tournamentId }: { tournamentId: string }) {
     <div>
       <div className="mb-4 flex justify-end gap-2">
         {canManage && (
-          <>
-            <Button variant="outline" onClick={() => setInviting(true)}><Send className="h-4 w-4" /> Invite player</Button>
-            <Button onClick={() => setAdding(true)}><UserPlus className="h-4 w-4" /> Add players</Button>
-          </>
+          <Button onClick={() => setInviting(true)}><Send className="h-4 w-4" /> Invite players</Button>
         )}
       </div>
 
@@ -95,14 +93,14 @@ export function PlayersTab({ tournamentId }: { tournamentId: string }) {
 
       {isLoading && <ListSkeleton rows={4} />}
       {error && <ErrorState onRetry={() => mutate()} />}
-      {data && registered.length === 0 && (
-        <EmptyState title="No players registered" message="Add existing players, or accept join requests on public tournaments." />
+      {data && roster.length === 0 && (
+        <EmptyState title="No players yet" message="Invite players to this tournament, or accept join requests on public tournaments." />
       )}
 
-      {registered.length > 0 && (
+      {roster.length > 0 && (
         <Card>
           <div className="divide-y divide-[var(--border)]">
-            {registered.map((tp) => (
+            {roster.map((tp) => (
               <div key={tp.id} className="flex items-center justify-between px-5 py-3">
                 <Link href={`/players/${tp.player.id}`} className="hover:underline">
                   <span className="font-medium">{tp.player.displayName}</span>
@@ -110,9 +108,11 @@ export function PlayersTab({ tournamentId }: { tournamentId: string }) {
                 </Link>
                 <div className="flex items-center gap-3 text-sm text-muted">
                   {tp.player.ranking && <span>{tp.player.ranking.wins}W · {tp.player.ranking.losses}L</span>}
-                  <Badge color="green">registered</Badge>
+                  <StatusBadge status={tp.status} />
                   {canManage && (
-                    <button onClick={() => remove(tp.player.id)} disabled={busy === tp.player.id} className="text-xs text-muted hover:text-[var(--danger)] disabled:opacity-50">Remove</button>
+                    <button onClick={() => remove(tp.player.id)} disabled={busy === tp.player.id} className="text-xs text-muted hover:text-[var(--danger)] disabled:opacity-50">
+                      {tp.status === "invited" ? "Cancel" : "Remove"}
+                    </button>
                   )}
                 </div>
               </div>
@@ -121,34 +121,52 @@ export function PlayersTab({ tournamentId }: { tournamentId: string }) {
         </Card>
       )}
 
-      {adding && (
-        <AddPlayersModal
-          tournamentId={tournamentId}
-          existingIds={new Set((data ?? []).map((tp) => tp.player.id))}
-          onClose={() => setAdding(false)}
-          onAdded={() => { mutate(); toast.success("Players added"); }}
-        />
-      )}
       {inviting && (
         <InvitePlayersModal
           tournamentId={tournamentId}
-          existingIds={new Set((data ?? []).map((tp) => tp.player.id))}
+          tournamentPlayers={data ?? []}
           onClose={() => setInviting(false)}
-          onInvited={() => { mutate(); toast.success("Invitation sent"); }}
+          onInvited={() => mutate()}
         />
       )}
     </div>
   );
 }
 
+// Tournament-membership status → badge (shared by the roster + the invite modal).
+const STATUS_BADGE: Record<string, { label: string; color: "green" | "amber" | "blue" | "red" | "slate" | "neutral" }> = {
+  registered: { label: "Joined", color: "green" },
+  invited: { label: "Invited", color: "amber" },
+  requested: { label: "Requested", color: "blue" },
+  declined: { label: "Declined", color: "red" },
+  removed: { label: "Removed", color: "neutral" },
+  withdrawn: { label: "Withdrawn", color: "neutral" },
+};
+
+function StatusBadge({ status }: { status: string }) {
+  const s = STATUS_BADGE[status] ?? { label: status, color: "slate" as const };
+  return <Badge color={s.color}>{s.label}</Badge>;
+}
+
+// A player is (re-)invitable when they aren't currently in the tournament: no
+// row at all, or a terminal negative outcome that can be reversed.
+function isInvitable(status: string | undefined): boolean {
+  return status === undefined || status === "declined" || status === "removed" || status === "withdrawn";
+}
+
+// Single entry point for putting players in a tournament. Shows the FULL result
+// set annotated with each player's current status (Available / Invited / Joined /
+// Requested / Declined) instead of hiding anyone. The action label adapts:
+// account-holders are "Invite"d (they accept); managed players are added directly
+// — the server decides, and the toast reflects what actually happened.
 function InvitePlayersModal({
   tournamentId,
-  existingIds,
+  tournamentPlayers,
   onClose,
   onInvited,
 }: {
   tournamentId: string;
-  existingIds: Set<string>;
+  tournamentPlayers: TournamentPlayerDTO[];
   onClose: () => void;
   onInvited: () => void;
 }) {
@@ -160,10 +178,13 @@ function InvitePlayersModal({
     swrFetcherWithMeta
   );
 
+  const statusById = new Map(tournamentPlayers.map((tp) => [tp.player.id, tp.status]));
+
   async function invite(playerId: string) {
     setBusy(playerId);
     try {
-      await api.post(`/api/tournaments/${tournamentId}/invite`, { playerId });
+      const tp = await api.post<{ status: string }>(`/api/tournaments/${tournamentId}/invite`, { playerId });
+      toast.success(tp?.status === "registered" ? "Player added" : "Invitation sent");
       onInvited();
     } catch (err) {
       toast.error(err instanceof ApiClientError ? err.message : "Could not invite");
@@ -172,103 +193,41 @@ function InvitePlayersModal({
     }
   }
 
-  const candidates = (data?.data ?? []).filter((p) => !existingIds.has(p.id));
+  // Never hide in-tournament players; float the invitable ones to the top.
+  const players = (data?.data ?? []).slice().sort((a, b) => {
+    return (isInvitable(statusById.get(a.id)) ? 0 : 1) - (isInvitable(statusById.get(b.id)) ? 0 : 1);
+  });
 
   return (
-    <Modal open onClose={onClose} title="Invite a player" footer={<Button variant="ghost" onClick={onClose}>Done</Button>}>
-      <p className="mb-3 text-sm text-muted">Invite any player across Smash. They&apos;ll get an invitation to accept.</p>
+    <Modal open onClose={onClose} title="Invite players" footer={<Button variant="ghost" onClick={onClose}>Done</Button>}>
+      <p className="mb-3 text-sm text-muted">
+        Invite any player across Smash. Players with an account get an invitation to accept; players without one are added directly.
+      </p>
       <Input placeholder="Search all players…" value={search} onChange={(e) => setSearch(e.target.value)} className="mb-3" />
       {isLoading && <ListSkeleton rows={4} />}
-      {!isLoading && candidates.length === 0 && (
+      {!isLoading && players.length === 0 && (
         <p className="py-6 text-center text-sm text-muted">No players found.</p>
       )}
       <div className="max-h-72 space-y-1 overflow-y-auto">
-        {candidates.map((p) => (
-          <div key={p.id} className="flex items-center justify-between rounded-lg px-3 py-2 hover:bg-surface-2">
-            <div className="min-w-0">
-              <span className="font-medium">{p.displayName}</span>
-              <span className="ml-2 text-sm text-muted">{p.fullName}</span>
+        {players.map((p) => {
+          const status = statusById.get(p.id);
+          return (
+            <div key={p.id} className="flex items-center justify-between rounded-lg px-3 py-2 hover:bg-surface-2">
+              <div className="min-w-0">
+                <span className="font-medium">{p.displayName}</span>
+                <span className="ml-2 text-sm text-muted">{p.fullName}</span>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                {status && <StatusBadge status={status} />}
+                {isInvitable(status) && (
+                  <Button size="sm" variant="outline" onClick={() => invite(p.id)} loading={busy === p.id}>
+                    {status ? "Re-invite" : "Invite"}
+                  </Button>
+                )}
+              </div>
             </div>
-            <Button size="sm" variant="outline" onClick={() => invite(p.id)} loading={busy === p.id}>Invite</Button>
-          </div>
-        ))}
-      </div>
-    </Modal>
-  );
-}
-
-function AddPlayersModal({
-  tournamentId,
-  existingIds,
-  onClose,
-  onAdded,
-}: {
-  tournamentId: string;
-  existingIds: Set<string>;
-  onClose: () => void;
-  onAdded: () => void;
-}) {
-  const toast = useToast();
-  const [search, setSearch] = useState("");
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [saving, setSaving] = useState(false);
-
-  const { data, isLoading } = useSWR<{ data: PlayerLite[] }>(
-    `/api/players?pageSize=100&search=${encodeURIComponent(search)}`,
-    swrFetcherWithMeta
-  );
-
-  const toggle = (id: string) =>
-    setSelected((s) => {
-      const next = new Set(s);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-
-  async function save() {
-    if (selected.size === 0) return;
-    setSaving(true);
-    try {
-      await api.post(`/api/tournaments/${tournamentId}/players`, { playerIds: [...selected] });
-      onAdded();
-      onClose();
-    } catch (err) {
-      toast.error(err instanceof ApiClientError ? err.message : "Could not add players");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  const candidates = (data?.data ?? []).filter((p) => !existingIds.has(p.id));
-
-  return (
-    <Modal
-      open
-      onClose={onClose}
-      title="Add players"
-      footer={
-        <>
-          <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button onClick={save} loading={saving} disabled={selected.size === 0}>
-            Add {selected.size || ""}
-          </Button>
-        </>
-      }
-    >
-      <Input placeholder="Search players…" value={search} onChange={(e) => setSearch(e.target.value)} className="mb-3" />
-      {isLoading && <ListSkeleton rows={4} />}
-      {!isLoading && candidates.length === 0 && (
-        <p className="py-6 text-center text-sm text-muted">No more players to add. Create players from the Players page first.</p>
-      )}
-      <div className="max-h-72 space-y-1 overflow-y-auto">
-        {candidates.map((p) => (
-          <label key={p.id} className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 hover:bg-surface-2">
-            <input type="checkbox" checked={selected.has(p.id)} onChange={() => toggle(p.id)} className="h-4 w-4 accent-[var(--primary)]" />
-            <span className="font-medium">{p.displayName}</span>
-            <span className="text-sm text-muted">{p.fullName}</span>
-          </label>
-        ))}
+          );
+        })}
       </div>
     </Modal>
   );

@@ -22,6 +22,9 @@ const isoDate = z
 export const CreatePlayerSchema = z.object({
   fullName: z.string().trim().min(2).max(120),
   displayName: z.string().trim().min(1).max(60).optional(),
+  // Optional email — used to link an existing account or dedupe a managed player
+  // (never creates a second player for the same person). See createPlayer.
+  email: z.string().trim().toLowerCase().email().max(200).optional(),
   phone: z.string().trim().max(20).optional(),
   photoUrl: z.string().url().max(500).optional(),
   gender: z.enum(GENDERS).optional(),

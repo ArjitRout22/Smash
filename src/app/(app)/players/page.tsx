@@ -182,8 +182,8 @@ export default function PlayersPage() {
         <CreatePlayerModal
           open={modalOpen}
           onClose={() => setModalOpen(false)}
-          onCreated={() => {
-            success("Player created");
+          onCreated={(linked) => {
+            success(linked ? "Linked to the existing player for that email" : "Player created");
             setModalOpen(false);
             mutate();
           }}
@@ -202,11 +202,12 @@ function CreatePlayerModal({
 }: {
   open: boolean;
   onClose: () => void;
-  onCreated: () => void;
+  onCreated: (linked: boolean) => void;
   onError: (message: string) => void;
 }) {
   const [fullName, setFullName] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [gender, setGender] = useState("");
   const [city, setCity] = useState("");
@@ -217,6 +218,7 @@ function CreatePlayerModal({
   function reset() {
     setFullName("");
     setDisplayName("");
+    setEmail("");
     setPhone("");
     setGender("");
     setCity("");
@@ -232,16 +234,17 @@ function CreatePlayerModal({
     setFieldError(undefined);
     setSubmitting(true);
     try {
-      await api.post("/api/players", {
+      const res = await api.post<{ linked: boolean }>("/api/players", {
         fullName: fullName.trim(),
         displayName: displayName.trim() || undefined,
+        email: email.trim() || undefined,
         phone: phone.trim() || undefined,
         gender: gender || undefined,
         city: city.trim() || undefined,
         dateOfBirth: dateOfBirth || undefined,
       });
       reset();
-      onCreated();
+      onCreated(Boolean(res?.linked));
     } catch (err) {
       onError(err instanceof ApiClientError ? err.message : "Failed to create player");
     } finally {
@@ -271,6 +274,9 @@ function CreatePlayerModal({
         </Field>
         <Field label="Display name" htmlFor="displayName" hint="Optional — shown on leaderboards.">
           <Input id="displayName" value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Jane" />
+        </Field>
+        <Field label="Email" htmlFor="email" hint="Optional — links to their account if they already have one, so you never create a duplicate.">
+          <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="jane@example.com" />
         </Field>
         <Field label="Phone" htmlFor="phone">
           <Input id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+44…" />

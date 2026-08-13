@@ -163,6 +163,10 @@ model Player {
   fullName       String
   displayName    String
   phone          String?
+  // Email captured when a managed player is pre-created before they have an
+  // account, so Create-Player can dedupe by email (and a future signup can claim
+  // this record instead of minting a duplicate). Null for players with no email.
+  invitedEmail   String?   @unique
   photoUrl       String?
   gender         String? // male | female | other
   skillLevel     String? // beginner | intermediate | pro (self-declared)

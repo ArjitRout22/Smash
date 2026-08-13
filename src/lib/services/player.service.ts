@@ -60,12 +60,42 @@ export async function getPlayer(actor: AuthUser, id: string) {
   return { ...player, phone: canSeePhone ? player.phone : null };
 }
 
+/**
+ * Create (or reuse) a player. When an email is supplied we NEVER create a second
+ * player for the same person:
+ *   1. if an account already exists with that email → return its linked player;
+ *   2. if a managed player was already pre-created with that email → return it;
+ *   3. otherwise create a managed player, storing `invitedEmail` so a later
+ *      Create-Player (or, once wired, a signup) resolves to this same record.
+ * Returns `{ player, linked }` — `linked: true` means we reused an existing one.
+ */
 export async function createPlayer(input: CreateInput, actor: AuthUser) {
+  const email = input.email?.trim().toLowerCase() || null;
+
+  if (email) {
+    // 1) An existing account with this email — reuse its player (dedupe).
+    const user = await prisma.user.findUnique({
+      where: { email },
+      include: { player: true },
+    });
+    if (user?.player && !user.player.deletedAt) {
+      return { player: user.player, linked: true as const };
+    }
+    // 2) A managed player already pre-created with this email — reuse it.
+    const pending = await prisma.player.findFirst({
+      where: { invitedEmail: email, deletedAt: null },
+    });
+    if (pending) {
+      return { player: pending, linked: true as const };
+    }
+  }
+
   const player = await prisma.player.create({
     data: {
       fullName: input.fullName,
       displayName: input.displayName ?? input.fullName,
       phone: input.phone,
+      invitedEmail: email,
       photoUrl: input.photoUrl,
       gender: input.gender,
       skillLevel: input.skillLevel,
@@ -75,7 +105,7 @@ export async function createPlayer(input: CreateInput, actor: AuthUser) {
     },
   });
   await audit({ actorUserId: actor.id, action: "player.created", entityType: "Player", entityId: player.id, newValue: player });
-  return player;
+  return { player, linked: false as const };
 }
 
 export async function updatePlayer(id: string, input: UpdateInput, actor: AuthUser) {
