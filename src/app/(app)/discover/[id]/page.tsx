@@ -12,11 +12,13 @@ import { useToast } from "@/components/ui/Toast";
 import { useAuth } from "@/components/AuthProvider";
 import { titleCase } from "@/lib/client/format";
 import { OverviewTab } from "@/components/tournament/OverviewTab";
+import { RosterTab } from "@/components/tournament/RosterTab";
+import { MatchesTab } from "@/components/tournament/MatchesTab";
 import { LeaderboardTab } from "@/components/tournament/LeaderboardTab";
 import { BracketTab } from "@/components/tournament/BracketTab";
 import type { TournamentDetail } from "@/components/tournament/types";
 
-type Tab = "Overview" | "Leaderboard" | "Bracket";
+type Tab = "Overview" | "Players" | "Matches" | "Leaderboard" | "Bracket";
 
 export default function PublicTournamentPage() {
   const { id } = useParams<{ id: string }>();
@@ -77,7 +79,7 @@ export default function PublicTournamentPage() {
       />
 
       <div className="mb-6 flex gap-1 overflow-x-auto border-b border-[var(--border)]">
-        {(["Overview", "Leaderboard", "Bracket"] as Tab[]).map((t) => (
+        {(["Overview", "Players", "Matches", "Leaderboard", "Bracket"] as Tab[]).map((t) => (
           <button key={t} onClick={() => setTab(t)} className={`whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium transition ${tab === t ? "border-[var(--primary)] text-foreground" : "border-transparent text-muted hover:text-foreground"}`}>
             {t}
           </button>
@@ -85,6 +87,8 @@ export default function PublicTournamentPage() {
       </div>
 
       {tab === "Overview" && <OverviewTab tournament={data} />}
+      {tab === "Players" && <RosterTab tournamentId={id} />}
+      {tab === "Matches" && <MatchesTab tournamentId={id} format={data.format} />}
       {tab === "Leaderboard" && <LeaderboardTab tournamentId={id} />}
       {tab === "Bracket" && <BracketTab tournamentId={id} />}
 

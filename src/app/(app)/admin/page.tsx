@@ -5,8 +5,8 @@ import useSWR from "swr";
 import { Search, ShieldAlert, Trash2, Bell } from "lucide-react";
 import { api, ApiClientError, swrFetcher } from "@/lib/client/api";
 import { PageHeader, EmptyState, ListSkeleton } from "@/components/ui/states";
-import { Card, Badge, Button, Input } from "@/components/ui/primitives";
-import { ConfirmDialog } from "@/components/ui/Modal";
+import { Card, Badge, Button, Input, Select, Field } from "@/components/ui/primitives";
+import { ConfirmDialog, Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { useAuth } from "@/components/AuthProvider";
 import { formatDate } from "@/lib/client/format";
@@ -26,24 +26,8 @@ export default function AdminPage() {
   const [search, setSearch] = useState("");
   const [target, setTarget] = useState<AdminUser | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [sending, setSending] = useState(false);
+  const [remindOpen, setRemindOpen] = useState(false);
   const isAdmin = user?.role === "ADMIN";
-
-  async function sendReminders() {
-    setSending(true);
-    try {
-      const res = await api.post<{ tournamentsDue: number; emailsSent: number }>("/api/admin/reminders");
-      toast.success(
-        res.emailsSent > 0
-          ? `Sent ${res.emailsSent} reminder${res.emailsSent === 1 ? "" : "s"} across ${res.tournamentsDue} tournament${res.tournamentsDue === 1 ? "" : "s"}.`
-          : "No tournaments start in the next 24 hours — nothing to send."
-      );
-    } catch (err) {
-      toast.error(err instanceof ApiClientError ? err.message : "Could not send reminders");
-    } finally {
-      setSending(false);
-    }
-  }
 
   const { data, isLoading, mutate } = useSWR<AdminUser[]>(
     isAdmin ? `/api/admin/users${search.trim() ? `?search=${encodeURIComponent(search.trim())}` : ""}` : null,
@@ -83,9 +67,9 @@ export default function AdminPage() {
       <Card className="mb-6 flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="font-semibold text-foreground">Tournament reminders</h2>
-          <p className="text-sm text-muted">Email registered players about tournaments starting within 24 hours. Sent on demand — no scheduled job.</p>
+          <p className="text-sm text-muted">Pick a tournament and choose who gets a reminder email. Sent on demand — no scheduled job.</p>
         </div>
-        <Button onClick={sendReminders} loading={sending} className="shrink-0"><Bell className="h-4 w-4" /> Send reminders</Button>
+        <Button onClick={() => setRemindOpen(true)} className="shrink-0"><Bell className="h-4 w-4" /> Send reminders</Button>
       </Card>
 
       <div className="relative mb-4 max-w-sm">
@@ -141,6 +125,108 @@ export default function AdminPage() {
         danger
         loading={deleting}
       />
+
+      {remindOpen && <RemindersModal onClose={() => setRemindOpen(false)} />}
     </div>
+  );
+}
+
+type RemindTarget = { id: string; name: string; startDate: string | null; players: { playerId: string; name: string }[] };
+
+// Admin picks a tournament + which registered players get a reminder email.
+function RemindersModal({ onClose }: { onClose: () => void }) {
+  const toast = useToast();
+  const { data, isLoading } = useSWR<RemindTarget[]>("/api/admin/reminders", swrFetcher);
+  const targets = data ?? [];
+  const [tid, setTid] = useState("");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [sending, setSending] = useState(false);
+
+  const current = targets.find((t) => t.id === tid) ?? null;
+
+  // Default to every player selected whenever the chosen tournament changes.
+  const [syncedTid, setSyncedTid] = useState<string | null>(null);
+  if (tid !== syncedTid) {
+    setSyncedTid(tid);
+    setSelected(new Set(current ? current.players.map((p) => p.playerId) : []));
+  }
+
+  const toggle = (id: string) =>
+    setSelected((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+
+  async function send() {
+    if (!tid || selected.size === 0) return;
+    setSending(true);
+    try {
+      const res = await api.post<{ emailsSent: number }>("/api/admin/reminders", {
+        tournamentId: tid,
+        playerIds: [...selected],
+      });
+      toast.success(`Sent ${res.emailsSent} reminder${res.emailsSent === 1 ? "" : "s"}.`);
+      onClose();
+    } catch (err) {
+      toast.error(err instanceof ApiClientError ? err.message : "Could not send reminders");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title="Send tournament reminders"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button onClick={send} loading={sending} disabled={!tid || selected.size === 0}>Send {selected.size || ""}</Button>
+        </>
+      }
+    >
+      {isLoading && <ListSkeleton rows={3} />}
+      {!isLoading && targets.length === 0 && (
+        <p className="py-6 text-center text-sm text-muted">No upcoming tournaments with registered players to remind.</p>
+      )}
+      {!isLoading && targets.length > 0 && (
+        <div className="flex flex-col gap-4">
+          <Field label="Tournament">
+            <Select value={tid} onChange={(e) => setTid(e.target.value)}>
+              <option value="">Select a tournament…</option>
+              {targets.map((t) => (
+                <option key={t.id} value={t.id}>{t.name} · {t.players.length} player{t.players.length === 1 ? "" : "s"}</option>
+              ))}
+            </Select>
+          </Field>
+          {current && (
+            <div>
+              <div className="mb-2 flex items-center justify-between text-sm">
+                <span className="font-medium text-foreground">Recipients</span>
+                <button
+                  type="button"
+                  className="text-xs text-primary hover:underline"
+                  onClick={() => setSelected(new Set(selected.size === current.players.length ? [] : current.players.map((p) => p.playerId)))}
+                >
+                  {selected.size === current.players.length ? "Clear all" : "Select all"}
+                </button>
+              </div>
+              <div className="max-h-56 space-y-1 overflow-y-auto rounded-lg border border-[var(--border)] p-1">
+                {current.players.map((p) => (
+                  <label key={p.playerId} className="flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 hover:bg-surface-2">
+                    <input type="checkbox" checked={selected.has(p.playerId)} onChange={() => toggle(p.playerId)} className="h-4 w-4 accent-[var(--primary)]" />
+                    <span className="text-sm">{p.name}</span>
+                  </label>
+                ))}
+              </div>
+              <p className="mt-2 text-xs text-muted">Only players with an account are listed — they can receive email.</p>
+            </div>
+          )}
+        </div>
+      )}
+    </Modal>
   );
 }
