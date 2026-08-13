@@ -39,6 +39,8 @@ export type MatchDTO = {
   courtNumber: string | null;
   scheduledAt: string | null;
   winnerSide: string | null;
+  liveA: number | null;
+  liveB: number | null;
   round: number | null;
   slot: number | null;
   version: number;

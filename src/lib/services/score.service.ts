@@ -207,6 +207,9 @@ export async function submitScore(
       data: {
         status: result.complete ? "completed" : "in_progress",
         winnerSide: result.winnerSide,
+        // The saved result supersedes the cosmetic live running score.
+        liveA: null,
+        liveB: null,
         // Lock the result as soon as a match completes — a scored tournament
         // match can't be edited until an organizer deliberately reopens it.
         closedAt: result.complete ? new Date() : null,
