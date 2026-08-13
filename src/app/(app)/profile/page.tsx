@@ -8,6 +8,7 @@ import { api, ApiClientError, swrFetcher } from "@/lib/client/api";
 import { PageHeader, EmptyState, CardGridSkeleton, BrandedLoader } from "@/components/ui/states";
 import { Button, Card, CardHeader, Badge, Select, Input, Field, Avatar } from "@/components/ui/primitives";
 import { ShareButton } from "@/components/ShareButton";
+import { InstallCard } from "@/components/InstallCard";
 import { LocationPicker, ViewOnMapButton, type PlaceValue } from "@/components/LocationPicker";
 import { useToast } from "@/components/ui/Toast";
 import { useAuth } from "@/components/AuthProvider";
@@ -127,6 +128,10 @@ export default function ProfilePage() {
           <Row label="Role" value={<Badge color="blue">{titleCase(user.role)}</Badge>} />
         </dl>
       </Card>
+
+      <div className="mt-6">
+        <InstallCard />
+      </div>
 
       {playerId && (
         <div className="mt-6">
