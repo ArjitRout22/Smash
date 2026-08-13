@@ -270,6 +270,32 @@ Tailwind CSS v4 · Vitest · Playwright.
 
 ---
 
+### Phase 8 — Notifications, reminders, status cleanup, nav loader
+- **Email notifications (Phase 1).** `src/lib/email/notifications.ts` layered on the
+  existing `EmailProvider` (Resend): an **invite email** goes out when an
+  account-holder is invited to a tournament (in `inviteToTournament`, best-effort).
+  A **daily reminder cron** (`vercel.json` → `GET /api/cron/reminders`, guarded by
+  `CRON_SECRET`) emails registered players about tournaments starting within 24h
+  (`reminders.service.ts`). Sends never throw — a delivery failure is logged.
+  Follow-ups: in-app notification center + Web Push (iOS needs an installed PWA).
+- **Dropped tournament `draft`.** New tournaments default to **`upcoming`**; the
+  state machine starts there; migration `20260813120000_drop_tournament_draft`
+  flips existing `draft`→`upcoming` and resets the column default. The list is
+  grouped **Upcoming → Ongoing → Completed → Cancelled** then by date
+  (`TOURNAMENT_STATUS_ORDER`; client-side sort, so grouping is within a page).
+- **Cancel-invite polish.** The roster action for an `invited` player reads
+  "Cancel invite" and toasts "Invitation cancelled" (backend already supported it).
+- **Global nav loader.** `NavProgress` (in `AppShell`) — a slim top progress bar on
+  client navigations, complementing the full-screen `loading.tsx` for slow server
+  loads. Dependency-free: starts on internal link/back-forward, finishes on
+  pathname change.
+- Shipped via PR #4. Verified: typecheck, lint, 48 unit + 7 integration, prod
+  build, and a live smoke (status default, invite email, reminder cron, migration).
+- **Architecture reference artifact** built for the three defining mechanisms
+  (layered path · point ledger · tenancy) + stack/delivery.
+
+---
+
 ## Key decisions
 
 - **Enum-like columns as strings** (validated by Zod + TS unions) instead of DB
@@ -308,6 +334,9 @@ Tailwind CSS v4 · Vitest · Playwright.
 - ✅ **Phase 7 live** (PR #2): unified player onboarding — status-aware invite
   list, single invite flow (account-aware), mandatory-email dedupe on Create
   Player. Migration applied on deploy.
+- ✅ **Phase 8 live** (PR #4): invite/reminder emails + reminder cron, dropped
+  tournament `draft`, cancel-invite polish, global nav loader. **Set `CRON_SECRET`
+  in Vercel** to protect the reminder cron (route is open until then).
 - ✅ CI green on every push; 48 unit + 7 integration tests.
 - ✅ **Custom domain live:** https://smashhero.app (HTTPS; Vercel primary = `www`,
   apex 308-redirects to it).
@@ -337,6 +366,11 @@ Tailwind CSS v4 · Vitest · Playwright.
   the account to the pre-created managed player (`Player.invitedEmail`) instead of
   minting a duplicate. Needs an `EmailProvider` template + a change to the
   `register` service (`src/lib/auth/service.ts`) to claim by email in its tx.
+- 🔔 **Notifications, next phases:** an in-app notification center (a `Notification`
+  table + bell/unread badge) and **Web Push** (service worker + VAPID; works on
+  Chrome/Firefox/Edge desktop + Android — iOS only when installed as a PWA). Also
+  more email triggers (result-to-confirm, match scheduled) + a per-send dedupe so
+  reminders can't repeat. Set `CRON_SECRET` in Vercel now to protect the cron.
 - 💡 Later: Redis-backed rate limiter for scale (the current limiter is in-memory
   per serverless instance); casual head-to-head record on profiles; "Challenge"
   button on player-directory profiles; client-side caching of OSM venue searches.
