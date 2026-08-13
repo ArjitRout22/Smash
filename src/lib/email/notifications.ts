@@ -85,6 +85,28 @@ export async function sendTournamentInviteEmail(opts: {
   });
 }
 
+/** Sent when a managed player is created by email — invites them to claim it. */
+export async function sendPlayerClaimInviteEmail(opts: {
+  to: string;
+  playerName: string;
+  invitedByName?: string | null;
+}) {
+  const { APP_URL } = getEnv();
+  const link = `${APP_URL}/login?mode=register&email=${encodeURIComponent(opts.to)}`;
+  const by = opts.invitedByName ? `${opts.invitedByName} added you` : "You've been added";
+  return safeSend({
+    to: opts.to,
+    subject: "You've been added to Smash — claim your profile",
+    text: `Hi ${opts.playerName},\n\n${by} to Smash (badminton tournaments & matches). Sign up with this email to claim your player profile — your matches and stats will be linked automatically:\n${link}\n`,
+    html: shell({
+      heading: "Claim your Smash profile",
+      intro: `Hi ${opts.playerName}, ${by.toLowerCase()} to <strong>Smash</strong>. Sign up with <strong>${opts.to}</strong> and your player profile — matches, stats and any tournaments you're in — links automatically.`,
+      cta: { label: "Sign up & claim", href: link },
+      outro: "Already have an account? Just log in — this profile links to the matching email.",
+    }),
+  });
+}
+
 /** Nudge for a player who was invited but hasn't accepted/declined yet. */
 export async function sendInviteReminderEmail(opts: {
   to: string;

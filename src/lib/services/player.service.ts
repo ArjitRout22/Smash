@@ -7,6 +7,7 @@ import { winPercentage } from "@/lib/engines/leaderboard";
 import { GLOBAL_POINTS_PER_WIN } from "@/lib/domain/constants";
 import type { AuthUser } from "@/lib/auth/authorize";
 import { orgFilter, assertOrgAccess, ownOrgId, isPlatformAdmin } from "@/lib/auth/tenancy";
+import { sendPlayerClaimInviteEmail } from "@/lib/email/notifications";
 import type { CreatePlayerSchema, UpdatePlayerSchema, UpdateOwnPlayerInput } from "@/lib/validation/schemas";
 
 type CreateInput = z.infer<typeof CreatePlayerSchema>;
@@ -100,6 +101,8 @@ export async function createPlayer(input: CreateInput, actor: AuthUser) {
     },
   });
   await audit({ actorUserId: actor.id, action: "player.created", entityType: "Player", entityId: player.id, newValue: player });
+  // Invite them to claim this profile by signing up with the same email.
+  await sendPlayerClaimInviteEmail({ to: email, playerName: player.displayName, invitedByName: actor.name });
   return player;
 }
 
