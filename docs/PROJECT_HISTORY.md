@@ -418,6 +418,18 @@ unit/17 integration/build green; prod smoke after deploy.
   teams were already accept-free (members must be registered → added `active`);
   the accept/"Pending" flow only ever applied to standalone teams.
 
+### Phase 14 — Scoring rename + global ranking on International (PR #18)
+- **Labels:** dropped "Sunday" from **League**; renamed **Standard → International**
+  (the 10-win / 2-loss + knockout-bonus preset). Internal config key stays
+  `standard`; only the display changes.
+- **Global leaderboard now ranks by International scoring** (win 10 / loss 2)
+  instead of the old flat 10-per-win / 0-per-loss. New `globalRankingPoints(wins,
+  losses)` in the points engine is the single source, used by the leaderboard
+  page, dashboard top-players, and a player's headline points/rank. Knockout-stage
+  bonuses stay tournament-only (excluded globally), so the board is still
+  derivable from win/loss totals with no per-match recompute. Removed the unused
+  `GLOBAL_POINTS_PER_WIN` constant.
+
 ---
 
 ## Key decisions
@@ -480,6 +492,9 @@ unit/17 integration/build green; prod smoke after deploy.
   report→confirm unchanged.
 - ✅ **Phase 13 live** (PR #17): Teams removed from the nav (built inside a
   tournament instead); tournament match **Cancel** shows only while Scheduled.
+- ✅ **Phase 14 live** (PR #18): scoring systems renamed to **League** /
+  **International**; the global leaderboard now ranks by International scoring
+  (win 10 / loss 2) instead of flat 10-per-win.
 - ✅ CI green on every push; 54 unit + 17 integration tests.
 - ✅ **Custom domain live:** https://smashhero.app (HTTPS; Vercel primary = `www`,
   apex 308-redirects to it).
