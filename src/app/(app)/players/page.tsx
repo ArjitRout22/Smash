@@ -182,8 +182,8 @@ export default function PlayersPage() {
         <CreatePlayerModal
           open={modalOpen}
           onClose={() => setModalOpen(false)}
-          onCreated={(linked) => {
-            success(linked ? "Linked to the existing player for that email" : "Player created");
+          onCreated={() => {
+            success("Player created");
             setModalOpen(false);
             mutate();
           }}
@@ -202,7 +202,7 @@ function CreatePlayerModal({
 }: {
   open: boolean;
   onClose: () => void;
-  onCreated: (linked: boolean) => void;
+  onCreated: () => void;
   onError: (message: string) => void;
 }) {
   const [fullName, setFullName] = useState("");
@@ -241,7 +241,7 @@ function CreatePlayerModal({
     setFieldError(undefined);
     setSubmitting(true);
     try {
-      const res = await api.post<{ linked: boolean }>("/api/players", {
+      await api.post("/api/players", {
         fullName: fullName.trim(),
         displayName: displayName.trim() || undefined,
         email: email.trim(),
@@ -251,9 +251,14 @@ function CreatePlayerModal({
         dateOfBirth: dateOfBirth || undefined,
       });
       reset();
-      onCreated(Boolean(res?.linked));
+      onCreated();
     } catch (err) {
-      onError(err instanceof ApiClientError ? err.message : "Failed to create player");
+      // A duplicate email (existing account or player) is shown inline on the field.
+      if (err instanceof ApiClientError && err.code === "CONFLICT") {
+        setEmailError(err.message);
+      } else {
+        onError(err instanceof ApiClientError ? err.message : "Failed to create player");
+      }
     } finally {
       setSubmitting(false);
     }

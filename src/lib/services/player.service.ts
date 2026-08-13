@@ -61,33 +61,28 @@ export async function getPlayer(actor: AuthUser, id: string) {
 }
 
 /**
- * Create (or reuse) a player. When an email is supplied we NEVER create a second
- * player for the same person:
- *   1. if an account already exists with that email → return its linked player;
- *   2. if a managed player was already pre-created with that email → return it;
- *   3. otherwise create a managed player, storing `invitedEmail` so a later
- *      Create-Player (or, once wired, a signup) resolves to this same record.
- * Returns `{ player, linked }` — `linked: true` means we reused an existing one.
+ * Create a NEW player, keyed by a required email. We never create a duplicate:
+ *   - if an account already exists with that email → reject and tell them to log
+ *     in / reset their password (they're already on Smash; add them via Invite);
+ *   - if a managed player was already pre-created with that email → reject (it
+ *     already exists — invite that player instead);
+ *   - otherwise create a managed player, storing `invitedEmail`.
  */
 export async function createPlayer(input: CreateInput, actor: AuthUser) {
-  const email = input.email?.trim().toLowerCase() || null;
+  const email = input.email.trim().toLowerCase();
 
-  if (email) {
-    // 1) An existing account with this email — reuse its player (dedupe).
-    const user = await prisma.user.findUnique({
-      where: { email },
-      include: { player: true },
-    });
-    if (user?.player && !user.player.deletedAt) {
-      return { player: user.player, linked: true as const };
-    }
-    // 2) A managed player already pre-created with this email — reuse it.
-    const pending = await prisma.player.findFirst({
-      where: { invitedEmail: email, deletedAt: null },
-    });
-    if (pending) {
-      return { player: pending, linked: true as const };
-    }
+  // An existing account owns this email — don't silently link; point them to auth.
+  const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+  if (user) {
+    throw Errors.conflict("An account already exists with this email. Please log in or reset the password — or add them from “Invite players”.");
+  }
+  // A managed player was already created with this email — avoid a duplicate.
+  const existing = await prisma.player.findFirst({
+    where: { invitedEmail: email, deletedAt: null },
+    select: { displayName: true },
+  });
+  if (existing) {
+    throw Errors.conflict(`A player already exists for this email (${existing.displayName}). Add them from “Invite players”.`);
   }
 
   const player = await prisma.player.create({
@@ -105,7 +100,7 @@ export async function createPlayer(input: CreateInput, actor: AuthUser) {
     },
   });
   await audit({ actorUserId: actor.id, action: "player.created", entityType: "Player", entityId: player.id, newValue: player });
-  return { player, linked: false as const };
+  return player;
 }
 
 export async function updatePlayer(id: string, input: UpdateInput, actor: AuthUser) {
