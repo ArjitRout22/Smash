@@ -363,10 +363,24 @@ export async function removeParticipant(actor: AuthUser, tournamentId: string, p
 // --- Invitations (Phase 4): organizer invites any registered player ---------
 
 /** Organizer invites a registered player (from anywhere in the app). */
+/**
+ * Single entry point for adding a player to a tournament (there is no separate
+ * "add" flow). It resolves the right status automatically:
+ *   - a player WITH an account → `invited` (they accept from their dashboard);
+ *   - a managed player WITHOUT an account → `registered` directly (there is no
+ *     one to accept an invitation, so the organizer rosters them);
+ *   - a player who already `requested` to join → `registered` (accept the ask).
+ * Re-inviting a `declined`/`removed`/`withdrawn` player is allowed. Returns the
+ * row (its `status` tells the UI whether it invited or added).
+ */
 export async function inviteToTournament(actor: AuthUser, tournamentId: string, playerId: string) {
   await loadOwnedTournament(actor, tournamentId);
-  const player = await prisma.player.findFirst({ where: { id: playerId, deletedAt: null }, select: { id: true } });
+  const player = await prisma.player.findFirst({
+    where: { id: playerId, deletedAt: null },
+    select: { id: true, user: { select: { id: true } } },
+  });
   if (!player) throw Errors.validation("Player not found");
+  const hasAccount = Boolean(player.user);
 
   const existing = await prisma.tournamentPlayer.findUnique({
     where: { tournamentId_playerId: { tournamentId, playerId } },
@@ -374,12 +388,21 @@ export async function inviteToTournament(actor: AuthUser, tournamentId: string, 
   if (existing?.status === "registered") throw Errors.conflict("This player is already in the tournament");
   if (existing?.status === "invited") throw Errors.conflict("This player has already been invited");
 
+  // Account-holders opt in via an invitation; everyone else is rostered directly.
+  const status = hasAccount && existing?.status !== "requested" ? "invited" : "registered";
+
   const tp = await prisma.tournamentPlayer.upsert({
     where: { tournamentId_playerId: { tournamentId, playerId } },
-    update: { status: "invited" },
-    create: { tournamentId, playerId, status: "invited" },
+    update: { status },
+    create: { tournamentId, playerId, status },
   });
-  await audit({ actorUserId: actor.id, action: "tournament.player.invited", entityType: "Tournament", entityId: tournamentId, newValue: { playerId } });
+  await audit({
+    actorUserId: actor.id,
+    action: status === "invited" ? "tournament.player.invited" : "tournament.player.added",
+    entityType: "Tournament",
+    entityId: tournamentId,
+    newValue: { playerId, status },
+  });
   return tp;
 }
 

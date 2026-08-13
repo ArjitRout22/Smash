@@ -54,8 +54,8 @@ d("multi-tenant isolation", () => {
     bob = await makeOrganizer("bob");
     const t = await createTournament({ name: "Alice Open", format: "singles", visibility: "private" }, alice);
     aliceTournamentId = t.id;
-    const p = await createPlayer({ fullName: "Alice Player" }, alice);
-    alicePlayerId = p.id;
+    const { player } = await createPlayer({ fullName: "Alice Player", email: "alice-player@t.test" }, alice);
+    alicePlayerId = player.id;
   });
 
   afterAll(async () => {
