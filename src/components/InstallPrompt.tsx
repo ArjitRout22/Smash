@@ -1,46 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { X, Download, Share } from "lucide-react";
+import { useInstall } from "@/lib/client/useInstall";
 
-// `beforeinstallprompt` isn't in the DOM lib types.
-interface BeforeInstallPromptEvent extends Event {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
-}
-
-type PromptState = { kind: "ios" } | { kind: "android"; event: BeforeInstallPromptEvent };
 const DISMISS_KEY = "smash-install-dismissed";
 
 /**
- * A dismissible "install app" banner.
- *  - Android/desktop Chrome: captures `beforeinstallprompt` → Install button.
- *  - iOS Safari (no prompt API): shows manual "Share → Add to Home Screen" steps.
- * Hidden if already installed (standalone) or previously dismissed.
+ * Dismissible "install app" banner (Android Install button / iOS home-screen
+ * hint). The permanent, non-dismissible version lives on the Profile page
+ * (InstallCard); both share `useInstall`.
  */
 export function InstallPrompt() {
-  const [state, setState] = useState<PromptState | null>(null);
-  const [dismissed, setDismissed] = useState(false);
-
-  useEffect(() => {
-    const nav = window.navigator as Navigator & { standalone?: boolean };
-    const standalone = window.matchMedia("(display-mode: standalone)").matches || nav.standalone === true;
-    if (standalone || localStorage.getItem(DISMISS_KEY) === "1") return;
-
-    const ua = navigator.userAgent;
-    if (/iphone|ipad|ipod/i.test(ua) && !/crios|fxios|edgios/i.test(ua)) {
-      // One-time environment read; deriving in render isn't possible after SSR.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setState({ kind: "ios" });
-      return;
-    }
-    const onBIP = (e: Event) => {
-      e.preventDefault();
-      setState({ kind: "android", event: e as BeforeInstallPromptEvent });
-    };
-    window.addEventListener("beforeinstallprompt", onBIP);
-    return () => window.removeEventListener("beforeinstallprompt", onBIP);
-  }, []);
+  const { mode, promptInstall } = useInstall();
+  const [dismissed, setDismissed] = useState(
+    () => typeof window !== "undefined" && localStorage.getItem(DISMISS_KEY) === "1"
+  );
 
   function dismiss() {
     setDismissed(true);
@@ -51,21 +26,13 @@ export function InstallPrompt() {
     }
   }
 
-  async function install() {
-    if (state?.kind !== "android") return;
-    await state.event.prompt();
-    await state.event.userChoice;
-    dismiss();
-  }
-
-  if (!state || dismissed) return null;
-  const isIOS = state.kind === "ios";
+  if (dismissed || (mode !== "ios" && mode !== "android")) return null;
 
   return (
     <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-[var(--border)] bg-surface px-4 py-2.5 text-sm">
       <div className="flex min-w-0 items-center gap-2">
         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary text-sm">🏸</span>
-        {isIOS ? (
+        {mode === "ios" ? (
           <span className="text-muted">
             Install Smash: tap <Share className="inline h-4 w-4 -translate-y-0.5" aria-label="Share" /> then{" "}
             <b className="text-foreground">Add to Home Screen</b>.
@@ -75,8 +42,8 @@ export function InstallPrompt() {
         )}
       </div>
       <div className="flex shrink-0 items-center gap-1">
-        {!isIOS && (
-          <button onClick={install} className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:opacity-90">
+        {mode === "android" && (
+          <button onClick={promptInstall} className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:opacity-90">
             <Download className="h-3.5 w-3.5" /> Install
           </button>
         )}
