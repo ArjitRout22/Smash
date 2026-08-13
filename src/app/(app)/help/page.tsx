@@ -102,7 +102,7 @@ const SECTIONS: { title: string; items: Item[] }[] = [
     items: [
       {
         q: "Two scoring systems",
-        a: "Set this per tournament in Settings → Scoring system. “League (Sunday)” is the default: win = 3, lose but reach 15 points = 1, lose under 15 = 0. “Standard” is 10 per win, 2 per loss, plus knockout-stage win bonuses. Switching rescores the standings from the stored results, so the points table updates immediately.",
+        a: "Set this per tournament in Settings → Scoring system. “League” is the default: win = 3, lose but reach 15 points = 1, lose under 15 = 0. “International” is 10 per win, 2 per loss, plus knockout-stage win bonuses. Switching rescores the standings from the stored results, so the points table updates immediately.",
       },
       {
         q: "How the League 15-point floor is judged",
@@ -136,7 +136,7 @@ const SECTIONS: { title: string; items: Item[] }[] = [
     items: [
       {
         q: "Global ranking",
-        a: "The Leaderboard page ranks every player across all workspaces — a flat 10 points per win, 0 per loss.",
+        a: "The Leaderboard page ranks every player across all workspaces using International scoring — 10 points per win, 2 per loss (knockout-stage bonuses are tournament-only and don't apply here).",
       },
       {
         q: "Per-tournament & per-group",

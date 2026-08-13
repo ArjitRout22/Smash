@@ -59,7 +59,7 @@ export default function LeaderboardPage() {
 
   return (
     <div>
-      <PageHeader title="Player Leaderboard" subtitle="Global ranking — 10 points per win, across every workspace." />
+      <PageHeader title="Player Leaderboard" subtitle="Global ranking — International scoring (10 per win, 2 per loss), across every workspace." />
 
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="relative max-w-xs flex-1">

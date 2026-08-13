@@ -138,10 +138,10 @@ export type PointTxType = (typeof POINT_TX_TYPES)[number];
 export const GENDERS = ["male", "female", "other"] as const;
 export type Gender = (typeof GENDERS)[number];
 
-// Global player ranking: a flat 10 points per win, 0 per loss. This drives the
-// cross-workspace leaderboard + a player's headline "Points", independent of any
-// per-tournament points config (which governs standings inside a tournament).
-export const GLOBAL_POINTS_PER_WIN = 10;
+// The global cross-workspace ranking uses the International scoring (win 10 /
+// loss 2) via `globalRankingPoints` in the points engine — see
+// `src/lib/engines/points.ts`. It's independent of each tournament's own points
+// config (which only governs standings inside that tournament).
 
 // Self-declared playing standard. Players can set their own (see /api/me/player).
 export const SKILL_LEVELS = ["beginner", "intermediate", "pro"] as const;
