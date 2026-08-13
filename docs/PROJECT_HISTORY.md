@@ -337,10 +337,28 @@ Kicking off a 7-feature growth push. Batch 1 (PR #8):
   `manifest.webmanifest` / `offline.html` load without auth. Unlocks iOS Web Push
   once installed.
 - Verified live on prod (PWA files serve 200 unauthenticated; QR + WhatsApp render).
-- **Still queued** (requested, not yet built): finish invite-by-email→claim (#6),
-  player identity/rivalry — H2H, streak, last-5, badges (#5), public no-login
-  tournament pages (#2, needs a public route/API pass), live scoring / spectator
-  (#4, needs a realtime-transport decision — likely lightweight polling on Vercel).
+
+Batch 2 (PRs #9, #10):
+- **Invite-by-email → claim** (#6): creating a player by email sends a claim-your-
+  profile signup link; signing up with that email claims the pre-created managed
+  player (links account, clears `invitedEmail`, moves to their workspace) instead
+  of duplicating. Finishes the onboarding loop.
+- **Player identity & rivalry** (#5): `/api/players/[id]/insights` — last-5 form,
+  current streak, top head-to-head rivalries (singles), and derived achievement
+  badges, shown on the public player profile.
+
+Batch 3 (PRs #11, #12):
+- **Public no-login tournament pages** (#2): server-rendered `/t/[id]` (public
+  tournaments only) with standings, results, players, share + "sign in to join";
+  `getPublicTournamentView` returns 404 for private/missing and selects only non-
+  sensitive data; middleware excludes `/t/`. Share/QR now point at `/t/[id]` — the
+  big signup unlock (shared links land on an indexable page, not a login wall).
+- **Live scoring / spectator** (#4): cosmetic `Match.liveA/liveB` (migration),
+  scorer-gated `POST /api/matches/[id]/live` with a +/- live scoreboard; the
+  matches list polls every 4s while in progress; a public **Live now** strip on
+  `/t/[id]` polls `/api/public/tournaments/[id]/live` so friends watch via the
+  shared link (no login). Polling, not WebSockets (Vercel serverless). Saving the
+  real result clears the live score.
 
 ---
 
@@ -388,6 +406,9 @@ Kicking off a 7-feature growth push. Batch 1 (PR #8):
 - ✅ **Phase 9 live** (PR #6): public read-only Players + Matches tabs on the
   tournament page (roster visible to all, registered-only for non-managers), and
   the admin reminder CTA now picks a tournament + specific recipients.
+- ✅ **Phase 10 live** (growth cluster, PRs #8–#12): WhatsApp share, tournament QR,
+  installable PWA, invite-by-email→claim, player identity/rivalry (form/streak/H2H/
+  badges), public no-login `/t/[id]` pages, and live scoring + spectator view.
 - ✅ CI green on every push; 48 unit + 7 integration tests.
 - ✅ **Custom domain live:** https://smashhero.app (HTTPS; Vercel primary = `www`,
   apex 308-redirects to it).
