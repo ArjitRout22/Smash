@@ -1,4 +1,8 @@
 import { prisma } from "@/lib/db/prisma";
+import { Errors } from "@/lib/errors";
+import { audit } from "@/lib/audit";
+import { isPlatformAdmin } from "@/lib/auth/tenancy";
+import type { AuthUser } from "@/lib/auth/authorize";
 import { sendTournamentReminderEmail } from "@/lib/email/notifications";
 
 /**
@@ -47,4 +51,18 @@ export async function runTournamentReminders(now = new Date()) {
     }
   }
   return { tournamentsDue: tournaments.length, emailsSent: sent };
+}
+
+/** Platform-admin on-demand trigger (replaces a scheduled cron). */
+export async function triggerRemindersAsAdmin(actor: AuthUser) {
+  if (!isPlatformAdmin(actor)) throw Errors.forbidden();
+  const result = await runTournamentReminders();
+  await audit({
+    actorUserId: actor.id,
+    action: "reminders.sent",
+    entityType: "System",
+    entityId: "reminders",
+    newValue: result,
+  });
+  return result;
 }

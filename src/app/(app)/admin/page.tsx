@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import useSWR from "swr";
-import { Search, ShieldAlert, Trash2 } from "lucide-react";
+import { Search, ShieldAlert, Trash2, Bell } from "lucide-react";
 import { api, ApiClientError, swrFetcher } from "@/lib/client/api";
 import { PageHeader, EmptyState, ListSkeleton } from "@/components/ui/states";
 import { Card, Badge, Button, Input } from "@/components/ui/primitives";
@@ -26,7 +26,24 @@ export default function AdminPage() {
   const [search, setSearch] = useState("");
   const [target, setTarget] = useState<AdminUser | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [sending, setSending] = useState(false);
   const isAdmin = user?.role === "ADMIN";
+
+  async function sendReminders() {
+    setSending(true);
+    try {
+      const res = await api.post<{ tournamentsDue: number; emailsSent: number }>("/api/admin/reminders");
+      toast.success(
+        res.emailsSent > 0
+          ? `Sent ${res.emailsSent} reminder${res.emailsSent === 1 ? "" : "s"} across ${res.tournamentsDue} tournament${res.tournamentsDue === 1 ? "" : "s"}.`
+          : "No tournaments start in the next 24 hours — nothing to send."
+      );
+    } catch (err) {
+      toast.error(err instanceof ApiClientError ? err.message : "Could not send reminders");
+    } finally {
+      setSending(false);
+    }
+  }
 
   const { data, isLoading, mutate } = useSWR<AdminUser[]>(
     isAdmin ? `/api/admin/users${search.trim() ? `?search=${encodeURIComponent(search.trim())}` : ""}` : null,
@@ -62,6 +79,14 @@ export default function AdminPage() {
   return (
     <div>
       <PageHeader title="Admin · Accounts" subtitle="Review accounts and soft-delete test users (reversible — hides them everywhere and revokes login)." />
+
+      <Card className="mb-6 flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="font-semibold text-foreground">Tournament reminders</h2>
+          <p className="text-sm text-muted">Email registered players about tournaments starting within 24 hours. Sent on demand — no scheduled job.</p>
+        </div>
+        <Button onClick={sendReminders} loading={sending} className="shrink-0"><Bell className="h-4 w-4" /> Send reminders</Button>
+      </Card>
 
       <div className="relative mb-4 max-w-sm">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
