@@ -116,6 +116,82 @@ export async function createTeam(input: CreateInput, actor: AuthUser) {
   return team;
 }
 
+/**
+ * Randomly pair a tournament's UNASSIGNED registered players into DOUBLES teams
+ * (2 per team). Players already on a team are left untouched, and any odd
+ * leftover player is returned as `unassigned` (no half-teams). Additive only —
+ * never modifies existing teams or matches. Auto-names new teams "Team N",
+ * continuing after the current team count.
+ */
+export async function createRandomTeams(actor: AuthUser, tournamentId: string) {
+  const t = await prisma.tournament.findFirst({
+    where: { id: tournamentId, deletedAt: null },
+    select: { organizationId: true },
+  });
+  if (!t) throw Errors.notFound("Tournament");
+  assertOrgAccess(actor, t.organizationId);
+
+  const [registered, assigned, existingCount] = await Promise.all([
+    prisma.tournamentPlayer.findMany({
+      where: { tournamentId, status: "registered" },
+      select: { player: { select: { id: true, displayName: true } } },
+    }),
+    prisma.teamPlayer.findMany({
+      where: { team: { tournamentId, deletedAt: null } },
+      select: { playerId: true },
+    }),
+    prisma.team.count({ where: { tournamentId, deletedAt: null } }),
+  ]);
+
+  const assignedIds = new Set(assigned.map((a) => a.playerId));
+  const eligible = registered.map((r) => r.player).filter((p) => !assignedIds.has(p.id));
+
+  // Fisher–Yates shuffle.
+  for (let i = eligible.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [eligible[i], eligible[j]] = [eligible[j], eligible[i]];
+  }
+
+  const pairs: { id: string; displayName: string }[][] = [];
+  for (let i = 0; i + 1 < eligible.length; i += 2) pairs.push([eligible[i], eligible[i + 1]]);
+  const unassigned = eligible.length % 2 === 1 ? [eligible[eligible.length - 1]] : [];
+
+  if (pairs.length === 0) {
+    throw Errors.validation(
+      eligible.length === 0
+        ? "Every registered player is already on a team."
+        : "Need at least 2 unassigned players to form a doubles team."
+    );
+  }
+
+  // Create all teams atomically so a partial failure never leaves half a draw.
+  const teams = await prisma.$transaction(
+    pairs.map((pair, i) =>
+      prisma.team.create({
+        data: {
+          name: `Team ${existingCount + i + 1}`,
+          teamType: "doubles",
+          tournamentId,
+          organizationId: ownOrgId(actor),
+          teamPlayers: {
+            create: pair.map((p, pos) => ({ playerId: p.id, position: pos + 1, status: "active" as const })),
+          },
+        },
+        include: teamInclude,
+      })
+    )
+  );
+
+  await audit({
+    actorUserId: actor.id,
+    action: "team.random_generated",
+    entityType: "Tournament",
+    entityId: tournamentId,
+    newValue: { created: teams.length, unassigned: unassigned.map((u) => u.id) },
+  });
+  return { created: teams.length, teams, unassigned };
+}
+
 export async function updateTeam(id: string, input: UpdateInput, actor: AuthUser) {
   const existing = await prisma.team.findFirst({ where: { id, deletedAt: null }, include: { teamPlayers: true } });
   if (!existing) throw Errors.notFound("Team");

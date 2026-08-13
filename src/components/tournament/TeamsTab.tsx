@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import useSWR from "swr";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Shuffle, Swords } from "lucide-react";
 import { api, ApiClientError, swrFetcher } from "@/lib/client/api";
 import { Card, Button, Badge, Input, Select, Field } from "@/components/ui/primitives";
 import { EmptyState, ErrorState, ListSkeleton } from "@/components/ui/states";
@@ -10,12 +10,16 @@ import { Modal, ConfirmDialog } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { useAuth } from "@/components/AuthProvider";
 import { PERMS } from "@/lib/client/perms";
+import { GenerateFixturesModal } from "./FixtureModals";
 import type { TeamDTO, TournamentPlayerDTO } from "./types";
 
-export function TeamsTab({ tournamentId }: { tournamentId: string }) {
+export function TeamsTab({ tournamentId, format }: { tournamentId: string; format: string }) {
   const { can } = useAuth();
   const toast = useToast();
+  const canManage = can(PERMS.TEAM_MANAGE);
   const [creating, setCreating] = useState(false);
+  const [randomOpen, setRandomOpen] = useState(false);
+  const [genMatches, setGenMatches] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -23,14 +27,31 @@ export function TeamsTab({ tournamentId }: { tournamentId: string }) {
     `/api/teams?tournamentId=${tournamentId}`,
     swrFetcher
   );
+  const { data: players, mutate: mutatePlayers } = useSWR<TournamentPlayerDTO[]>(
+    `/api/tournaments/${tournamentId}/players`,
+    swrFetcher
+  );
+
+  const teams = useMemo(() => data ?? [], [data]);
+
+  // Registered players not already on a team → available for random pairing.
+  const unassigned = useMemo(() => {
+    const registered = (players ?? []).filter((tp) => tp.status === "registered");
+    const assigned = new Set(teams.flatMap((t) => t.teamPlayers.map((tp) => tp.player.id)));
+    return registered.filter((tp) => !assigned.has(tp.player.id)).map((tp) => tp.player);
+  }, [players, teams]);
+
+  async function refresh() {
+    await Promise.all([mutate(), mutatePlayers()]);
+  }
 
   async function remove() {
     if (!deleteId) return;
     setDeleting(true);
     try {
       await api.del(`/api/teams/${deleteId}`);
-      toast.success("Team deleted");
-      mutate();
+      toast.success("Team deleted — its players are available again");
+      refresh();
     } catch (err) {
       toast.error(err instanceof ApiClientError ? err.message : "Could not delete team");
     } finally {
@@ -41,32 +62,57 @@ export function TeamsTab({ tournamentId }: { tournamentId: string }) {
 
   return (
     <div>
-      <div className="mb-4 flex justify-end">
-        {can(PERMS.TEAM_MANAGE) && <Button onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> New team</Button>}
+      <div className="mb-4 flex flex-wrap justify-end gap-2">
+        {canManage && (
+          <>
+            <Button variant="outline" onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> New team</Button>
+            <Button variant="outline" onClick={() => setRandomOpen(true)}><Shuffle className="h-4 w-4" /> Create random teams</Button>
+            {teams.length >= 2 && (
+              <Button onClick={() => setGenMatches(true)}><Swords className="h-4 w-4" /> Generate matches</Button>
+            )}
+          </>
+        )}
       </div>
 
       {isLoading && <ListSkeleton rows={3} />}
       {error && <ErrorState onRetry={() => mutate()} />}
-      {data && data.length === 0 && <EmptyState title="No teams yet" message="Create doubles teams for this tournament." />}
+      {data && teams.length === 0 && (
+        <EmptyState
+          title="No teams yet"
+          message="Create doubles teams manually, or use “Create random teams” to auto-pair everyone who's joined."
+        />
+      )}
 
-      {data && data.length > 0 && (
+      {data && teams.length > 0 && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {data.map((team) => (
+          {teams.map((team) => (
             <Card key={team.id} className="p-4">
               <div className="mb-2 flex items-center justify-between">
                 <h3 className="font-semibold">{team.name}</h3>
                 <div className="flex items-center gap-2">
                   <Badge color="slate">{team.teamType}</Badge>
-                  {can(PERMS.TEAM_MANAGE) && (
+                  {canManage && (
                     <button onClick={() => setDeleteId(team.id)} className="text-muted hover:text-[var(--danger)]" aria-label="Delete team">
                       <Trash2 className="h-4 w-4" />
                     </button>
                   )}
                 </div>
               </div>
-              <p className="text-sm text-muted">{team.teamPlayers.map((tp) => tp.player.displayName).join(" & ")}</p>
+              <p className="text-sm text-muted">{team.teamPlayers.map((tp) => tp.player.displayName).join(" + ")}</p>
             </Card>
           ))}
+        </div>
+      )}
+
+      {/* Any registered player not yet on a team — so odd/leftover players are obvious. */}
+      {canManage && unassigned.length > 0 && (
+        <div className="mt-6">
+          <h4 className="mb-2 text-sm font-semibold text-muted">Unassigned players ({unassigned.length})</h4>
+          <div className="flex flex-wrap gap-2">
+            {unassigned.map((p) => (
+              <Badge key={p.id} color="amber">{p.displayName}</Badge>
+            ))}
+          </div>
         </div>
       )}
 
@@ -74,7 +120,25 @@ export function TeamsTab({ tournamentId }: { tournamentId: string }) {
         <CreateTeamModal
           tournamentId={tournamentId}
           onClose={() => setCreating(false)}
-          onCreated={() => { mutate(); toast.success("Team created"); }}
+          onCreated={() => { refresh(); toast.success("Team created"); }}
+        />
+      )}
+
+      {randomOpen && (
+        <RandomTeamsModal
+          tournamentId={tournamentId}
+          available={unassigned.length}
+          onClose={() => setRandomOpen(false)}
+          onDone={(created) => { refresh(); toast.success(`${created} team${created === 1 ? "" : "s"} created`); }}
+        />
+      )}
+
+      {genMatches && (
+        <GenerateFixturesModal
+          tournamentId={tournamentId}
+          format={format}
+          onClose={() => setGenMatches(false)}
+          onDone={() => toast.success("Matches generated — see the Matches tab")}
         />
       )}
 
@@ -82,12 +146,89 @@ export function TeamsTab({ tournamentId }: { tournamentId: string }) {
         open={Boolean(deleteId)}
         onClose={() => setDeleteId(null)}
         onConfirm={remove}
-        title="Delete team?"
-        message="This cannot be undone. Teams already used in matches cannot be deleted."
-        confirmLabel="Delete"
+        title="Delete this team?"
+        message="This team will be removed and its players will become available again. (Teams already used in matches can't be deleted.)"
+        confirmLabel="Delete team"
         danger
         loading={deleting}
       />
+    </div>
+  );
+}
+
+/** Confirmation + generate for random doubles pairing. */
+function RandomTeamsModal({
+  tournamentId,
+  available,
+  onClose,
+  onDone,
+}: {
+  tournamentId: string;
+  available: number;
+  onClose: () => void;
+  onDone: (created: number) => void;
+}) {
+  const toast = useToast();
+  const [saving, setSaving] = useState(false);
+  const teamsToCreate = Math.floor(available / 2);
+  const leftover = available % 2;
+  const canGenerate = teamsToCreate >= 1;
+
+  async function generate() {
+    if (!canGenerate) return;
+    setSaving(true);
+    try {
+      const res = await api.post<{ created: number }>("/api/teams/random", { tournamentId });
+      onDone(res.created);
+      onClose();
+    } catch (err) {
+      toast.error(err instanceof ApiClientError ? err.message : "Could not create teams");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title="Create random teams?"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button onClick={generate} loading={saving} disabled={!canGenerate}>Generate teams</Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-4">
+        <p className="text-sm text-muted">
+          Players will be randomly paired into doubles teams. You can review or delete teams before generating matches.
+        </p>
+        <dl className="divide-y divide-[var(--border)] rounded-lg border border-[var(--border)]">
+          <Row label="Available players" value={String(available)} />
+          <Row label="Format" value="Doubles" />
+          <Row label="Teams that will be created" value={String(teamsToCreate)} />
+        </dl>
+        {leftover > 0 && canGenerate && (
+          <p className="text-xs text-amber-600 dark:text-amber-400">
+            1 player will be left unassigned (odd number of available players).
+          </p>
+        )}
+        {!canGenerate && (
+          <p className="text-xs text-[var(--danger)]">
+            Need at least 2 unassigned players to form a doubles team.
+          </p>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between px-3 py-2 text-sm">
+      <dt className="text-muted">{label}</dt>
+      <dd className="font-medium text-foreground">{value}</dd>
     </div>
   );
 }
