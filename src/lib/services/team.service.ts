@@ -255,38 +255,58 @@ export async function changeTeamPair(actor: AuthUser, teamId: string, input: Cha
   if (input.inPlayerId === input.outPlayerId) throw Errors.validation("Pick a different replacement player.");
   if (members.some((m) => m.playerId === input.inPlayerId)) throw Errors.validation("That player is already in this team.");
 
-  // Replacement must be registered in this tournament…
+  // Replacement must be registered in this tournament.
   const reg = await prisma.tournamentPlayer.findFirst({
     where: { tournamentId: team.tournamentId ?? undefined, playerId: input.inPlayerId, status: "registered" },
   });
   if (!reg) throw Errors.validation("The replacement must be a player registered in this tournament.");
-  // …and not already on another team in this tournament.
-  const onOther = await prisma.teamPlayer.findFirst({
-    where: { playerId: input.inPlayerId, status: "active", teamId: { not: teamId }, team: { tournamentId: team.tournamentId, deletedAt: null } },
-    include: { team: { select: { name: true } } },
-  });
-  if (onOther) throw Errors.validation(`That player is already on ${onOther.team.name}.`);
 
-  // A locked team requires an explicit second confirmation (force).
-  if (team.lockedAt && !input.force) {
-    throw Errors.conflict("This team is locked. Confirm again to change its pairing.");
+  // If the replacement is already on ANOTHER team in this tournament, we SWAP —
+  // the outgoing player takes their spot — so both teams stay complete pairs
+  // (rather than leaving the other team a player short).
+  const inMembership = await prisma.teamPlayer.findFirst({
+    where: { playerId: input.inPlayerId, status: "active", teamId: { not: teamId }, team: { tournamentId: team.tournamentId, deletedAt: null } },
+    include: { team: { include: { teamPlayers: { include: { player: { select: { id: true, displayName: true } } } } } } },
+  });
+  const otherTeam = inMembership?.team ?? null;
+
+  // Case C — a live match on EITHER team blocks the change.
+  if (otherTeam) {
+    const liveOther = await prisma.matchParticipant.count({
+      where: { teamId: otherTeam.id, match: { status: "in_progress", deletedAt: null } },
+    });
+    if (liveOther > 0) throw Errors.conflict(`${otherTeam.name} currently has an active match. The pairing can be changed after it completes.`);
+  }
+
+  // A locked team involved requires an explicit second confirmation (force).
+  if ((team.lockedAt || otherTeam?.lockedAt) && !input.force) {
+    throw Errors.conflict("A team involved is locked. Confirm again to change the pairing.");
   }
 
   const inPlayer = await prisma.player.findUniqueOrThrow({ where: { id: input.inPlayerId }, select: { displayName: true } });
-  const before = members.map((m) => ({ id: m.playerId, name: m.player.displayName }));
-  const after = members.map((m) =>
+  const aBefore = members.map((m) => ({ id: m.playerId, name: m.player.displayName }));
+  const aAfter = members.map((m) =>
     m.playerId === input.outPlayerId ? { id: input.inPlayerId, name: inPlayer.displayName } : { id: m.playerId, name: m.player.displayName }
   );
 
   await prisma.$transaction(async (tx) => {
-    // Swap membership — team_id stays the same; keep the replaced slot's position.
-    await tx.teamPlayer.delete({ where: { id: outMember.id } });
-    await tx.teamPlayer.create({ data: { teamId, playerId: input.inPlayerId, position: outMember.position, status: "active" } });
+    if (otherTeam && inMembership) {
+      // SWAP between team A and otherTeam; keep each vacated slot's position.
+      await tx.teamPlayer.delete({ where: { id: outMember.id } });
+      await tx.teamPlayer.delete({ where: { id: inMembership.id } });
+      await tx.teamPlayer.create({ data: { teamId, playerId: input.inPlayerId, position: outMember.position, status: "active" } });
+      await tx.teamPlayer.create({ data: { teamId: otherTeam.id, playerId: input.outPlayerId, position: inMembership.position, status: "active" } });
+    } else {
+      // Plain replace — the outgoing player leaves the team (back to unassigned).
+      await tx.teamPlayer.delete({ where: { id: outMember.id } });
+      await tx.teamPlayer.create({ data: { teamId, playerId: input.inPlayerId, position: outMember.position, status: "active" } });
+    }
 
-    // Refresh the snapshot on still-SCHEDULED matches only (future fixtures);
+    // Refresh the snapshot on still-SCHEDULED matches of the affected team(s);
     // in-progress / completed / cancelled matches stay frozen.
+    const affectedTeamIds = otherTeam ? [teamId, otherTeam.id] : [teamId];
     const scheduled = await tx.matchParticipant.findMany({
-      where: { teamId, match: { status: "scheduled", deletedAt: null } },
+      where: { teamId: { in: affectedTeamIds }, match: { status: "scheduled", deletedAt: null } },
       select: { matchId: true },
     });
     for (const mid of new Set(scheduled.map((s) => s.matchId))) {
@@ -299,15 +319,35 @@ export async function changeTeamPair(actor: AuthUser, teamId: string, input: Cha
         tournamentId: team.tournamentId,
         removedPlayerId: input.outPlayerId,
         addedPlayerId: input.inPlayerId,
-        playersBefore: before as unknown as Prisma.InputJsonValue,
-        playersAfter: after as unknown as Prisma.InputJsonValue,
+        playersBefore: aBefore as unknown as Prisma.InputJsonValue,
+        playersAfter: aAfter as unknown as Prisma.InputJsonValue,
         reason: input.reason,
         changedById: actor.id,
       },
     });
+    // Record the mirror change on the other team when this was a swap.
+    if (otherTeam && inMembership) {
+      const bMembers = otherTeam.teamPlayers.filter((tp) => tp.status === "active");
+      const bBefore = bMembers.map((m) => ({ id: m.playerId, name: m.player.displayName }));
+      const bAfter = bMembers.map((m) =>
+        m.playerId === input.inPlayerId ? { id: input.outPlayerId, name: outMember.player.displayName } : { id: m.playerId, name: m.player.displayName }
+      );
+      await tx.teamPairingChange.create({
+        data: {
+          teamId: otherTeam.id,
+          tournamentId: team.tournamentId,
+          removedPlayerId: input.inPlayerId,
+          addedPlayerId: input.outPlayerId,
+          playersBefore: bBefore as unknown as Prisma.InputJsonValue,
+          playersAfter: bAfter as unknown as Prisma.InputJsonValue,
+          reason: input.reason ? `Swap with ${team.name}: ${input.reason}` : `Swapped with ${team.name}`,
+          changedById: actor.id,
+        },
+      });
+    }
   });
 
-  await audit({ actorUserId: actor.id, action: "team.pair_changed", entityType: "Team", entityId: teamId, previousValue: { players: before }, newValue: { players: after, reason: input.reason ?? null } });
+  await audit({ actorUserId: actor.id, action: "team.pair_changed", entityType: "Team", entityId: teamId, previousValue: { players: aBefore }, newValue: { players: aAfter, reason: input.reason ?? null, swappedWith: otherTeam?.id ?? null } });
   return getTeam(actor, teamId);
 }
 

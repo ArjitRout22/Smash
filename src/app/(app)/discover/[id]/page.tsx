@@ -14,10 +14,11 @@ import { titleCase } from "@/lib/client/format";
 import { OverviewTab } from "@/components/tournament/OverviewTab";
 import { RosterTab } from "@/components/tournament/RosterTab";
 import { MatchesTab } from "@/components/tournament/MatchesTab";
+import { TeamsTab } from "@/components/tournament/TeamsTab";
 import { LeaderboardTab } from "@/components/tournament/LeaderboardTab";
 import type { TournamentDetail } from "@/components/tournament/types";
 
-type Tab = "Overview" | "Players" | "Matches" | "Leaderboard";
+type Tab = "Overview" | "Players" | "Teams" | "Matches" | "Leaderboard";
 
 export default function PublicTournamentPage() {
   const { id } = useParams<{ id: string }>();
@@ -78,15 +79,18 @@ export default function PublicTournamentPage() {
       />
 
       <div className="mb-6 flex gap-1 overflow-x-auto border-b border-[var(--border)]">
-        {(["Overview", "Players", "Matches", "Leaderboard"] as Tab[]).map((t) => (
-          <button key={t} onClick={() => setTab(t)} className={`whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium transition ${tab === t ? "border-[var(--primary)] text-foreground" : "border-transparent text-muted hover:text-foreground"}`}>
-            {t}
-          </button>
-        ))}
+        {(["Overview", "Players", "Teams", "Matches", "Leaderboard"] as Tab[])
+          .filter((t) => (t === "Teams" ? data.format !== "singles" : true))
+          .map((t) => (
+            <button key={t} onClick={() => setTab(t)} className={`whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium transition ${tab === t ? "border-[var(--primary)] text-foreground" : "border-transparent text-muted hover:text-foreground"}`}>
+              {t}
+            </button>
+          ))}
       </div>
 
       {tab === "Overview" && <OverviewTab tournament={data} />}
       {tab === "Players" && <RosterTab tournamentId={id} />}
+      {tab === "Teams" && <TeamsTab tournamentId={id} format={data.format} canManage={Boolean(data.canManage)} />}
       {tab === "Matches" && <MatchesTab tournamentId={id} format={data.format} canManage={Boolean(data.canManage)} />}
       {tab === "Leaderboard" && <LeaderboardTab tournamentId={id} pointsConfig={data.pointsConfig} />}
 

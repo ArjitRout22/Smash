@@ -16,10 +16,20 @@ import type { TeamDTO, TournamentPlayerDTO, PairingChangeDTO } from "./types";
 
 type PlayerLite = { id: string; displayName: string };
 
-export function TeamsTab({ tournamentId, format }: { tournamentId: string; format: string }) {
+export function TeamsTab({
+  tournamentId,
+  format,
+  canManage: canManageTournament = false,
+}: {
+  tournamentId: string;
+  format: string;
+  /** Whether the VIEWER manages THIS tournament. Team-building actions require
+   *  it, so the tab reads like the others for non-owners. */
+  canManage?: boolean;
+}) {
   const { can } = useAuth();
   const toast = useToast();
-  const canManage = can(PERMS.TEAM_MANAGE);
+  const canManage = canManageTournament && can(PERMS.TEAM_MANAGE);
   const [creating, setCreating] = useState(false);
   const [randomOpen, setRandomOpen] = useState(false);
   const [genMatches, setGenMatches] = useState(false);
@@ -98,7 +108,7 @@ export function TeamsTab({ tournamentId, format }: { tournamentId: string; forma
       {data && teams.length === 0 && (
         <EmptyState
           title="No teams yet"
-          message="Create doubles teams manually, or use “Create random teams” to auto-pair everyone who's joined."
+          message={canManage ? "Create doubles teams manually, or use “Create random teams” to auto-pair everyone who's joined." : "The organizer hasn't set up teams yet."}
         />
       )}
 
@@ -310,13 +320,13 @@ function ChangePairModal({
             ))}
             {assigned.length > 0 && (
               <>
-                <p className="px-2 pt-2 text-xs font-semibold uppercase tracking-wide text-muted">Already assigned</p>
+                <p className="px-2 pt-2 text-xs font-semibold uppercase tracking-wide text-muted">On another team — picking one swaps places</p>
                 {assigned.map((p) => (
-                  <div key={p.id} className="flex items-center gap-3 rounded-lg px-2 py-1.5 opacity-60">
-                    <Lock className="h-3.5 w-3.5 text-muted" />
-                    <span className="text-sm">{p.displayName}</span>
+                  <label key={p.id} className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-surface-2">
+                    <input type="radio" name="newPlayer" checked={inId === p.id} onChange={() => setInId(p.id)} className="h-4 w-4 accent-[var(--primary)]" />
+                    <span className="text-sm font-medium">{p.displayName}</span>
                     <span className="ml-auto text-xs text-muted">{assignedElsewhere.get(p.id)}</span>
-                  </div>
+                  </label>
                 ))}
               </>
             )}
@@ -328,7 +338,9 @@ function ChangePairModal({
         </Field>
 
         <p className="text-xs text-muted">
-          ⚠️ Upcoming fixtures will use the new pairing. Completed matches keep their original players and results.
+          {inId && assignedElsewhere.has(inId)
+            ? `⚠️ ${members.find((m) => m.id === outId)?.displayName ?? "This player"} and this player will swap teams (both stay complete pairs). Upcoming fixtures update; completed matches keep their original players.`
+            : "⚠️ Upcoming fixtures will use the new pairing. Completed matches keep their original players and results."}
         </p>
         {team.lockedAt && (
           <p className="text-xs text-amber-600 dark:text-amber-400">This team is locked — confirm to change its pairing.</p>
