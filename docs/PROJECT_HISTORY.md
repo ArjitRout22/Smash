@@ -566,6 +566,28 @@ no new message table. Migration `20260814080811`. Integration-tested.
 - **Follow-up (infra, not code):** set the Vercel function region near Singapore
   and/or adopt the pooled Neon URL (pending PR #1) to cut cross-region latency.
 
+### Phase 24 — Match reset, deterministic round schedule, team-name snapshot, UI (PRs #30–#32)
+- **Undo a mis-scored match (PR #30).** `resetMatchResult` + `DELETE /api/matches/[id]/scores`:
+  wipes a match's games + point ledger, clears the winner, vacates any downstream
+  bracket slot, returns it to `scheduled`, and recomputes tournament + global
+  standings. Fixes scores entered by mistake polluting the leaderboard/stats.
+  Scorer-gated. (Used it to clean a live tournament: 2 mis-scored matches → all
+  18 back to scheduled, leaderboard rolled back to 0.)
+- **Deterministic cross-group round schedule (PR #31).** Two equal-size groups now
+  get a circle-method schedule: `2×3, rounds:2` → 6 rounds × 3 matches, every
+  A-team meets every B-team twice, every team once per round (6 each), courts
+  rotate; round offsets `[0,1,2,1,2,0]`. Persists `round` + `courtNumber`. Other
+  shapes keep the flat behaviour. Group fixtures now carry a `round`, so
+  `getBracket` excludes group/round_robin stages (don't render as a knockout).
+  Batched-write perf fix intact.
+- **UI (PR #31).** Removed the broken WhatsApp share button everywhere (native
+  share + copy only); made player-profile header CTAs responsive.
+- **Team-name snapshot (PR #32).** New `MatchParticipant.teamName` point-in-time
+  snapshot (migration backfills it). Renaming a team only refreshes STILL-scheduled
+  fixtures; in-progress/completed matches keep the name they were played under.
+  Captured at generateFixtures/createMatch/generateBracket; `serializeMatch` labels
+  prefer the snapshot.
+
 ---
 
 ## Key decisions
@@ -657,6 +679,12 @@ no new message table. Migration `20260814080811`. Integration-tested.
   generation (Neon/Singapore ↔ Vercel/US-East transaction-timeout for the 18-match
   double round-robin) by batching the writes into a few `createMany` calls
   (~150 round-trips → ~6).
+- ✅ **Phase 24 live** (PRs #30–#32): undo a mis-scored match
+  (`DELETE /api/matches/[id]/scores` → back to scheduled + recompute);
+  deterministic cross-group **round schedule** (6 rounds × 3, court rotation) with
+  group fixtures kept out of the bracket view; removed the broken WhatsApp share +
+  responsive profile CTAs; **team-name snapshot** so a rename only affects
+  scheduled matches.
 - ✅ CI green on every push; 54 unit + 17 integration tests.
 - ✅ **Custom domain live:** https://smashhero.app (HTTPS; Vercel primary = `www`,
   apex 308-redirects to it).
