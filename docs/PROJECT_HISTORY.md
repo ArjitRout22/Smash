@@ -507,6 +507,17 @@ for incoming + connected. **Chat** once connected reuses the polymorphic
 `MatchComment` store (new `play_request` entity type, gated to the two users) —
 no new message table. Migration `20260814080811`. Integration-tested.
 
+### Phase 21 — Teams tab readable to non-owners + pair-change swap (PR #27)
+- **Teams tab on `/discover/[id]`** (doubles tournaments): `TeamsTab` gains a
+  per-tournament `canManage`; all team-building actions gate on it, so non-owners
+  get a read-only view (same pattern as the Matches read-only fix).
+- **Change pair with an already-assigned player → SWAP.** Picking a replacement
+  who's on another team now swaps the two players (both teams stay complete pairs)
+  instead of being rejected. Blocks on a live match on either team; a locked team
+  either side needs `force`; both teams' scheduled snapshots refresh + both get a
+  pairing-history row. Unassigned replacements still do a plain replace. No schema
+  change.
+
 ---
 
 ## Key decisions
@@ -587,6 +598,9 @@ no new message table. Migration `20260814080811`. Integration-tested.
 - ✅ **Phase 20 live** (PR #26): **nearby players + request-to-play + chat** —
   opt-in discovery around your home location, accept/decline, connected chat
   (reuses the comment store).
+- ✅ **Phase 21 live** (PR #27): Teams tab readable to non-owners on the public
+  page; and changing a pair with an already-assigned player now **swaps** (both
+  teams stay complete).
 - ✅ CI green on every push; 54 unit + 17 integration tests.
 - ✅ **Custom domain live:** https://smashhero.app (HTTPS; Vercel primary = `www`,
   apex 308-redirects to it).
