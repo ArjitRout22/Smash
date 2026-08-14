@@ -1,4 +1,120 @@
 import { prisma } from "@/lib/db/prisma";
+import { smashHeroRating, globalRankingPoints } from "@/lib/engines/points";
+
+/**
+ * Read-only, no-login "viral" player profile. Aggregate numbers come from the
+ * maintained ranking (all play); the recent-results / tournament-history detail
+ * is limited to PUBLIC tournaments so private events are never exposed. Returns
+ * null if the player doesn't exist.
+ */
+export async function getPublicPlayerProfile(id: string) {
+  const player = await prisma.player.findFirst({
+    where: { id, deletedAt: null },
+    select: {
+      id: true,
+      displayName: true,
+      fullName: true,
+      city: true,
+      ranking: { select: { wins: true, losses: true, matchesPlayed: true, tournamentsPlayed: true, titles: true } },
+    },
+  });
+  if (!player) return null;
+
+  const r = player.ranking;
+  const wins = r?.wins ?? 0;
+  const losses = r?.losses ?? 0;
+  const matchesPlayed = r?.matchesPlayed ?? 0;
+
+  // Completed matches the player actually played (singles playerId or doubles
+  // snapshot), in PUBLIC tournaments only, newest first.
+  const parts = await prisma.matchParticipant.findMany({
+    where: {
+      OR: [{ playerId: id }, { snapshotPlayers: { some: { playerId: id } } }],
+      match: { status: "completed", deletedAt: null, tournament: { deletedAt: null, visibility: "public" } },
+    },
+    orderBy: { match: { createdAt: "desc" } },
+    take: 40,
+    select: {
+      side: true,
+      isWinner: true,
+      gamesWon: true,
+      match: {
+        select: {
+          id: true,
+          createdAt: true,
+          tournament: { select: { id: true, name: true } },
+          participants: {
+            select: {
+              side: true,
+              gamesWon: true,
+              teamId: true,
+              playerId: true,
+              team: { select: { name: true } },
+              player: { select: { displayName: true } },
+              snapshotPlayers: { select: { displayName: true }, orderBy: { position: "asc" } },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const sideLabel = (p: { team: { name: string } | null; player: { displayName: string } | null; snapshotPlayers: { displayName: string }[] }) =>
+    p.snapshotPlayers.length ? p.snapshotPlayers.map((s) => s.displayName).join(" & ") : p.team?.name ?? p.player?.displayName ?? "TBD";
+
+  const recentResults = parts.slice(0, 10).map((p) => {
+    const opp = p.match.participants.find((x) => x.side !== p.side) ?? null;
+    const mine = p.match.participants.find((x) => x.side === p.side) ?? null;
+    return {
+      matchId: p.match.id,
+      tournamentId: p.match.tournament.id,
+      tournamentName: p.match.tournament.name,
+      opponent: opp ? sideLabel(opp) : "—",
+      won: p.isWinner,
+      score: `${mine?.gamesWon ?? 0}–${opp?.gamesWon ?? 0}`,
+    };
+  });
+
+  // Current streak = leading run of the same result (newest first).
+  const form = parts.map((p) => (p.isWinner ? "W" : "L"));
+  let winStreak = 0;
+  for (const f of form) {
+    if (f === "W") winStreak += 1;
+    else break;
+  }
+
+  // Public tournaments the player appeared in.
+  const tourMap = new Map<string, { id: string; name: string; matches: number }>();
+  for (const p of parts) {
+    const t = p.match.tournament;
+    const e = tourMap.get(t.id) ?? { id: t.id, name: t.name, matches: 0 };
+    e.matches += 1;
+    tourMap.set(t.id, e);
+  }
+  const tournamentHistory = [...tourMap.values()];
+
+  // Global rank (on-read) by International scoring — how many players have more.
+  const myPoints = globalRankingPoints(wins, losses);
+  const all = await prisma.playerRanking.findMany({ select: { wins: true, losses: true } });
+  const rank = matchesPlayed > 0 ? 1 + all.filter((x) => globalRankingPoints(x.wins, x.losses) > myPoints).length : null;
+
+  return {
+    id: player.id,
+    displayName: player.displayName,
+    fullName: player.fullName,
+    city: player.city,
+    rating: smashHeroRating(wins, losses),
+    wins,
+    losses,
+    matchesPlayed,
+    tournamentsPlayed: r?.tournamentsPlayed ?? 0,
+    titles: r?.titles ?? 0,
+    winStreak,
+    rank,
+    recentResults,
+    tournamentHistory,
+  };
+}
 
 /**
  * Read-only data for the PUBLIC (no-login) tournament page. Returns null unless
