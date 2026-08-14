@@ -330,7 +330,10 @@ export async function generateFixtures(tournamentId: string, input: GenerateFixt
   } else {
     const teams = await prisma.team.findMany({
       where: { id: { in: allIds }, deletedAt: null },
-      select: { id: true, tournamentId: true, teamPlayers: { where: { status: "invited" }, select: { id: true } } },
+      // Pull every member's status so we can check both "no pending invites" and
+      // "exactly 2 active players" — a doubles fixture needs a full pair on each
+      // side, otherwise the match is unplayable/unscorable downstream.
+      select: { id: true, name: true, tournamentId: true, teamPlayers: { select: { status: true } } },
     });
     const byId = new Map(teams.map((t) => [t.id, t]));
     for (const id of allIds) {
@@ -338,8 +341,13 @@ export async function generateFixtures(tournamentId: string, input: GenerateFixt
       if (!t) throw Errors.invalidMatchConfig("One of the selected teams doesn't exist");
       if (t.tournamentId && t.tournamentId !== tournamentId)
         throw Errors.invalidMatchConfig("A selected team belongs to a different tournament");
-      if (t.teamPlayers.length > 0)
-        throw Errors.invalidMatchConfig("A selected team has a pending invite — all members must accept first");
+      if (t.teamPlayers.some((m) => m.status === "invited"))
+        throw Errors.invalidMatchConfig(`"${t.name}" has a pending invite — all members must accept before fixtures can be generated`);
+      const activeCount = t.teamPlayers.filter((m) => m.status === "active").length;
+      if (activeCount !== 2)
+        throw Errors.invalidMatchConfig(
+          `Each doubles team must have exactly 2 active players — "${t.name}" has ${activeCount}. Complete every team before generating fixtures.`
+        );
     }
   }
 
