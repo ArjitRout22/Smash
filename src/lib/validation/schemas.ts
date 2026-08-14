@@ -45,8 +45,18 @@ export const UpdateOwnPlayerSchema = z.object({
   locationName: z.string().trim().max(200).nullable().optional(),
   locationLat: z.number().min(-90).max(90).nullable().optional(),
   locationLng: z.number().min(-180).max(180).nullable().optional(),
+  discoverable: z.boolean().optional(), // opt-in to "players near you"
 });
 export type UpdateOwnPlayerInput = z.infer<typeof UpdateOwnPlayerSchema>;
+
+// A "let's play" request to a nearby player.
+export const CreatePlayRequestSchema = z.object({
+  toPlayerId: z.string().uuid(),
+  note: z.string().trim().max(200).optional(),
+});
+export const PlayRequestActionSchema = z.object({
+  action: z.enum(["accept", "decline", "cancel"]),
+});
 
 // --- Tournaments ------------------------------------------------------------
 export const CreateTournamentSchema = z

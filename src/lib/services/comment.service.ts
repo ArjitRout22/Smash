@@ -17,10 +17,10 @@ import type { CreateCommentInput } from "@/lib/validation/schemas";
  *    admin may moderate. In both cases you can always delete your own comment.
  */
 
-export type CommentEntityType = "match" | "casual_match";
+export type CommentEntityType = "match" | "casual_match" | "play_request";
 
 function assertEntityType(t: string): CommentEntityType {
-  if (t === "match" || t === "casual_match") return t;
+  if (t === "match" || t === "casual_match" || t === "play_request") return t;
   throw Errors.validation("Unknown comment thread");
 }
 
@@ -47,6 +47,19 @@ async function assertCommentAccess(
       actor.id === m.tournament.organizerId ||
       actor.id === m.tournament.createdById;
     return { canModerate };
+  }
+
+  if (entityType === "play_request") {
+    // Chat is unlocked only once the two players have CONNECTED (accepted), and
+    // only they can see it.
+    const r = await prisma.playRequest.findUnique({
+      where: { id: entityId },
+      select: { fromUserId: true, toUserId: true, status: true },
+    });
+    if (!r) throw Errors.notFound("Conversation");
+    if (![r.fromUserId, r.toUserId].includes(actor.id)) throw Errors.notFound("Conversation");
+    if (r.status !== "accepted") throw Errors.invalidState("You can chat once the request is accepted.");
+    return { canModerate: isPlatformAdmin(actor) };
   }
 
   // casual_match — only the (up to four) participants; don't reveal others.

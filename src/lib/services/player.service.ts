@@ -147,6 +147,7 @@ export async function updateOwnPlayer(actor: AuthUser, input: UpdateOwnPlayerInp
       locationName: input.locationName === undefined ? undefined : input.locationName,
       locationLat: input.locationLat === undefined ? undefined : input.locationLat,
       locationLng: input.locationLng === undefined ? undefined : input.locationLng,
+      discoverable: input.discoverable === undefined ? undefined : input.discoverable,
     },
     include: { ranking: true },
   });

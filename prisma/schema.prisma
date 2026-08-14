@@ -177,6 +177,7 @@ model Player {
   locationName   String?
   locationLat    Float?
   locationLng    Float?
+  discoverable   Boolean  @default(false) // opt-in to appear in "players near you"
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
   deletedAt      DateTime?
@@ -194,10 +195,32 @@ model Player {
   casualAsOpponent   CasualMatch[] @relation("CasualOpponentPlayer")
   casualAsChallengerPartner CasualMatch[] @relation("CasualChallengerPartner")
   casualAsOpponentPartner   CasualMatch[] @relation("CasualOpponentPartner")
+  playRequestsSent     PlayRequest[] @relation("PlayRequestFrom")
+  playRequestsReceived PlayRequest[] @relation("PlayRequestTo")
 
   @@index([organizationId])
   @@index([deletedAt])
   @@index([fullName])
+  @@index([discoverable])
+}
+
+// A "let's play" request between two account-holding players (nearby discovery).
+model PlayRequest {
+  id           String    @id @default(uuid())
+  fromPlayerId String
+  fromUserId   String
+  toPlayerId   String
+  toUserId     String
+  status       String    @default("pending") // pending|accepted|declined|cancelled
+  note         String?
+  createdAt    DateTime  @default(now())
+  respondedAt  DateTime?
+
+  fromPlayer Player @relation("PlayRequestFrom", fields: [fromPlayerId], references: [id], onDelete: Cascade)
+  toPlayer   Player @relation("PlayRequestTo", fields: [toPlayerId], references: [id], onDelete: Cascade)
+
+  @@index([toUserId, status])
+  @@index([fromUserId, status])
 }
 
 // Global materialized stats per player (rebuildable from the point ledger).
