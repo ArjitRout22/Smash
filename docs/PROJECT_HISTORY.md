@@ -542,6 +542,30 @@ no new message table. Migration `20260814080811`. Integration-tested.
   21–15 → completed/closed/winner/points; live → in_progress; cancelled → 409;
   invalid score → 422), and generation across all four tournament statuses.
 
+### Phase 23 — Batch group-fixture writes (fix real prod 500 timeout) (PR #29)
+- **Real prod 500.** Generating fixtures for a live tournament (2 groups × 3
+  clean doubles teams, `rounds:2`) returned a 500 on `www.smashhero.app` even
+  after Phase 22. The six teams were verified clean (read-only) — so this was
+  **not** validation. Root cause: `generateFixtures` created fixtures in an
+  interactive transaction issuing **~8 sequential round-trips per match**
+  (`match.create` + `attachMatchSnapshots`). Neon is in **ap-southeast-1
+  (Singapore)** and the function ran in **iad1 (US-East)** (~200ms RTT), so a
+  double round-robin (18 matches → ~150 sequential round-trips ≈ 34s) exceeded
+  Prisma's 30s transaction timeout → a non-`P2002/P2025` error → caught → generic
+  **500**. `rounds:1` (half the round-trips) stayed under and appeared to work,
+  which is why only the larger config failed.
+- **Fix.** Build all rows (matches, participants, doubles snapshots) in memory
+  with pre-generated UUIDs, then write with a few batched `createMany` calls —
+  **~6 round-trips total, independent of draw size** (~1–2s even cross-region).
+  No behaviour change: identical match/participant shape, immutable per-match
+  doubles snapshots, group labels, and the return-leg side-swap.
+  `attachMatchSnapshots` is untouched (still used by createMatch / generateBracket
+  / propagateWinner).
+- **Tests.** Fixtures/scoring/live suite now 20 cases (adds singles round_robin →
+  player participants, zero snapshot rows). Full suite 106/106.
+- **Follow-up (infra, not code):** set the Vercel function region near Singapore
+  and/or adopt the pooled Neon URL (pending PR #1) to cut cross-region latency.
+
 ---
 
 ## Key decisions
@@ -629,6 +653,10 @@ no new message table. Migration `20260814080811`. Integration-tested.
   incomplete doubles team (≠ 2 active players) with a clean 422 instead of
   silently creating a broken fixture; the cross-group double-round-robin path was
   already correct (2 groups × 3 teams, rounds:2 → 18 matches).
+- ✅ **Phase 23 live** (PR #29): fixed a real prod **500** on group-fixture
+  generation (Neon/Singapore ↔ Vercel/US-East transaction-timeout for the 18-match
+  double round-robin) by batching the writes into a few `createMany` calls
+  (~150 round-trips → ~6).
 - ✅ CI green on every push; 54 unit + 17 integration tests.
 - ✅ **Custom domain live:** https://smashhero.app (HTTPS; Vercel primary = `www`,
   apex 308-redirects to it).
