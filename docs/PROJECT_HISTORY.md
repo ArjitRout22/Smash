@@ -455,6 +455,24 @@ frees a team's players back to unassigned. Backend `POST /api/teams/random` →
 excludes already-assigned players, leaves existing teams/matches untouched,
 refuses when <2 available, auto-names "Team N". Integration-tested.
 
+### Phase 17 — Read-only matches for non-owners + team pair change (PRs #21, #22)
+- **PR #21:** the Matches tab's draw/lifecycle actions were gated only on the
+  viewer's global role, so an organizer-role user on someone else's public
+  tournament saw them. `MatchesTab` now takes a per-tournament `canManage` — read
+  -only for non-owners; scoring stays permission-based (nominated scorers).
+- **PR #22 — team pair change with immutable snapshots.** Swap a doubles player
+  last-minute without corrupting fixtures/history/stats. New
+  `MatchParticipantPlayer` = immutable per-match snapshot of who represented each
+  side (captured at create/fixtures/bracket/progression; migration backfills
+  existing matches). `serializeMatch` and player-stats read the snapshot, so a
+  completed result is never re-attributed. `changeTeamPair` swaps one player,
+  keeps team_id/fixtures, refreshes only still-**scheduled** matches (Case A),
+  leaves completed frozen (Case B), blocks while a match is **live** (Case C);
+  validates the replacement and records every change in `TeamPairingChange`
+  (+ reason). `Team.lockedAt` needs an extra `force` confirm to re-pair. Teams
+  tab: Change pair / Lock / History per card. Routes: `POST /api/teams/[id]/pair|
+  lock`, `GET .../pairing-history`.
+
 ---
 
 ## Key decisions
@@ -524,6 +542,9 @@ refuses when <2 available, auto-names "Team N". Integration-tested.
   card + a step-by-step Add-to-Home-Screen guide with real iOS glyphs.
 - ✅ **Phase 16 live** (PR #20): **Create Random Teams** in the Teams tab —
   auto-pair unassigned players into doubles teams, review/delete before matches.
+- ✅ **Phase 17 live** (PRs #21, #22): Matches tab read-only for non-owners; and
+  **team pair change** — swap a doubles player with immutable per-match snapshots
+  so fixtures/history/stats stay intact (+ team lock + pairing history).
 - ✅ CI green on every push; 54 unit + 17 integration tests.
 - ✅ **Custom domain live:** https://smashhero.app (HTTPS; Vercel primary = `www`,
   apex 308-redirects to it).
