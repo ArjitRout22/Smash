@@ -116,7 +116,7 @@ export default function PlayerDetailPage() {
         }
         actions={
           player ? (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {player.skillLevel && (
                 <Badge color={player.skillLevel === "pro" ? "green" : player.skillLevel === "intermediate" ? "blue" : "slate"}>
                   {titleCase(player.skillLevel)}

@@ -148,7 +148,7 @@ export function ViewOnMapButton({
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      className={`inline-flex items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] bg-surface font-medium text-foreground transition hover:bg-surface-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] ${sizeCls} ${className ?? ""}`}
+      className={`inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-[var(--border)] bg-surface font-medium text-foreground transition hover:bg-surface-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] ${sizeCls} ${className ?? ""}`}
     >
       <MapPin className="h-4 w-4 text-primary" />
       {label}

@@ -4,7 +4,7 @@ import { permissionsForRole } from "@/lib/auth/permissions";
 import type { AuthUser } from "@/lib/auth/authorize";
 import { createTournament, addTournamentPlayers } from "@/lib/services/tournament.service";
 import { createTeam } from "@/lib/services/team.service";
-import { generateFixtures, setLiveScore, listMatches, getMatch } from "@/lib/services/match.service";
+import { generateFixtures, setLiveScore, listMatches, getMatch, getBracket } from "@/lib/services/match.service";
 import { submitScore, resetMatchResult } from "@/lib/services/score.service";
 
 /**
@@ -96,6 +96,100 @@ d("group-stage fixtures + scoring (integration)", () => {
     const teamsWithGroup = await prisma.team.findMany({ where: { id: { in: teamIds } }, select: { id: true, group: true } });
     expect(teamsWithGroup.filter((t) => t.group === "A")).toHaveLength(3);
     expect(teamsWithGroup.filter((t) => t.group === "B")).toHaveLength(3);
+  });
+
+  it("deterministic cross-group round schedule: 6 rounds × 3, circle method, court rotation", async () => {
+    const { id, teamIds } = await doublesTournamentWithTeams(6);
+    const groupA = teamIds.slice(0, 3); // A1,A2,A3
+    const groupB = teamIds.slice(3, 6); // B1,B2,B3
+    const aIndex = new Map(groupA.map((t, i) => [t, i]));
+    const bIndex = new Map(groupB.map((t, i) => [t, i]));
+
+    await generateFixtures(id, { stageName: "Group Stage", matchType: "doubles", bestOf: 1, rounds: 2, mode: "groups", groups: [groupA, groupB] }, actor);
+
+    const matches = await prisma.match.findMany({
+      where: { tournamentId: id, deletedAt: null },
+      include: { participants: true },
+      orderBy: [{ round: "asc" }, { slot: "asc" }],
+    });
+    expect(matches).toHaveLength(18);
+
+    // Every match carries a round (1..6) and a court (Court 1..3).
+    const rounds = new Map<number, typeof matches>();
+    const teamMatchCount = new Map<string, number>();
+    const perRoundTeams = new Map<number, Set<string>>();
+    const pairingCount = new Map<string, number>();
+
+    for (const m of matches) {
+      expect(m.round).toBeGreaterThanOrEqual(1);
+      expect(m.round).toBeLessThanOrEqual(6);
+      expect(m.courtNumber).toMatch(/^Court [123]$/);
+      const a = m.participants.find((p) => p.teamId && aIndex.has(p.teamId))?.teamId;
+      const b = m.participants.find((p) => p.teamId && bIndex.has(p.teamId))?.teamId;
+      // No A-vs-A or B-vs-B — exactly one team from each group.
+      expect(a).toBeTruthy();
+      expect(b).toBeTruthy();
+
+      rounds.set(m.round!, [...(rounds.get(m.round!) ?? []), m]);
+      for (const t of [a!, b!]) {
+        teamMatchCount.set(t, (teamMatchCount.get(t) ?? 0) + 1);
+        const set = perRoundTeams.get(m.round!) ?? new Set<string>();
+        expect(set.has(t)).toBe(false); // each team plays at most once per round
+        set.add(t);
+        perRoundTeams.set(m.round!, set);
+      }
+      const key = [a, b].sort().join("|");
+      pairingCount.set(key, (pairingCount.get(key) ?? 0) + 1);
+    }
+
+    // 6 rounds, exactly 3 matches each, distinct courts within a round.
+    expect([...rounds.keys()].sort((x, y) => x - y)).toEqual([1, 2, 3, 4, 5, 6]);
+    for (const [, rms] of rounds) {
+      expect(rms).toHaveLength(3);
+      expect(new Set(rms.map((m) => m.courtNumber)).size).toBe(3);
+      expect(new Set(rms.map((m) => m.slot)).size).toBe(3);
+    }
+    // Every team plays exactly 6, and exactly once per round (6 teams / round).
+    expect([...teamMatchCount.values()]).toEqual([6, 6, 6, 6, 6, 6]);
+    for (const [, set] of perRoundTeams) expect(set.size).toBe(6);
+    // 9 unique pairings, each exactly twice.
+    expect(pairingCount.size).toBe(9);
+    expect([...pairingCount.values()].every((c) => c === 2)).toBe(true);
+
+    // Circle-method determinism: all 3 matches in a round share one offset
+    // (bIdx - aIdx mod 3), and the six rounds use offsets [0,1,2,1,2,0].
+    const roundOffset = (r: number) => {
+      const offs = rounds.get(r)!.map((m) => {
+        const a = m.participants.find((p) => p.teamId && aIndex.has(p.teamId))!.teamId!;
+        const b = m.participants.find((p) => p.teamId && bIndex.has(p.teamId))!.teamId!;
+        return (bIndex.get(b)! - aIndex.get(a)! + 3) % 3;
+      });
+      expect(new Set(offs).size).toBe(1);
+      return offs[0];
+    };
+    expect([1, 2, 3, 4, 5, 6].map(roundOffset)).toEqual([0, 1, 2, 1, 2, 0]);
+
+    // These group fixtures must NOT leak into the knockout bracket view.
+    const bracket = await getBracket(actor, id);
+    const bracketMatchCount = bracket.reduce((n, r) => n + r.matches.length, 0);
+    expect(bracketMatchCount).toBe(0);
+  });
+
+  it("cross-group schedule is deterministic across runs (same structure)", async () => {
+    const structure = async () => {
+      const { id, teamIds } = await doublesTournamentWithTeams(6);
+      const aIndex = new Map(teamIds.slice(0, 3).map((t, i) => [t, i]));
+      const bIndex = new Map(teamIds.slice(3, 6).map((t, i) => [t, i]));
+      await generateFixtures(id, { stageName: "GS", matchType: "doubles", bestOf: 1, rounds: 2, mode: "groups", groups: [teamIds.slice(0, 3), teamIds.slice(3, 6)] }, actor);
+      const ms = await prisma.match.findMany({ where: { tournamentId: id }, include: { participants: true }, orderBy: [{ round: "asc" }, { slot: "asc" }] });
+      // Encode each match by (round, court, aIdx, bIdx) — independent of the ids.
+      return ms.map((m) => {
+        const a = m.participants.find((p) => p.teamId && aIndex.has(p.teamId))!.teamId!;
+        const b = m.participants.find((p) => p.teamId && bIndex.has(p.teamId))!.teamId!;
+        return `${m.round}-${m.slot}-${aIndex.get(a)}-${bIndex.get(b)}`;
+      });
+    };
+    expect(await structure()).toEqual(await structure());
   });
 
   it("rounds:1 → 9 cross-group matches (single round-robin)", async () => {
