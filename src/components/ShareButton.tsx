@@ -44,6 +44,19 @@ export function ShareButton({
   const waHref = `https://wa.me/?text=${encodeURIComponent(`${text ? `${text}\n` : ""}${url}`)}`;
   const btnCls = `inline-flex items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-surface font-medium text-foreground transition hover:bg-surface-2 ${size === "md" ? "h-10 px-4 text-sm" : "h-8 px-3 text-sm"}`;
 
+  // In an INSTALLED PWA, a `target="_blank"` link opens a sandboxed in-app
+  // browser that can't hand off to WhatsApp (nothing happens / blank page). When
+  // running standalone, navigate the current context so iOS/Android open the
+  // WhatsApp app directly.
+  function onWhatsApp(e: React.MouseEvent<HTMLAnchorElement>) {
+    const nav = window.navigator as Navigator & { standalone?: boolean };
+    const standalone = window.matchMedia?.("(display-mode: standalone)").matches || nav.standalone === true;
+    if (standalone) {
+      e.preventDefault();
+      window.location.href = waHref;
+    }
+  }
+
   async function share() {
     const nav = typeof navigator !== "undefined" ? navigator : undefined;
     if (nav?.share) {
@@ -67,7 +80,7 @@ export function ShareButton({
   return (
     <div className="inline-flex gap-2">
       {whatsapp && (
-        <a href={waHref} target="_blank" rel="noopener noreferrer" className={btnCls} aria-label="Share on WhatsApp">
+        <a href={waHref} onClick={onWhatsApp} target="_blank" rel="noopener noreferrer" className={btnCls} aria-label="Share on WhatsApp">
           <WhatsAppIcon className="h-4 w-4 text-[#25D366]" /> WhatsApp
         </a>
       )}

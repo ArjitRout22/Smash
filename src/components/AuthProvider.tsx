@@ -11,6 +11,7 @@ export type CurrentUser = {
   emailVerified: boolean;
   phone: string | null;
   name: string | null;
+  displayName?: string | null;
   role: string;
   organizationId: string | null;
   playerId: string | null;

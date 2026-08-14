@@ -12,6 +12,7 @@ export type AuthUser = {
   emailVerified: boolean;
   phone: string | null;
   name: string | null;
+  displayName?: string | null; // the linked player's short/display name, if any
   role: string;
   organizationId: string | null;
   playerId: string | null;
@@ -28,7 +29,7 @@ export async function getAuthUser(): Promise<AuthUser | null> {
 
   const user = await prisma.user.findFirst({
     where: { id: claims.sub, deletedAt: null, isActive: true },
-    include: { role: true },
+    include: { role: true, player: { select: { displayName: true } } },
   });
   if (!user) return null;
 
@@ -38,6 +39,7 @@ export async function getAuthUser(): Promise<AuthUser | null> {
     emailVerified: user.emailVerifiedAt != null,
     phone: user.phone,
     name: user.name,
+    displayName: user.player?.displayName ?? null,
     role: user.role.name,
     organizationId: user.organizationId,
     playerId: user.playerId,

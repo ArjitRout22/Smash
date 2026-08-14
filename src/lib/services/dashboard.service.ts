@@ -46,7 +46,9 @@ export async function getDashboard(actor: AuthUser) {
     prisma.tournament.count({ where: { deletedAt: null, ...org } }),
     prisma.tournament.count({ where: { deletedAt: null, status: "ongoing", ...org } }),
     prisma.tournament.count({ where: { deletedAt: null, status: "completed", ...org } }),
-    prisma.player.count({ where: { deletedAt: null, ...org } }),
+    // Players are a GLOBAL directory across all workspaces — show the whole
+    // community total, not just this org's roster.
+    prisma.player.count({ where: { deletedAt: null } }),
     prisma.team.count({ where: { deletedAt: null, ...org } }),
     prisma.match.findMany({
       where: { deletedAt: null, status: "completed", ...matchOrg },
