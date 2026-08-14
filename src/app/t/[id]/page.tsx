@@ -35,10 +35,13 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const t = await getPublicTournamentView(id);
   if (!t) return { title: "Tournament not found" };
   const desc = `${titleCase(t.format)} · ${t.players.length} players${t.location ? ` · ${t.location}` : ""} — follow live standings and results on Smash.`;
+  // og:image / twitter:image are supplied by the colocated opengraph-image.tsx /
+  // twitter-image.tsx; here we just opt into the large-image Twitter card.
   return {
     title: t.name, // root layout template appends " · Smash"
     description: desc,
     openGraph: { title: `${t.name} · Smash`, description: desc, url: `${APP_URL}/t/${id}`, type: "website" },
+    twitter: { card: "summary_large_image", title: `${t.name} · Smash`, description: desc },
   };
 }
 
