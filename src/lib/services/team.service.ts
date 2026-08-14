@@ -5,6 +5,7 @@ import { Errors } from "@/lib/errors";
 import { audit } from "@/lib/audit";
 import type { AuthUser } from "@/lib/auth/authorize";
 import { orgFilter, assertOrgAccess, ownOrgId, isPlatformAdmin } from "@/lib/auth/tenancy";
+import { loadViewableTournament } from "@/lib/services/tournament.service";
 import { attachMatchSnapshots } from "@/lib/services/match.service";
 import type { CreateTeamSchema, UpdateTeamSchema, ChangeTeamPairInput } from "@/lib/validation/schemas";
 
@@ -78,8 +79,19 @@ const teamInclude = {
 } as const;
 
 export async function listTeams(actor: AuthUser, filters: { tournamentId?: string }) {
+  // Listing a specific tournament's teams is allowed for anyone who may VIEW it
+  // (owner, public, or a joined/invited player) — so a participant sees the teams
+  // read-only, same as matches. The general list stays workspace-scoped.
+  if (filters.tournamentId) {
+    await loadViewableTournament(actor, filters.tournamentId);
+    return prisma.team.findMany({
+      where: { deletedAt: null, tournamentId: filters.tournamentId },
+      include: teamInclude,
+      orderBy: { createdAt: "desc" },
+    });
+  }
   return prisma.team.findMany({
-    where: { deletedAt: null, ...orgFilter(actor), ...(filters.tournamentId ? { tournamentId: filters.tournamentId } : {}) },
+    where: { deletedAt: null, ...orgFilter(actor) },
     include: teamInclude,
     orderBy: { createdAt: "desc" },
   });

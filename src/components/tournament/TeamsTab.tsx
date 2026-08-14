@@ -128,17 +128,22 @@ export function TeamsTab({
                   </h3>
                   <div className="flex items-center gap-2">
                     <Badge color="slate">{team.teamType}</Badge>
-                    <button
-                      onClick={() =>
-                        isAdmin
-                          ? setRenameFor(team)
-                          : toast.error("Only an admin can rename a team. Please contact support@smashhero.app to request a change.")
-                      }
-                      className="text-muted hover:text-foreground"
-                      aria-label="Edit team name"
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </button>
+                    {/* Edit-name CTA only for managers/admins — joined players see
+                        the Teams tab fully read-only. Admins rename; a non-admin
+                        manager is told to contact support. */}
+                    {canManage && (
+                      <button
+                        onClick={() =>
+                          isAdmin
+                            ? setRenameFor(team)
+                            : toast.error("Only an admin can rename a team. Please contact support@smashhero.app to request a change.")
+                        }
+                        className="text-muted hover:text-foreground"
+                        aria-label="Edit team name"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                    )}
                     {canManage && (
                       <button onClick={() => setDeleteId(team.id)} className="text-muted hover:text-[var(--danger)]" aria-label="Delete team">
                         <Trash2 className="h-4 w-4" />
