@@ -604,6 +604,18 @@ no new message table. Migration `20260814080811`. Integration-tested.
   PLAYER-role scorer being unable to score, and a non-owning organizer seeing a
   Score button that 403s. Backend gate was already correct.
 
+### Phase 26 — Team visibility for participants + accurate At-a-glance counts (PR #34)
+- **At a glance counted soft-deleted rows.** After deleting the 18 fixtures the
+  card still showed "18 Matches". `getTournament` `_count` now filters
+  `matches`/`teams` to `deletedAt = null`, so counts reflect reality (0).
+- **Participants couldn't see teams.** `listTeams` was org-scoped, so a joined
+  player from another org saw "No teams yet". It now returns a tournament's teams
+  to anyone who may VIEW it (owner/public/joined/invited) — read-only — mirroring
+  `listMatches`. The general (no-tournament) list stays workspace-scoped.
+- **Fully read-only Teams tab** for joined non-managers: the team-name edit pencil
+  now shows only to managers/admins (admins rename; a non-admin manager gets the
+  contact-support toast).
+
 ---
 
 ## Key decisions
@@ -704,6 +716,9 @@ no new message table. Migration `20260814080811`. Integration-tested.
 - ✅ **Phase 25 live** (PR #33): admin-only team-rename CTA (others → contact
   support@smashhero.app); dashboard player count links to /players; per-tournament
   `canScore` gating so only organizer/admin/nominated-scorer see score controls.
+- ✅ **Phase 26 live** (PR #34): At-a-glance counts exclude soft-deleted
+  matches/teams; a tournament's teams are visible read-only to any viewer
+  (participant/public), not just its org.
 - ✅ CI green on every push; 54 unit + 17 integration tests.
 - ✅ **Custom domain live:** https://smashhero.app (HTTPS; Vercel primary = `www`,
   apex 308-redirects to it).
