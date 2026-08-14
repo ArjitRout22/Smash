@@ -1,10 +1,12 @@
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { Errors } from "@/lib/errors";
 import { audit } from "@/lib/audit";
 import type { AuthUser } from "@/lib/auth/authorize";
 import { orgFilter, assertOrgAccess, ownOrgId, isPlatformAdmin } from "@/lib/auth/tenancy";
-import type { CreateTeamSchema, UpdateTeamSchema } from "@/lib/validation/schemas";
+import { attachMatchSnapshots } from "@/lib/services/match.service";
+import type { CreateTeamSchema, UpdateTeamSchema, ChangeTeamPairInput } from "@/lib/validation/schemas";
 
 type CreateInput = z.infer<typeof CreateTeamSchema>;
 type UpdateInput = z.infer<typeof UpdateTeamSchema>;
@@ -213,6 +215,118 @@ export async function updateTeam(id: string, input: UpdateInput, actor: AuthUser
   });
   await audit({ actorUserId: actor.id, action: "team.updated", entityType: "Team", entityId: id, previousValue: { name: existing.name }, newValue: { name: updated.name } });
   return updated;
+}
+
+/**
+ * Swap ONE player on a team for another, keeping the team's identity (id, name,
+ * fixtures) unchanged. Core rule: team identity is stable, membership can change,
+ * and a match's player snapshot never changes once the match has started.
+ *  - Case A (all fixtures scheduled): future fixtures pick up the new pairing.
+ *  - Case B (some matches completed): completed snapshots stay frozen.
+ *  - Case C (a match is live): blocked until it finishes.
+ */
+export async function changeTeamPair(actor: AuthUser, teamId: string, input: ChangeTeamPairInput) {
+  const team = await prisma.team.findFirst({
+    where: { id: teamId, deletedAt: null },
+    include: {
+      teamPlayers: { include: { player: { select: { id: true, displayName: true } } } },
+      tournament: { select: { id: true, organizationId: true, status: true } },
+    },
+  });
+  if (!team) throw Errors.notFound("Team");
+  assertOrgAccess(actor, team.organizationId);
+
+  // Edge: a finished tournament is read-only.
+  if (team.tournament && (team.tournament.status === "completed" || team.tournament.status === "cancelled")) {
+    throw Errors.invalidState("This tournament is finished — team pairings can no longer be changed.");
+  }
+
+  // Case C — a live match involving this team blocks the change.
+  const live = await prisma.matchParticipant.count({
+    where: { teamId, match: { status: "in_progress", deletedAt: null } },
+  });
+  if (live > 0) {
+    throw Errors.conflict(`${team.name} currently has an active match. The team pairing can be changed after the match is completed.`);
+  }
+
+  const members = team.teamPlayers.filter((tp) => tp.status === "active");
+  const outMember = members.find((m) => m.playerId === input.outPlayerId);
+  if (!outMember) throw Errors.validation("The player you're replacing isn't in this team.");
+  if (input.inPlayerId === input.outPlayerId) throw Errors.validation("Pick a different replacement player.");
+  if (members.some((m) => m.playerId === input.inPlayerId)) throw Errors.validation("That player is already in this team.");
+
+  // Replacement must be registered in this tournament…
+  const reg = await prisma.tournamentPlayer.findFirst({
+    where: { tournamentId: team.tournamentId ?? undefined, playerId: input.inPlayerId, status: "registered" },
+  });
+  if (!reg) throw Errors.validation("The replacement must be a player registered in this tournament.");
+  // …and not already on another team in this tournament.
+  const onOther = await prisma.teamPlayer.findFirst({
+    where: { playerId: input.inPlayerId, status: "active", teamId: { not: teamId }, team: { tournamentId: team.tournamentId, deletedAt: null } },
+    include: { team: { select: { name: true } } },
+  });
+  if (onOther) throw Errors.validation(`That player is already on ${onOther.team.name}.`);
+
+  // A locked team requires an explicit second confirmation (force).
+  if (team.lockedAt && !input.force) {
+    throw Errors.conflict("This team is locked. Confirm again to change its pairing.");
+  }
+
+  const inPlayer = await prisma.player.findUniqueOrThrow({ where: { id: input.inPlayerId }, select: { displayName: true } });
+  const before = members.map((m) => ({ id: m.playerId, name: m.player.displayName }));
+  const after = members.map((m) =>
+    m.playerId === input.outPlayerId ? { id: input.inPlayerId, name: inPlayer.displayName } : { id: m.playerId, name: m.player.displayName }
+  );
+
+  await prisma.$transaction(async (tx) => {
+    // Swap membership — team_id stays the same; keep the replaced slot's position.
+    await tx.teamPlayer.delete({ where: { id: outMember.id } });
+    await tx.teamPlayer.create({ data: { teamId, playerId: input.inPlayerId, position: outMember.position, status: "active" } });
+
+    // Refresh the snapshot on still-SCHEDULED matches only (future fixtures);
+    // in-progress / completed / cancelled matches stay frozen.
+    const scheduled = await tx.matchParticipant.findMany({
+      where: { teamId, match: { status: "scheduled", deletedAt: null } },
+      select: { matchId: true },
+    });
+    for (const mid of new Set(scheduled.map((s) => s.matchId))) {
+      await attachMatchSnapshots(tx, mid);
+    }
+
+    await tx.teamPairingChange.create({
+      data: {
+        teamId,
+        tournamentId: team.tournamentId,
+        removedPlayerId: input.outPlayerId,
+        addedPlayerId: input.inPlayerId,
+        playersBefore: before as unknown as Prisma.InputJsonValue,
+        playersAfter: after as unknown as Prisma.InputJsonValue,
+        reason: input.reason,
+        changedById: actor.id,
+      },
+    });
+  });
+
+  await audit({ actorUserId: actor.id, action: "team.pair_changed", entityType: "Team", entityId: teamId, previousValue: { players: before }, newValue: { players: after, reason: input.reason ?? null } });
+  return getTeam(actor, teamId);
+}
+
+/** Lock or unlock a team (a locked team needs an extra confirm to re-pair). */
+export async function setTeamLock(actor: AuthUser, teamId: string, locked: boolean) {
+  const team = await prisma.team.findFirst({ where: { id: teamId, deletedAt: null }, select: { organizationId: true } });
+  if (!team) throw Errors.notFound("Team");
+  assertOrgAccess(actor, team.organizationId);
+  const updated = await prisma.team.update({ where: { id: teamId }, data: { lockedAt: locked ? new Date() : null }, include: teamInclude });
+  await audit({ actorUserId: actor.id, action: locked ? "team.locked" : "team.unlocked", entityType: "Team", entityId: teamId });
+  return updated;
+}
+
+/** The audit trail of pairing changes for a team (oldest first). */
+export async function listTeamPairingChanges(actor: AuthUser, teamId: string) {
+  const team = await prisma.team.findFirst({ where: { id: teamId, deletedAt: null }, select: { organizationId: true } });
+  if (!team) throw Errors.notFound("Team");
+  assertOrgAccess(actor, team.organizationId);
+  return prisma.teamPairingChange.findMany({ where: { teamId }, orderBy: { createdAt: "asc" } });
 }
 
 export async function deleteTeam(id: string, actor: AuthUser) {

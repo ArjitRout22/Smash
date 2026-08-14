@@ -11,22 +11,20 @@ type Tx = Prisma.TransactionClient;
  * run INSIDE the score-submission transaction so stats never drift from results.
  */
 
-/** Player ids involved in a match (a doubles side contributes both players). */
+/**
+ * Player ids involved in a match (a doubles side contributes both players).
+ * Uses the immutable per-match SNAPSHOT — the players who actually played — not
+ * the team's current members, so stats stay correct after a pair change.
+ */
 export async function involvedPlayerIds(tx: Tx, matchId: string): Promise<string[]> {
   const parts = await tx.matchParticipant.findMany({
     where: { matchId },
-    select: { playerId: true, teamId: true },
+    select: { playerId: true, snapshotPlayers: { select: { playerId: true } } },
   });
   const ids = new Set<string>();
   for (const p of parts) {
     if (p.playerId) ids.add(p.playerId);
-    if (p.teamId) {
-      const tps = await tx.teamPlayer.findMany({
-        where: { teamId: p.teamId },
-        select: { playerId: true },
-      });
-      tps.forEach((t) => ids.add(t.playerId));
-    }
+    for (const sp of p.snapshotPlayers) ids.add(sp.playerId);
   }
   return [...ids];
 }
@@ -148,16 +146,15 @@ export async function recomputeTournamentLeaderboard(tx: Tx, tournamentId: strin
 
 /** Rebuild one player's global aggregate stats from matches + the ledger. */
 export async function recomputePlayerAggregates(tx: Tx, playerId: string) {
-  const teamIds = (
-    await tx.teamPlayer.findMany({ where: { playerId }, select: { teamId: true } })
-  ).map((t) => t.teamId);
-
   const participants = await tx.matchParticipant.findMany({
     where: {
       // Exclude matches whose tournament was soft-deleted so global stats
       // never count results from removed tournaments.
       match: { status: "completed", deletedAt: null, tournament: { deletedAt: null } },
-      OR: [{ playerId }, ...(teamIds.length ? [{ teamId: { in: teamIds } }] : [])],
+      // Singles → this exact player; doubles → the match's player SNAPSHOT
+      // (who actually played), so a later team pair change never rewrites
+      // anyone's win/loss history.
+      OR: [{ playerId }, { snapshotPlayers: { some: { playerId } } }],
     },
     include: { match: { include: { stage: true } } },
   });

@@ -65,8 +65,19 @@ export type TeamDTO = {
   id: string;
   name: string;
   teamType: string;
+  lockedAt?: string | null;
   tournament: { id: string; name: string } | null;
-  teamPlayers: { player: { id: string; displayName: string } }[];
+  teamPlayers: { player: { id: string; displayName: string }; position?: number | null; status?: string }[];
+};
+
+export type PairingChangeDTO = {
+  id: string;
+  removedPlayerId: string | null;
+  addedPlayerId: string | null;
+  playersBefore: { id: string; name: string }[];
+  playersAfter: { id: string; name: string }[];
+  reason: string | null;
+  createdAt: string;
 };
 
 export type StageDTO = {
