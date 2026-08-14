@@ -55,6 +55,7 @@ export default function ProfilePage() {
     locationName: string | null;
     locationLat: number | null;
     locationLng: number | null;
+    discoverable: boolean;
   }>(playerId ? `/api/players/${playerId}` : null, swrFetcher);
 
   if (isLoading) {
@@ -142,6 +143,12 @@ export default function ProfilePage() {
             locationLng={player?.locationLng ?? null}
             onSaved={() => mutatePlayer()}
           />
+        </div>
+      )}
+
+      {playerId && (
+        <div className="mt-6">
+          <DiscoverableCard discoverable={player?.discoverable ?? false} onSaved={() => mutatePlayer()} />
         </div>
       )}
 
@@ -351,6 +358,52 @@ function SkillLevelCard({ currentLevel, onSaved }: { currentLevel: string | null
           </Select>
           <Button size="sm" onClick={save} loading={saving} disabled={!dirty}>Save</Button>
         </div>
+      </div>
+    </Card>
+  );
+}
+
+function DiscoverableCard({ discoverable, onSaved }: { discoverable: boolean; onSaved: () => void }) {
+  const toast = useToast();
+  const [on, setOn] = useState(discoverable);
+  const [busy, setBusy] = useState(false);
+  const [synced, setSynced] = useState(discoverable);
+  if (discoverable !== synced) {
+    setSynced(discoverable);
+    setOn(discoverable);
+  }
+
+  async function toggle() {
+    const next = !on;
+    setOn(next);
+    setBusy(true);
+    try {
+      await api.put("/api/me/player", { discoverable: next });
+      toast.success(next ? "You're now discoverable to nearby players" : "You're hidden from nearby search");
+      onSaved();
+    } catch (err) {
+      setOn(!next);
+      toast.error(err instanceof ApiClientError ? err.message : "Could not update");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card className="overflow-hidden">
+      <CardHeader title="Find players to play" subtitle="Let nearby players discover you and send a request to play. Uses your home location; only an approximate distance is ever shown." />
+      <div className="flex items-center justify-between gap-3 px-5 py-4">
+        <span className="text-sm font-medium text-foreground">Discoverable to nearby players</span>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={on}
+          disabled={busy}
+          onClick={toggle}
+          className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition ${on ? "bg-primary" : "bg-surface-2 border border-[var(--border)]"}`}
+        >
+          <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${on ? "translate-x-5" : "translate-x-0.5"}`} />
+        </button>
       </div>
     </Card>
   );
