@@ -496,6 +496,17 @@ fallback if not found. `twitter-image.tsx` reuses it; page metadata opts into
   PUBLIC tournaments (private never exposed), counts doubles via the match
   snapshot. "Share profile" also on the in-app player page. No schema change.
 
+### Phase 20 — Nearby players + request-to-play + chat (PR #26)
+Replaces the nearby-venues carousel with people discovery. Opt-in
+`Player.discoverable` (Profile toggle); only opted-in players with an account
+appear, exact coords never returned. **Players near you** (dashboard): Haversine
+over saved home locations (25 km, bbox prefilter), approximate distance only.
+New `PlayRequest` table + `play.service`: send → accept/decline (recipient) /
+cancel (sender); self/duplicate/non-discoverable blocked. **Play requests** card
+for incoming + connected. **Chat** once connected reuses the polymorphic
+`MatchComment` store (new `play_request` entity type, gated to the two users) —
+no new message table. Migration `20260814080811`. Integration-tested.
+
 ---
 
 ## Key decisions
@@ -573,6 +584,9 @@ fallback if not found. `twitter-image.tsx` reuses it; page metadata opts into
 - ✅ **Phase 19 live** (PRs #24, #25): dashboard display-name greeting + global
   player count + PWA WhatsApp fix; and a **public "viral" player profile**
   (`/player/[id]`) with a **SmashHero Rating** share card.
+- ✅ **Phase 20 live** (PR #26): **nearby players + request-to-play + chat** —
+  opt-in discovery around your home location, accept/decline, connected chat
+  (reuses the comment store).
 - ✅ CI green on every push; 54 unit + 17 integration tests.
 - ✅ **Custom domain live:** https://smashhero.app (HTTPS; Vercel primary = `www`,
   apex 308-redirects to it).
