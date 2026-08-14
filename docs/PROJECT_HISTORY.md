@@ -588,6 +588,22 @@ no new message table. Migration `20260814080811`. Integration-tested.
   Captured at generateFixtures/createMatch/generateBracket; `serializeMatch` labels
   prefer the snapshot.
 
+### Phase 25 — Team-rename CTA, clickable player count, per-tournament score gating (PR #33)
+- **Delete generated fixtures (prod op).** Removed the tournament's 18 generated
+  matches via the match-delete API (soft-delete → cleared from all lists incl.
+  dashboard "upcoming"). No code change.
+- **Rename team (admin-only) (task 2).** Pencil CTA on every team card; platform
+  admins get a rename modal, everyone else a toast to contact support@smashhero.app.
+  `updateTeam` rejects a non-admin name change with FORBIDDEN. Rename still only
+  touches the team + its scheduled fixtures (teamName snapshot from Phase 24).
+- **Clickable player count (task 3).** Dashboard "Players" stat links to `/players`.
+- **Per-tournament score gating (task 4).** `getTournament()` returns `canScore`
+  (organizer/creator, platform admin, or nominated scorer — mirrors
+  `assertCanScoreTournament`); `MatchesTab` uses it for the Score button + live
+  +/- controls instead of the role-only `can(SCORE_EDIT)`. Fixes a nominated
+  PLAYER-role scorer being unable to score, and a non-owning organizer seeing a
+  Score button that 403s. Backend gate was already correct.
+
 ---
 
 ## Key decisions
@@ -685,6 +701,9 @@ no new message table. Migration `20260814080811`. Integration-tested.
   group fixtures kept out of the bracket view; removed the broken WhatsApp share +
   responsive profile CTAs; **team-name snapshot** so a rename only affects
   scheduled matches.
+- ✅ **Phase 25 live** (PR #33): admin-only team-rename CTA (others → contact
+  support@smashhero.app); dashboard player count links to /players; per-tournament
+  `canScore` gating so only organizer/admin/nominated-scorer see score controls.
 - ✅ CI green on every push; 54 unit + 17 integration tests.
 - ✅ **Custom domain live:** https://smashhero.app (HTTPS; Vercel primary = `www`,
   apex 308-redirects to it).
