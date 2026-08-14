@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
@@ -317,6 +318,12 @@ export async function generateFixtures(tournamentId: string, input: GenerateFixt
     throw Errors.validation(`That would create ${total} matches — too many at once (max ${MAX_FIXTURES}).`);
   }
 
+  // Active members per doubles team, captured here so the write below can build
+  // the per-match player snapshots WITHOUT a query per team (see the batched
+  // transaction note).
+  type Member = { playerId: string; displayName: string; position: number | null };
+  const teamMembers = new Map<string, Member[]>();
+
   // Validate every participant belongs to the tournament.
   if (input.matchType === "singles") {
     const regs = await prisma.tournamentPlayer.findMany({
@@ -330,10 +337,18 @@ export async function generateFixtures(tournamentId: string, input: GenerateFixt
   } else {
     const teams = await prisma.team.findMany({
       where: { id: { in: allIds }, deletedAt: null },
-      // Pull every member's status so we can check both "no pending invites" and
-      // "exactly 2 active players" — a doubles fixture needs a full pair on each
-      // side, otherwise the match is unplayable/unscorable downstream.
-      select: { id: true, name: true, tournamentId: true, teamPlayers: { select: { status: true } } },
+      // Pull every member's status (to check "no pending invites" and "exactly 2
+      // active players") plus the details needed to snapshot the pair — a doubles
+      // fixture needs a full pair on each side, else it's unplayable downstream.
+      select: {
+        id: true,
+        name: true,
+        tournamentId: true,
+        teamPlayers: {
+          orderBy: { position: "asc" },
+          select: { status: true, playerId: true, position: true, player: { select: { displayName: true } } },
+        },
+      },
     });
     const byId = new Map(teams.map((t) => [t.id, t]));
     for (const id of allIds) {
@@ -343,24 +358,60 @@ export async function generateFixtures(tournamentId: string, input: GenerateFixt
         throw Errors.invalidMatchConfig("A selected team belongs to a different tournament");
       if (t.teamPlayers.some((m) => m.status === "invited"))
         throw Errors.invalidMatchConfig(`"${t.name}" has a pending invite — all members must accept before fixtures can be generated`);
-      const activeCount = t.teamPlayers.filter((m) => m.status === "active").length;
-      if (activeCount !== 2)
+      const active = t.teamPlayers.filter((m) => m.status === "active");
+      if (active.length !== 2)
         throw Errors.invalidMatchConfig(
-          `Each doubles team must have exactly 2 active players — "${t.name}" has ${activeCount}. Complete every team before generating fixtures.`
+          `Each doubles team must have exactly 2 active players — "${t.name}" has ${active.length}. Complete every team before generating fixtures.`
         );
+      teamMembers.set(id, active.map((m) => ({ playerId: m.playerId, displayName: m.player.displayName, position: m.position })));
     }
   }
 
   const ref = (id: string): { playerId?: string; teamId?: string } =>
     input.matchType === "singles" ? { playerId: id } : { teamId: id };
+  const isDoubles = input.matchType !== "singles";
 
-  const created = await prisma.$transaction(
+  // Build every row in memory, then write with a handful of batched createMany
+  // calls. The previous version issued ~8 sequential round-trips PER match
+  // (match.create + attachMatchSnapshots); against a managed DB in another region
+  // (Neon/Singapore ↔ Vercel/US-East, ~200ms RTT) a larger draw such as a double
+  // round-robin (18 matches → ~150 round-trips ≈ 34s) blew past the 30s
+  // transaction timeout and surfaced as a 500. Batching keeps it to ~6
+  // round-trips regardless of draw size. Ids are pre-generated so participant
+  // snapshots can reference their rows without reading them back.
+  const stageId = input.stageName ? randomUUID() : null;
+  const matchRows: Prisma.MatchCreateManyInput[] = [];
+  const partRows: Prisma.MatchParticipantCreateManyInput[] = [];
+  const snapRows: Prisma.MatchParticipantPlayerCreateManyInput[] = [];
+
+  const addSide = (matchId: string, side: Side, id: string) => {
+    const partId = randomUUID();
+    partRows.push({ id: partId, matchId, side, ...ref(id) });
+    if (isDoubles) {
+      const members = teamMembers.get(id) ?? [];
+      members.forEach((m, i) =>
+        snapRows.push({ matchParticipantId: partId, playerId: m.playerId, displayName: m.displayName, position: m.position ?? i + 1 })
+      );
+    }
+  };
+
+  for (const [a, b] of pairs) {
+    for (let r = 0; r < input.rounds; r++) {
+      const [x, y] = r % 2 === 0 ? [a, b] : [b, a]; // alternate sides on the return leg
+      const matchId = randomUUID();
+      matchRows.push({ id: matchId, tournamentId, stageId, matchType: input.matchType, bestOf: input.bestOf, createdById: actor.id });
+      addSide(matchId, "A", x);
+      addSide(matchId, "B", y);
+    }
+  }
+
+  await prisma.$transaction(
     async (tx) => {
-      let stageId: string | null = null;
       if (input.stageName) {
         const maxOrder = await tx.stage.aggregate({ where: { tournamentId }, _max: { order: true } });
-        const stage = await tx.stage.create({
+        await tx.stage.create({
           data: {
+            id: stageId!,
             tournamentId,
             name: input.stageName,
             type: input.mode === "groups" ? "group" : "round_robin",
@@ -368,7 +419,6 @@ export async function generateFixtures(tournamentId: string, input: GenerateFixt
             status: "active",
           },
         });
-        stageId = stage.id;
       }
 
       // Record each participant's group so the leaderboard can show per-group
@@ -385,29 +435,13 @@ export async function generateFixtures(tournamentId: string, input: GenerateFixt
         }
       }
 
-      let n = 0;
-      for (const [a, b] of pairs) {
-        for (let r = 0; r < input.rounds; r++) {
-          const [x, y] = r % 2 === 0 ? [a, b] : [b, a]; // alternate sides on the return leg
-          const mm = await tx.match.create({
-            data: {
-              tournamentId,
-              stageId,
-              matchType: input.matchType,
-              bestOf: input.bestOf,
-              createdById: actor.id,
-              participants: { create: [{ side: "A", ...ref(x) }, { side: "B", ...ref(y) }] },
-            },
-            select: { id: true },
-          });
-          await attachMatchSnapshots(tx, mm.id);
-          n++;
-        }
-      }
-      return n;
+      await tx.match.createMany({ data: matchRows });
+      await tx.matchParticipant.createMany({ data: partRows });
+      if (snapRows.length) await tx.matchParticipantPlayer.createMany({ data: snapRows });
     },
     { timeout: 30000 }
   );
+  const created = matchRows.length;
 
   await audit({
     actorUserId: actor.id,
