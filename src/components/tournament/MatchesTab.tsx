@@ -28,11 +28,21 @@ const EMPTY_MATCHES: MatchDTO[] = [];
  * the view, and stage chips filter the list. Management actions are gated by
  * permission, so this same component is also the read-only public view.
  */
-export function MatchesTab({ tournamentId, format }: { tournamentId: string; format: string }) {
+export function MatchesTab({
+  tournamentId,
+  format,
+  canManage: canManageTournament = false,
+}: {
+  tournamentId: string;
+  format: string;
+  /** Whether the VIEWER can manage THIS tournament (owner/admin). Draw-building
+   *  and match-lifecycle actions require it, so the tab is read-only for others. */
+  canManage?: boolean;
+}) {
   const { can } = useAuth();
   const toast = useToast();
-  const canManage = can(PERMS.MATCH_MANAGE);
-  const canStage = can(PERMS.STAGE_MANAGE);
+  const canManage = canManageTournament && can(PERMS.MATCH_MANAGE);
+  const canStage = canManageTournament && can(PERMS.STAGE_MANAGE);
 
   const [view, setView] = useState<View>("list");
   const [stageFilter, setStageFilter] = useState<string>("all"); // stage id or "all"
@@ -127,6 +137,7 @@ export function MatchesTab({ tournamentId, format }: { tournamentId: string; for
                   <MatchRow
                     key={m.id}
                     m={m}
+                    canManage={canManage}
                     busy={busyId === m.id}
                     onScore={() => setScoreMatch(m)}
                     onPatch={patchMatch}
@@ -197,12 +208,14 @@ function FilterChip({ active, onClick, children }: { active: boolean; onClick: (
 
 function MatchRow({
   m,
+  canManage,
   busy,
   onScore,
   onPatch,
   onRefresh,
 }: {
   m: MatchDTO;
+  canManage: boolean;
   busy: boolean;
   onScore: () => void;
   onPatch: (m: MatchDTO, body: Record<string, unknown>, successMsg: string) => void;
@@ -211,7 +224,9 @@ function MatchRow({
   const { can } = useAuth();
   const [showComments, setShowComments] = useState(false);
   const bothSet = m.sides[0]?.label !== "TBD" && m.sides[1]?.label !== "TBD";
-  const canManage = can(PERMS.MATCH_MANAGE);
+  // Scoring stays permission-based — nominated scorers needn't own the tournament,
+  // and the server enforces it. Match-lifecycle actions require management of THIS
+  // tournament (`canManage`), so the tab is read-only for non-owners.
   const canScore = can(PERMS.SCORE_EDIT);
 
   async function setLive(a: number, b: number) {
