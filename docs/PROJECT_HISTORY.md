@@ -518,6 +518,30 @@ no new message table. Migration `20260814080811`. Integration-tested.
   pairing-history row. Unassigned replacements still do a plain replace. No schema
   change.
 
+### Phase 22 — Reject incomplete doubles teams in group-fixture generation (PR #28)
+- **Bug context.** A group-stage config (2 groups × 3 doubles teams, `rounds:2`,
+  cross-group only) was reported as returning a 500. Reproduced against a real DB
+  by calling `generateFixtures` directly: the cross-group double-round-robin path
+  was **already correct** — it produces exactly **18** matches (9 unique A-vs-B
+  pairings, each played twice; the 2nd occurrence is *not* rejected, since `Match`
+  has no unique constraint). No 500 in the happy path.
+- **Real defect (fixed).** `generateFixtures` (doubles branch) never checked that
+  each selected team had a full pair. A team missing a partner (removed, or an
+  invite never accepted) would **silently create a broken, unscorable doubles
+  fixture** — the realistic trigger for downstream failures on the fixtures /
+  scoring / live pages. Now every selected doubles team must have exactly **2
+  active players** (and still no pending invites) or generation returns a clean
+  **422 `INVALID_MATCH_CONFIG`** naming the offending team — before any insert, so
+  no partial/malformed fixtures are written. No schema change; happy path
+  unchanged.
+- **Tests.** New `tests/integration/generate-fixtures.integration.test.ts` (19
+  DB-gated cases): generation variants (2×3 rounds:2→18, rounds:1→9, 3×2→12,
+  round_robin→6, regenerate-not-deduped), validation→clean-4xx (1/0-active-player
+  teams, dup team across groups, nonexistent team, cross-tournament team), display
+  serialization (labels + 2-player snapshots), scoring + live scoring (best-of-1
+  21–15 → completed/closed/winner/points; live → in_progress; cancelled → 409;
+  invalid score → 422), and generation across all four tournament statuses.
+
 ---
 
 ## Key decisions
@@ -601,6 +625,10 @@ no new message table. Migration `20260814080811`. Integration-tested.
 - ✅ **Phase 21 live** (PR #27): Teams tab readable to non-owners on the public
   page; and changing a pair with an already-assigned player now **swaps** (both
   teams stay complete).
+- ✅ **Phase 22 live** (PR #28): group-fixture generation now rejects an
+  incomplete doubles team (≠ 2 active players) with a clean 422 instead of
+  silently creating a broken fixture; the cross-group double-round-robin path was
+  already correct (2 groups × 3 teams, rounds:2 → 18 matches).
 - ✅ CI green on every push; 54 unit + 17 integration tests.
 - ✅ **Custom domain live:** https://smashhero.app (HTTPS; Vercel primary = `www`,
   apex 308-redirects to it).
