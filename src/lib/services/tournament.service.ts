@@ -45,7 +45,17 @@ export async function getTournament(actor: AuthUser, id: string) {
     include: {
       organizer: { select: { id: true, name: true, phone: true } },
       stages: { orderBy: { order: "asc" } },
-      _count: { select: { tournamentPlayers: true, teams: true, matches: true, stages: true } },
+      // Exclude soft-deleted rows so "At a glance" reflects what's actually there
+      // (e.g. after deleting generated fixtures the match count must drop, not
+      // keep counting the deletedAt rows).
+      _count: {
+        select: {
+          tournamentPlayers: true,
+          teams: { where: { deletedAt: null } },
+          matches: { where: { deletedAt: null } },
+          stages: true,
+        },
+      },
     },
   });
   if (!t) throw Errors.notFound("Tournament");

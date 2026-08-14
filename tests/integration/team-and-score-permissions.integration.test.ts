@@ -2,8 +2,8 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { prisma } from "@/lib/db/prisma";
 import { permissionsForRole } from "@/lib/auth/permissions";
 import type { AuthUser } from "@/lib/auth/authorize";
-import { createTournament, getTournament, addScorer } from "@/lib/services/tournament.service";
-import { createTeam, updateTeam } from "@/lib/services/team.service";
+import { createTournament, getTournament, addScorer, addTournamentPlayers } from "@/lib/services/tournament.service";
+import { createTeam, updateTeam, listTeams } from "@/lib/services/team.service";
 
 /**
  * Permission rules:
@@ -25,6 +25,7 @@ d("team-rename + scoring permissions (integration)", () => {
   const cleanupUserIds: string[] = [];
   const cleanupPlayerIds: string[] = [];
   const tournamentIds: string[] = [];
+  const extraOrgIds: string[] = [];
 
   const mkUser = async (role: string, organizationId: string | null, playerId: string | null = null): Promise<AuthUser> => {
     await prisma.role.upsert({ where: { name: role }, update: {}, create: { name: role, description: role } });
@@ -51,7 +52,7 @@ d("team-rename + scoring permissions (integration)", () => {
     await prisma.tournament.deleteMany({ where: { id: { in: tournamentIds } } });
     await prisma.user.deleteMany({ where: { id: { in: cleanupUserIds } } });
     await prisma.player.deleteMany({ where: { id: { in: cleanupPlayerIds } } });
-    await prisma.organization.deleteMany({ where: { id: orgId } });
+    await prisma.organization.deleteMany({ where: { id: { in: [orgId, ...extraOrgIds] } } });
     await prisma.$disconnect();
   });
 
@@ -100,5 +101,34 @@ d("team-rename + scoring permissions (integration)", () => {
     expect((await getTournament(scorer, t.id)).canScore).toBe(false);
     await addScorer(organizer, t.id, scorer.playerId!);
     expect((await getTournament(scorer, t.id)).canScore).toBe(true);
+  });
+
+  // --- Teams visible to a viewer outside the org (public tournament) --------
+  it("a viewer in a different org can see a PUBLIC tournament's teams (read-only)", async () => {
+    const t = await createTournament({ name: `Pub ${Date.now()}`, format: "doubles", visibility: "public" }, organizer);
+    tournamentIds.push(t.id);
+    const p1 = await prisma.player.create({ data: { fullName: "PP1", displayName: "PP1", organizationId: orgId } });
+    const p2 = await prisma.player.create({ data: { fullName: "PP2", displayName: "PP2", organizationId: orgId } });
+    cleanupPlayerIds.push(p1.id, p2.id);
+    await addTournamentPlayers(t.id, [p1.id, p2.id], organizer);
+    await createTeam({ name: "Visible Team", teamType: "doubles", tournamentId: t.id, playerIds: [p1.id, p2.id] }, organizer);
+
+    const org2 = await prisma.organization.create({ data: { name: `Org2 ${Date.now()}`, slug: `org2-${Date.now()}-${Math.round(performance.now())}` } });
+    extraOrgIds.push(org2.id);
+    const outsider = await mkUser("ORGANIZER", org2.id);
+
+    const teams = await listTeams(outsider, { tournamentId: t.id });
+    expect(teams.map((x) => x.name)).toContain("Visible Team");
+  });
+
+  // --- At-a-glance counts exclude soft-deleted matches ----------------------
+  it("getTournament match count excludes soft-deleted matches", async () => {
+    const t = await createTournament({ name: `Count ${Date.now()}`, format: "doubles", visibility: "private" }, organizer);
+    tournamentIds.push(t.id);
+    const m1 = await prisma.match.create({ data: { tournamentId: t.id, matchType: "doubles", bestOf: 1, status: "scheduled" } });
+    const m2 = await prisma.match.create({ data: { tournamentId: t.id, matchType: "doubles", bestOf: 1, status: "scheduled" } });
+    expect((await getTournament(organizer, t.id))._count.matches).toBe(2);
+    await prisma.match.updateMany({ where: { id: { in: [m1.id, m2.id] } }, data: { deletedAt: new Date() } });
+    expect((await getTournament(organizer, t.id))._count.matches).toBe(0);
   });
 });
