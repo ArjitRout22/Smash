@@ -190,3 +190,12 @@ export function sumAwards(awards: PointAward[]): number {
 export function globalRankingPoints(wins: number, losses: number): number {
   return wins * STANDARD_POINTS_CONFIG.matchWin + losses * STANDARD_POINTS_CONFIG.matchLoss;
 }
+
+/**
+ * "SmashHero Rating" — a friendly headline number for a player's public profile
+ * and share card. Starts at 1000 and climbs with wins; deterministic, derived
+ * from win/loss totals so it needs no schema or separate store.
+ */
+export function smashHeroRating(wins: number, losses: number): number {
+  return Math.max(100, 1000 + wins * 20 - losses * 10);
+}

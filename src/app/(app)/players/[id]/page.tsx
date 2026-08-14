@@ -7,6 +7,7 @@ import { swrFetcher, swrFetcherWithMeta } from "@/lib/client/api";
 import { PageHeader, ErrorState, ListSkeleton, CardGridSkeleton } from "@/components/ui/states";
 import { Card, CardHeader, Badge, statusColor, Avatar } from "@/components/ui/primitives";
 import { ViewOnMapButton } from "@/components/LocationPicker";
+import { ShareButton } from "@/components/ShareButton";
 import { formatDate, pct, titleCase } from "@/lib/client/format";
 
 type Player = {
@@ -125,6 +126,12 @@ export default function PlayerDetailPage() {
                 location={player.locationName ?? player.city ?? null}
                 lat={player.locationLat ?? null}
                 lng={player.locationLng ?? null}
+              />
+              <ShareButton
+                url={typeof window !== "undefined" ? `${window.location.origin}/player/${id}` : `/player/${id}`}
+                title={`${player.displayName} · SmashHero`}
+                text={`Check out ${player.displayName}'s SmashHero profile.`}
+                label="Share profile"
               />
             </div>
           ) : undefined
