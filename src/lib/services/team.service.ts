@@ -207,11 +207,21 @@ export async function updateTeam(id: string, input: UpdateInput, actor: AuthUser
         data: input.playerIds.map((playerId, i) => ({ teamId: id, playerId, position: i + 1, status: status.get(playerId)! })),
       });
     }
-    return tx.team.update({
+    const team = await tx.team.update({
       where: { id },
       data: { name: input.name ?? undefined, teamType: input.teamType ?? undefined },
       include: teamInclude,
     });
+    // A rename only reaches STILL-SCHEDULED fixtures: their per-match team-name
+    // snapshot is refreshed, while in-progress/completed matches keep the name
+    // the team had when they were played (immutable history, like pair snapshots).
+    if (input.name && input.name !== existing.name) {
+      await tx.matchParticipant.updateMany({
+        where: { teamId: id, match: { status: "scheduled", deletedAt: null } },
+        data: { teamName: input.name },
+      });
+    }
+    return team;
   });
   await audit({ actorUserId: actor.id, action: "team.updated", entityType: "Team", entityId: id, previousValue: { name: existing.name }, newValue: { name: updated.name } });
   return updated;

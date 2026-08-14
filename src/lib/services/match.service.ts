@@ -69,10 +69,13 @@ const matchInclude = {
 } as const;
 
 function participantLabel(p: {
+  teamName?: string | null;
   player: { displayName: string } | null;
   team: { name: string } | null;
 }) {
-  return p.team?.name ?? p.player?.displayName ?? "TBD";
+  // The per-match team-name snapshot wins over the team's CURRENT name, so a
+  // rename only shows on still-scheduled fixtures (whose snapshot was updated).
+  return p.teamName ?? p.team?.name ?? p.player?.displayName ?? "TBD";
 }
 
 export function serializeMatch(m: Awaited<ReturnType<typeof getMatchRaw>>) {
@@ -253,9 +256,18 @@ export async function createMatch(input: CreateInput, actor: AuthUser) {
     sideB: input.sideB,
   });
 
-  const participants: { side: Side; playerId?: string; teamId?: string }[] = [];
+  const participants: { side: Side; playerId?: string; teamId?: string; teamName?: string }[] = [];
   if (input.sideA) participants.push({ side: "A", ...input.sideA });
   if (input.sideB) participants.push({ side: "B", ...input.sideB });
+
+  // Snapshot each team's current name onto its participant (see teamName).
+  const teamIds = participants.map((p) => p.teamId).filter(Boolean) as string[];
+  if (teamIds.length) {
+    const names = new Map(
+      (await prisma.team.findMany({ where: { id: { in: teamIds } }, select: { id: true, name: true } })).map((t) => [t.id, t.name])
+    );
+    for (const p of participants) if (p.teamId) p.teamName = names.get(p.teamId);
+  }
 
   const match = await prisma.$transaction(async (tx) => {
     const m = await tx.match.create({
@@ -383,6 +395,7 @@ export async function generateFixtures(tournamentId: string, input: GenerateFixt
   // transaction note).
   type Member = { playerId: string; displayName: string; position: number | null };
   const teamMembers = new Map<string, Member[]>();
+  const teamNameById = new Map<string, string>();
 
   // Validate every participant belongs to the tournament.
   if (input.matchType === "singles") {
@@ -424,6 +437,7 @@ export async function generateFixtures(tournamentId: string, input: GenerateFixt
           `Each doubles team must have exactly 2 active players — "${t.name}" has ${active.length}. Complete every team before generating fixtures.`
         );
       teamMembers.set(id, active.map((m) => ({ playerId: m.playerId, displayName: m.player.displayName, position: m.position })));
+      teamNameById.set(id, t.name);
     }
   }
 
@@ -446,7 +460,7 @@ export async function generateFixtures(tournamentId: string, input: GenerateFixt
 
   const addSide = (matchId: string, side: Side, id: string) => {
     const partId = randomUUID();
-    partRows.push({ id: partId, matchId, side, ...ref(id) });
+    partRows.push({ id: partId, matchId, side, ...ref(id), teamName: isDoubles ? teamNameById.get(id) : undefined });
     if (isDoubles) {
       const members = teamMembers.get(id) ?? [];
       members.forEach((m, i) =>
