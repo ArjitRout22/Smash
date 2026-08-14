@@ -104,6 +104,25 @@ d("group-stage fixtures + scoring (integration)", () => {
     expect(res.created).toBe(9);
   });
 
+  it("singles round_robin: player participants, no doubles snapshot rows", async () => {
+    const t = await createTournament({ name: `GF-singles ${Date.now()}`, format: "singles", visibility: "private" }, actor);
+    tournamentIds.push(t.id);
+    const pIds: string[] = [];
+    for (let i = 0; i < 4; i++) {
+      const p = await prisma.player.create({ data: { fullName: `S P${i}`, displayName: `SP${i}` } });
+      pIds.push(p.id);
+      playerIds.push(p.id);
+    }
+    await addTournamentPlayers(t.id, pIds, actor);
+    const res = await generateFixtures(t.id, { stageName: "Round Robin", matchType: "singles", bestOf: 1, rounds: 1, mode: "round_robin", participantIds: pIds }, actor);
+    expect(res.created).toBe(6); // C(4,2)
+    const parts = await prisma.matchParticipant.findMany({ where: { match: { tournamentId: t.id } } });
+    expect(parts).toHaveLength(12);
+    expect(parts.every((p) => p.playerId && !p.teamId)).toBe(true);
+    const snaps = await prisma.matchParticipantPlayer.count({ where: { participant: { match: { tournamentId: t.id } } } });
+    expect(snaps).toBe(0); // singles use participant.playerId directly
+  });
+
   it("3 groups × 2 teams, rounds:1 → 12 cross-group matches", async () => {
     const { id, teamIds } = await doublesTournamentWithTeams(6);
     const groups = [teamIds.slice(0, 2), teamIds.slice(2, 4), teamIds.slice(4, 6)];
