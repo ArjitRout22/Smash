@@ -481,6 +481,21 @@ location, current leader, smashhero.app) instead of a text-only preview. New
 fallback if not found. `twitter-image.tsx` reuses it; page metadata opts into
 `summary_large_image`. No schema change.
 
+### Phase 19 — Dashboard tweaks + viral player profile (PRs #24, #25)
+- **PR #24 (quick fixes):** dashboard greeting uses the player's display name (or
+  first name) — `displayName` now on the auth user / `/api/auth/me`; the "Players"
+  stat shows the **global** community total ("on Smash"); WhatsApp share navigates
+  the current context when running as an installed PWA (a `target=_blank` link
+  opens a sandboxed in-app browser that can't hand off to WhatsApp).
+- **PR #25 — public "viral" player profile.** Every player has a no-login page at
+  **/player/[id]**: a **SmashHero Rating** hero (`smashHeroRating(wins,losses)` =
+  1000 + wins*20 − losses*10, floor 100), stat tiles, global rank, win streak,
+  recent results, tournament history, and Share/WhatsApp. Middleware excludes
+  `/player/`. A branded **share card** (`opengraph-image.tsx` + `twitter-image`,
+  `summary_large_image`). `getPublicPlayerProfile` limits recent-results/history to
+  PUBLIC tournaments (private never exposed), counts doubles via the match
+  snapshot. "Share profile" also on the in-app player page. No schema change.
+
 ---
 
 ## Key decisions
@@ -555,6 +570,9 @@ fallback if not found. `twitter-image.tsx` reuses it; page metadata opts into
   so fixtures/history/stats stay intact (+ team lock + pairing history).
 - ✅ **Phase 18 live** (PR #23): **OG/Twitter share images** for `/t/[id]` — a
   branded per-tournament card so shared links preview richly (summary_large_image).
+- ✅ **Phase 19 live** (PRs #24, #25): dashboard display-name greeting + global
+  player count + PWA WhatsApp fix; and a **public "viral" player profile**
+  (`/player/[id]`) with a **SmashHero Rating** share card.
 - ✅ CI green on every push; 54 unit + 17 integration tests.
 - ✅ **Custom domain live:** https://smashhero.app (HTTPS; Vercel primary = `www`,
   apex 308-redirects to it).
