@@ -296,6 +296,63 @@ function crossGroupPairs(groups: string[][]): [string, string][] {
   return pairs;
 }
 
+// A scheduled fixture: side-A id, side-B id, and (when the schedule is
+// round-structured) its 1-based round and 0-based court. round/court are null
+// for the flat fallback shapes.
+type PlannedMatch = { a: string; b: string; round: number | null; court: number | null };
+
+/**
+ * Deterministic cross-group schedule. For exactly two EQUAL-size groups this uses
+ * the circle method: `meetings` full cycles of n rounds each (n = group size),
+ * n matches per round, every A-team meets every B-team once per cycle, every team
+ * plays exactly once per round, and courts rotate so a team isn't always on the
+ * same court. Any other shape (unequal groups, >2 groups) falls back to the flat
+ * cross-group pairing (no round/court metadata) so existing behaviour is kept.
+ */
+function crossGroupSchedule(groups: string[][], meetings: number): PlannedMatch[] {
+  const planned: PlannedMatch[] = [];
+  const twoEqual = groups.length === 2 && groups[0].length === groups[1].length && groups[0].length > 0;
+  if (twoEqual) {
+    const [A, B] = groups;
+    const n = A.length;
+    let round = 0;
+    for (let meeting = 0; meeting < meetings; meeting++) {
+      for (let k = 0; k < n; k++) {
+        // Rotate the starting offset per meeting so the second cycle doesn't
+        // reproduce the first cycle's round order / court slots verbatim.
+        const offset = (k + meeting) % n;
+        round += 1;
+        for (let i = 0; i < n; i++) {
+          const court = (i + (round - 1)) % n; // rotate courts across rounds
+          planned.push({ a: A[i], b: B[(i + offset) % n], round, court });
+        }
+      }
+    }
+    return planned;
+  }
+  // Fallback: flat cross-group pairs, repeated per meeting (side-swap on the
+  // return leg), with no round/court structure.
+  for (const [a, b] of crossGroupPairs(groups)) {
+    for (let r = 0; r < meetings; r++) {
+      const [x, y] = r % 2 === 0 ? [a, b] : [b, a];
+      planned.push({ a: x, b: y, round: null, court: null });
+    }
+  }
+  return planned;
+}
+
+/** Everyone-plays-everyone, repeated per meeting (side-swap on the return leg). */
+function roundRobinSchedule(ids: string[], meetings: number): PlannedMatch[] {
+  const planned: PlannedMatch[] = [];
+  for (const [a, b] of roundRobinPairs(ids)) {
+    for (let r = 0; r < meetings; r++) {
+      const [x, y] = r % 2 === 0 ? [a, b] : [b, a];
+      planned.push({ a: x, b: y, round: null, court: null });
+    }
+  }
+  return planned;
+}
+
 /**
  * Bulk-create round-robin fixtures — everyone-plays-everyone, or cross-group
  * only (teams in different groups), single or double (each pairing twice).
@@ -311,9 +368,12 @@ export async function generateFixtures(tournamentId: string, input: GenerateFixt
   }
   if (allIds.length < 2) throw Errors.validation("Select at least two participants");
 
-  const pairs = input.mode === "groups" ? crossGroupPairs(input.groups!) : roundRobinPairs(input.participantIds!);
-  if (pairs.length === 0) throw Errors.validation("This selection produces no matches");
-  const total = pairs.length * input.rounds;
+  const planned =
+    input.mode === "groups"
+      ? crossGroupSchedule(input.groups!, input.rounds)
+      : roundRobinSchedule(input.participantIds!, input.rounds);
+  if (planned.length === 0) throw Errors.validation("This selection produces no matches");
+  const total = planned.length;
   if (total > MAX_FIXTURES) {
     throw Errors.validation(`That would create ${total} matches — too many at once (max ${MAX_FIXTURES}).`);
   }
@@ -395,14 +455,23 @@ export async function generateFixtures(tournamentId: string, input: GenerateFixt
     }
   };
 
-  for (const [a, b] of pairs) {
-    for (let r = 0; r < input.rounds; r++) {
-      const [x, y] = r % 2 === 0 ? [a, b] : [b, a]; // alternate sides on the return leg
-      const matchId = randomUUID();
-      matchRows.push({ id: matchId, tournamentId, stageId, matchType: input.matchType, bestOf: input.bestOf, createdById: actor.id });
-      addSide(matchId, "A", x);
-      addSide(matchId, "B", y);
-    }
+  for (const pm of planned) {
+    const matchId = randomUUID();
+    matchRows.push({
+      id: matchId,
+      tournamentId,
+      stageId,
+      matchType: input.matchType,
+      bestOf: input.bestOf,
+      createdById: actor.id,
+      // Round-structured schedules (2 equal groups) carry a round + court so the
+      // draw reads as "Round N / Court X"; flat shapes leave them unset.
+      round: pm.round ?? undefined,
+      slot: pm.court ?? undefined,
+      courtNumber: pm.court != null ? `Court ${pm.court + 1}` : undefined,
+    });
+    addSide(matchId, "A", pm.a);
+    addSide(matchId, "B", pm.b);
   }
 
   await prisma.$transaction(
@@ -542,7 +611,16 @@ export async function softDeleteMatch(id: string, actor: AuthUser) {
 export async function getBracket(actor: AuthUser, tournamentId: string) {
   await loadViewableTournament(actor, tournamentId);
   const matches = await prisma.match.findMany({
-    where: { tournamentId, deletedAt: null, round: { not: null } },
+    // Bracket = knockout matches only. Group / round-robin fixtures also carry a
+    // `round` (for a "Round N" schedule), so exclude those stage types here or
+    // they'd be mis-rendered as a knockout tree. Legacy bracket matches have no
+    // stage (stageId null) and stay included.
+    where: {
+      tournamentId,
+      deletedAt: null,
+      round: { not: null },
+      OR: [{ stageId: null }, { stage: { type: { notIn: ["group", "round_robin"] } } }],
+    },
     include: { participants: { include: participantInclude } },
     orderBy: [{ round: "asc" }, { slot: "asc" }],
   });
