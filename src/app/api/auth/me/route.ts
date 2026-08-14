@@ -10,6 +10,7 @@ export const GET = route(async () => {
     emailVerified: user.emailVerified,
     phone: user.phone,
     name: user.name,
+    displayName: user.displayName,
     role: user.role,
     organizationId: user.organizationId,
     playerId: user.playerId,

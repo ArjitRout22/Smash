@@ -37,6 +37,12 @@ type Dashboard = {
   topPlayers: { playerId: string; name: string; photoUrl: string | null; points: number; wins: number; losses: number; rank: number | null }[];
 };
 
+// Prefer the player's display name; otherwise the first name of the full name —
+// a short, friendly greeting rather than the full legal name.
+function greetName(user: { displayName?: string | null; name?: string | null } | null) {
+  return user?.displayName || user?.name?.split(" ")[0] || user?.name || "";
+}
+
 export default function DashboardPage() {
   const { user, can } = useAuth();
   const { data, error, isLoading, mutate } = useSWR<Dashboard>("/api/dashboard", swrFetcher);
@@ -44,7 +50,7 @@ export default function DashboardPage() {
   return (
     <div>
       <PageHeader
-        title={`Hi${user?.name ? `, ${user.name}` : ""} 👋`}
+        title={`Hi${greetName(user) ? `, ${greetName(user)}` : ""} 👋`}
         subtitle="Here's what's happening across your club."
         actions={
           <>
@@ -82,7 +88,7 @@ export default function DashboardPage() {
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
             <Stat icon={Trophy} label="Tournaments" value={data.stats.totalTournaments} hint={`${data.stats.activeTournaments} active · ${data.stats.completedTournaments} done`} />
             <Stat icon={Activity} label="Active now" value={data.stats.activeTournaments} />
-            <Stat icon={Users} label="Players" value={data.stats.totalPlayers} />
+            <Stat icon={Users} label="Players" value={data.stats.totalPlayers} hint="on Smash" />
             <Stat icon={UsersRound} label="Teams" value={data.stats.totalTeams} />
           </div>
 
