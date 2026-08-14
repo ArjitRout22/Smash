@@ -88,14 +88,19 @@ d("team pair change + match snapshots (integration)", () => {
     await updateMatch(m.id, { status: "cancelled" }, actor); // reset for later tests
   });
 
-  it("rejects a replacement already on another team", async () => {
-    await expect(changeTeamPair(actor, team1, { outPlayerId: P.A, inPlayerId: P.C })).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+  it("swaps places when the replacement is already on another team", async () => {
+    // team1 = A + E, team2 = C + D. Replace A with C → the two swap teams.
+    const after = await changeTeamPair(actor, team1, { outPlayerId: P.A, inPlayerId: P.C });
+    expect(after.teamPlayers.map((tp) => tp.player.id).sort()).toEqual([P.C, P.E].sort());
+    const t2 = await prisma.teamPlayer.findMany({ where: { teamId: team2, status: "active" }, select: { playerId: true } });
+    expect(new Set(t2.map((x) => x.playerId))).toEqual(new Set([P.A, P.D])); // both teams stay complete pairs
   });
 
   it("a locked team needs force to change", async () => {
+    // team1 = C + E now; B is unassigned.
     await setTeamLock(actor, team1, true);
-    await expect(changeTeamPair(actor, team1, { outPlayerId: P.A, inPlayerId: P.B })).rejects.toMatchObject({ code: "CONFLICT" });
-    const after = await changeTeamPair(actor, team1, { outPlayerId: P.A, inPlayerId: P.B, force: true });
+    await expect(changeTeamPair(actor, team1, { outPlayerId: P.C, inPlayerId: P.B })).rejects.toMatchObject({ code: "CONFLICT" });
+    const after = await changeTeamPair(actor, team1, { outPlayerId: P.C, inPlayerId: P.B, force: true });
     expect(after.teamPlayers.map((tp) => tp.player.id).sort()).toEqual([P.B, P.E].sort());
     await setTeamLock(actor, team1, false);
   });

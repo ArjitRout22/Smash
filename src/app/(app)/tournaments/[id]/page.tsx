@@ -107,7 +107,7 @@ export default function TournamentDetailPage() {
 
       {tab === "Overview" && <OverviewTab tournament={data} />}
       {tab === "Players" && <PlayersTab tournamentId={id} />}
-      {tab === "Teams" && <TeamsTab tournamentId={id} format={data.format} />}
+      {tab === "Teams" && <TeamsTab tournamentId={id} format={data.format} canManage={data.canManage} />}
       {tab === "Matches" && <MatchesTab tournamentId={id} format={data.format} canManage={data.canManage} />}
       {tab === "Leaderboard" && <LeaderboardTab tournamentId={id} pointsConfig={data.pointsConfig} />}
       {tab === "Settings" && <SettingsTab tournament={data} onChanged={() => mutate()} />}
