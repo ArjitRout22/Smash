@@ -11,6 +11,7 @@ export type TournamentDetail = {
   format: string;
   visibility: string;
   canManage?: boolean;
+  canScore?: boolean; // may the viewer enter scores for this tournament
   viewerStatus?: string | null; // the current user's own join status, if any
   pointsConfig?: unknown; // stored scoring system (null = legacy Standard)
   organizer: { id: string; name: string | null; phone: string } | null;

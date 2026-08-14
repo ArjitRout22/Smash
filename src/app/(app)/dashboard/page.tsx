@@ -90,7 +90,7 @@ export default function DashboardPage() {
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
             <Stat icon={Trophy} label="Tournaments" value={data.stats.totalTournaments} hint={`${data.stats.activeTournaments} active · ${data.stats.completedTournaments} done`} />
             <Stat icon={Activity} label="Active now" value={data.stats.activeTournaments} />
-            <Stat icon={Users} label="Players" value={data.stats.totalPlayers} hint="on Smash" />
+            <Stat icon={Users} label="Players" value={data.stats.totalPlayers} hint="on Smash" href="/players" />
             <Stat icon={UsersRound} label="Teams" value={data.stats.totalTeams} />
           </div>
 
@@ -404,9 +404,9 @@ function ChallengesCard() {
   );
 }
 
-function Stat({ icon: Icon, label, value, hint }: { icon: React.ComponentType<{ className?: string }>; label: string; value: number; hint?: string }) {
-  return (
-    <Card className="p-4">
+function Stat({ icon: Icon, label, value, hint, href }: { icon: React.ComponentType<{ className?: string }>; label: string; value: number; hint?: string; href?: string }) {
+  const body = (
+    <Card className={`p-4${href ? " transition hover:border-[var(--primary)] hover:bg-surface-2" : ""}`}>
       <div className="flex items-center gap-3">
         <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-surface-2 text-primary"><Icon className="h-5 w-5" /></span>
         <div>
@@ -417,6 +417,7 @@ function Stat({ icon: Icon, label, value, hint }: { icon: React.ComponentType<{ 
       {hint && <p className="mt-2 text-xs text-muted">{hint}</p>}
     </Card>
   );
+  return href ? <Link href={href} className="block">{body}</Link> : body;
 }
 
 function MatchRow({ m }: { m: MatchDTO }) {
