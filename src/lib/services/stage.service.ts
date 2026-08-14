@@ -99,13 +99,15 @@ export async function generateBracket(tournamentId: string, input: GenerateInput
   const matchType = isTeam ? "doubles" : "singles";
 
   // Validate participants exist and belong to this tournament.
+  const teamNameById = new Map<string, string>();
   if (isTeam) {
     const teams = await prisma.team.findMany({
       where: { id: { in: input.participantIds }, tournamentId, deletedAt: null },
-      select: { id: true },
+      select: { id: true, name: true },
     });
     if (teams.length !== input.participantIds.length)
       throw Errors.validation("All participants must be teams in this tournament");
+    for (const t of teams) teamNameById.set(t.id, t.name);
   } else {
     const regs = await prisma.tournamentPlayer.findMany({
       where: { tournamentId, playerId: { in: input.participantIds } },
@@ -156,7 +158,7 @@ export async function generateBracket(tournamentId: string, input: GenerateInput
 
     // 3. Link winners forward + seed round-1 participants.
     const refData = (ref: string) =>
-      isTeam ? { teamId: ref } : { playerId: ref };
+      isTeam ? { teamId: ref, teamName: teamNameById.get(ref) } : { playerId: ref };
 
     for (const pm of plan.matches) {
       const matchId = idByCoord.get(key(pm.round, pm.slot))!;
@@ -206,7 +208,7 @@ async function advanceByes(
   planned: PlannedMatch[],
   idByCoord: Map<string, string>,
   key: (r: number, s: number) => string,
-  refData: (ref: string) => { teamId: string } | { playerId: string }
+  refData: (ref: string) => { teamId: string; teamName?: string } | { playerId: string }
 ) {
   for (const pm of planned) {
     if (pm.round !== 1) continue;

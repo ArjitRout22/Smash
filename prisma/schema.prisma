@@ -442,6 +442,10 @@ model MatchParticipant {
   side     String // "A" | "B"
   playerId String? // set for singles
   teamId   String? // set for doubles
+  // Point-in-time team name for THIS match. Frozen once the match starts, so
+  // renaming a team only changes its scheduled (not yet played) fixtures and
+  // completed match history keeps the name the team had when it was played.
+  teamName String?
   isWinner Boolean @default(false)
   gamesWon Int     @default(0)
 
