@@ -186,6 +186,7 @@ model Player {
   tournamentPlayers TournamentPlayer[]
   teamPlayers       TeamPlayer[]
   matchParticipants MatchParticipant[]
+  matchSnapshots    MatchParticipantPlayer[]
   pointTransactions PointTransaction[]
   ranking           PlayerRanking?
   leaderboardEntries LeaderboardEntry[]
@@ -300,6 +301,7 @@ model Team {
   name           String
   teamType       String   @default("doubles") // doubles|mixed
   group          String? // group label (A, B, …) for group-stage standings
+  lockedAt       DateTime? // when locked; a locked team needs extra confirmation to re-pair
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   deletedAt      DateTime?
@@ -310,9 +312,27 @@ model Team {
   teamPlayers       TeamPlayer[]
   matchParticipants MatchParticipant[]
   leaderboardEntries LeaderboardEntry[]
+  pairingChanges    TeamPairingChange[]
 
   @@index([tournamentId])
   @@index([deletedAt])
+}
+
+model TeamPairingChange {
+  id              String   @id @default(uuid())
+  teamId          String
+  tournamentId    String?
+  removedPlayerId String?
+  addedPlayerId   String?
+  playersBefore   Json // [{ id, name }]
+  playersAfter    Json // [{ id, name }]
+  reason          String?
+  changedById     String?
+  createdAt       DateTime @default(now())
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([teamId])
 }
 
 model TeamPlayer {
@@ -406,9 +426,29 @@ model MatchParticipant {
   player Player? @relation(fields: [playerId], references: [id], onDelete: Cascade)
   team   Team?   @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
+  // Immutable snapshot of the players who represent this side FOR THIS MATCH.
+  // Captured at match creation and updated only while the match is still
+  // scheduled; frozen once it starts, so a later team-pair change never rewrites
+  // history/stats. (Singles use `playerId`; only doubles populate this.)
+  snapshotPlayers MatchParticipantPlayer[]
+
   @@unique([matchId, side])
   @@index([playerId])
   @@index([teamId])
+}
+
+model MatchParticipantPlayer {
+  id                 String @id @default(uuid())
+  matchParticipantId String
+  playerId           String
+  displayName        String // point-in-time name, so history reads correctly
+  position           Int?
+
+  participant MatchParticipant @relation(fields: [matchParticipantId], references: [id], onDelete: Cascade)
+  player      Player           @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@index([matchParticipantId])
+  @@index([playerId])
 }
 
 model Game {

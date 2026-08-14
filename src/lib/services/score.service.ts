@@ -5,6 +5,7 @@ import { audit } from "@/lib/audit";
 import { resolveMatch } from "@/lib/engines/scoring";
 import { resolvePointsConfig, pointsForMatch } from "@/lib/engines/points";
 import { recomputeAfterMatch } from "@/lib/services/recompute";
+import { attachMatchSnapshots } from "@/lib/services/match.service";
 import type { Side, StageType } from "@/lib/domain/constants";
 import type { SubmitScoreInput } from "@/lib/validation/schemas";
 import type { AuthUser } from "@/lib/auth/authorize";
@@ -65,6 +66,10 @@ async function propagateWinner(
       data: { matchId: next.id, side, playerId: winner.playerId, teamId: winner.teamId },
     });
   }
+
+  // Snapshot the advancing team's current players into the (still-scheduled)
+  // downstream slot, so a later pair change updates it until it's played.
+  if (winner?.teamId) await attachMatchSnapshots(tx, next.id);
 
   // The downstream match's composition changed → invalidate its result.
   if (next.status === "completed" || next.status === "in_progress" || next.winnerSide) {

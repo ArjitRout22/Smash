@@ -11,6 +11,7 @@ import type { StageType, Side } from "@/lib/domain/constants";
 import type { AuthUser } from "@/lib/auth/authorize";
 import { assertOrgAccess } from "@/lib/auth/tenancy";
 import { loadOwnedTournament } from "@/lib/services/tournament.service";
+import { attachMatchSnapshots } from "@/lib/services/match.service";
 import type {
   CreateStageSchema,
   UpdateStageSchema,
@@ -181,6 +182,9 @@ export async function generateBracket(tournamentId: string, input: GenerateInput
     // 4. Auto-advance byes (walkovers): a round-1 match with exactly one
     //    participant sends that participant straight to the next round.
     await advanceByes(tx, plan.matches, idByCoord, key, refData);
+
+    // 5. Snapshot the players for every doubles participant now placed.
+    for (const matchId of idByCoord.values()) await attachMatchSnapshots(tx, matchId);
 
     await audit(
       {

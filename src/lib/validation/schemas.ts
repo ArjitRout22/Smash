@@ -108,6 +108,14 @@ export const UpdateTeamSchema = z.object({
 export const RandomTeamsSchema = z.object({
   tournamentId: z.string().uuid(),
 });
+// Swap one player on a team for another (team identity/id stays the same).
+export const ChangeTeamPairSchema = z.object({
+  outPlayerId: z.string().uuid(),
+  inPlayerId: z.string().uuid(),
+  reason: z.string().trim().max(200).optional(),
+  force: z.boolean().optional(), // required to change a LOCKED team
+});
+export const TeamLockSchema = z.object({ locked: z.boolean() });
 
 // --- Stages -----------------------------------------------------------------
 export const CreateStageSchema = z.object({
@@ -279,5 +287,6 @@ export type CreatePlayerInput = z.infer<typeof CreatePlayerSchema>;
 export type CreateTournamentInput = z.infer<typeof CreateTournamentSchema>;
 export type CreateTeamInput = z.infer<typeof CreateTeamSchema>;
 export type RandomTeamsInput = z.infer<typeof RandomTeamsSchema>;
+export type ChangeTeamPairInput = z.infer<typeof ChangeTeamPairSchema>;
 export type CreateMatchInput = z.infer<typeof CreateMatchSchema>;
 export type SubmitScoreInput = z.infer<typeof SubmitScoreSchema>;

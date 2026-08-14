@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { Errors } from "@/lib/errors";
 import { audit } from "@/lib/audit";
@@ -23,7 +24,41 @@ const participantInclude = {
       teamPlayers: { include: { player: { select: { id: true, displayName: true } } } },
     },
   },
+  // The immutable per-match player snapshot (doubles). Preferred over the team's
+  // CURRENT members so history/stats reflect who actually played.
+  snapshotPlayers: { select: { playerId: true, displayName: true, position: true }, orderBy: { position: "asc" as const } },
 } as const;
+
+/**
+ * Create/refresh the per-match player snapshot for a match's DOUBLES sides from
+ * each team's CURRENT active members. Idempotent (delete-then-insert), so it's
+ * safe to call at creation, on bracket progression, and when refreshing a still-
+ * scheduled match after a team's pair changed.
+ */
+export async function attachMatchSnapshots(tx: Prisma.TransactionClient, matchId: string) {
+  const parts = await tx.matchParticipant.findMany({
+    where: { matchId, teamId: { not: null } },
+    select: { id: true, teamId: true },
+  });
+  for (const part of parts) {
+    const members = await tx.teamPlayer.findMany({
+      where: { teamId: part.teamId!, status: "active" },
+      orderBy: { position: "asc" },
+      select: { playerId: true, position: true, player: { select: { displayName: true } } },
+    });
+    await tx.matchParticipantPlayer.deleteMany({ where: { matchParticipantId: part.id } });
+    if (members.length) {
+      await tx.matchParticipantPlayer.createMany({
+        data: members.map((m, i) => ({
+          matchParticipantId: part.id,
+          playerId: m.playerId,
+          displayName: m.player.displayName,
+          position: m.position ?? i + 1,
+        })),
+      });
+    }
+  }
+}
 
 const matchInclude = {
   tournament: { select: { id: true, name: true, format: true, organizationId: true } },
@@ -67,7 +102,11 @@ export function serializeMatch(m: Awaited<ReturnType<typeof getMatchRaw>>) {
         teamId: p?.teamId ?? null,
         isWinner: p?.isWinner ?? false,
         gamesWon: p?.gamesWon ?? 0,
-        players: p?.team?.teamPlayers.map((tp) => tp.player) ?? (p?.player ? [p.player] : []),
+        // Snapshot players (who actually represent this side for this match) win
+        // over the team's current members; fall back for legacy/singles rows.
+        players: p?.snapshotPlayers?.length
+          ? p.snapshotPlayers.map((sp) => ({ id: sp.playerId, displayName: sp.displayName }))
+          : (p?.team?.teamPlayers.map((tp) => tp.player) ?? (p?.player ? [p.player] : [])),
       };
     }),
   };
@@ -217,20 +256,24 @@ export async function createMatch(input: CreateInput, actor: AuthUser) {
   if (input.sideA) participants.push({ side: "A", ...input.sideA });
   if (input.sideB) participants.push({ side: "B", ...input.sideB });
 
-  const match = await prisma.match.create({
-    data: {
-      tournamentId: input.tournamentId,
-      stageId: input.stageId,
-      matchType: input.matchType,
-      bestOf: input.bestOf,
-      courtNumber: input.courtNumber,
-      scheduledAt: input.scheduledAt,
-      round: input.round,
-      slot: input.slot,
-      createdById: actor.id,
-      participants: { create: participants },
-    },
-    include: matchInclude,
+  const match = await prisma.$transaction(async (tx) => {
+    const m = await tx.match.create({
+      data: {
+        tournamentId: input.tournamentId,
+        stageId: input.stageId,
+        matchType: input.matchType,
+        bestOf: input.bestOf,
+        courtNumber: input.courtNumber,
+        scheduledAt: input.scheduledAt,
+        round: input.round,
+        slot: input.slot,
+        createdById: actor.id,
+        participants: { create: participants },
+      },
+      select: { id: true },
+    });
+    await attachMatchSnapshots(tx, m.id);
+    return tx.match.findUniqueOrThrow({ where: { id: m.id }, include: matchInclude });
   });
   await audit({ actorUserId: actor.id, action: "match.created", entityType: "Match", entityId: match.id, newValue: { tournamentId: match.tournamentId } });
   return serializeMatch(match);
@@ -338,7 +381,7 @@ export async function generateFixtures(tournamentId: string, input: GenerateFixt
       for (const [a, b] of pairs) {
         for (let r = 0; r < input.rounds; r++) {
           const [x, y] = r % 2 === 0 ? [a, b] : [b, a]; // alternate sides on the return leg
-          await tx.match.create({
+          const mm = await tx.match.create({
             data: {
               tournamentId,
               stageId,
@@ -347,7 +390,9 @@ export async function generateFixtures(tournamentId: string, input: GenerateFixt
               createdById: actor.id,
               participants: { create: [{ side: "A", ...ref(x) }, { side: "B", ...ref(y) }] },
             },
+            select: { id: true },
           });
+          await attachMatchSnapshots(tx, mm.id);
           n++;
         }
       }

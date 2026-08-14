@@ -18,6 +18,7 @@ const matchInclude = {
           teamPlayers: { include: { player: { select: { id: true, displayName: true } } } },
         },
       },
+      snapshotPlayers: { select: { playerId: true, displayName: true, position: true }, orderBy: { position: "asc" as const } },
     },
   },
 } as const;
