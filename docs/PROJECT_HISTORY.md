@@ -473,6 +473,14 @@ refuses when <2 available, auto-names "Team N". Integration-tested.
   tab: Change pair / Lock / History per card. Routes: `POST /api/teams/[id]/pair|
   lock`, `GET .../pairing-history`.
 
+### Phase 18 — OG share images for public tournament pages (PR #23)
+Shared `/t/[id]` links now render a branded card (name, status, format · players ·
+location, current leader, smashhero.app) instead of a text-only preview. New
+`src/app/t/[id]/opengraph-image.tsx` = a self-contained 1200×630 `ImageResponse`
+(`next/og`, Node runtime for Prisma), data from `getPublicTournamentView`, generic
+fallback if not found. `twitter-image.tsx` reuses it; page metadata opts into
+`summary_large_image`. No schema change.
+
 ---
 
 ## Key decisions
@@ -545,6 +553,8 @@ refuses when <2 available, auto-names "Team N". Integration-tested.
 - ✅ **Phase 17 live** (PRs #21, #22): Matches tab read-only for non-owners; and
   **team pair change** — swap a doubles player with immutable per-match snapshots
   so fixtures/history/stats stay intact (+ team lock + pairing history).
+- ✅ **Phase 18 live** (PR #23): **OG/Twitter share images** for `/t/[id]` — a
+  branded per-tournament card so shared links preview richly (summary_large_image).
 - ✅ CI green on every push; 54 unit + 17 integration tests.
 - ✅ **Custom domain live:** https://smashhero.app (HTTPS; Vercel primary = `www`,
   apex 308-redirects to it).
