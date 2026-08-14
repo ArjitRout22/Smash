@@ -5,7 +5,7 @@ import type { AuthUser } from "@/lib/auth/authorize";
 import { createTournament, addTournamentPlayers } from "@/lib/services/tournament.service";
 import { createTeam } from "@/lib/services/team.service";
 import { generateFixtures, setLiveScore, listMatches, getMatch } from "@/lib/services/match.service";
-import { submitScore } from "@/lib/services/score.service";
+import { submitScore, resetMatchResult } from "@/lib/services/score.service";
 
 /**
  * Group-stage fixture generation + scoring + live scoring (the "Sunday" flows).
@@ -248,6 +248,44 @@ d("group-stage fixtures + scoring (integration)", () => {
     // Points ledger written for the winning side's 2 players.
     const ledger = await prisma.pointTransaction.findMany({ where: { matchId: match.id } });
     expect(ledger.length).toBeGreaterThan(0);
+  });
+
+  it("resetMatchResult undoes a mistaken score: back to scheduled, points cleared, stats recomputed", async () => {
+    const { id, teamIds } = await doublesTournamentWithTeams(6);
+    await generateFixtures(id, { stageName: "Group Stage", matchType: "doubles", bestOf: 1, rounds: 1, mode: "groups", groups: [teamIds.slice(0, 3), teamIds.slice(3, 6)] }, actor);
+    const match = await prisma.match.findFirstOrThrow({ where: { tournamentId: id }, orderBy: { createdAt: "asc" }, include: { participants: true } });
+    const winnerTeamId = match.participants.find((p) => p.side === "A")!.teamId!;
+
+    await submitScore(match.id, { games: [{ scoreA: 21, scoreB: 15 }] }, actor);
+    // Sanity: the win landed in the winning team's leaderboard entry (doubles
+    // standings are keyed by team) and a per-player point ledger was written.
+    const before = await prisma.leaderboardEntry.findFirst({ where: { tournamentId: id, teamId: winnerTeamId } });
+    expect(before && (before.wins > 0 || before.points > 0)).toBeTruthy();
+    expect(await prisma.pointTransaction.count({ where: { matchId: match.id } })).toBeGreaterThan(0);
+
+    const res = await resetMatchResult(actor, match.id);
+    expect(res).toMatchObject({ status: "scheduled", wasScored: true });
+
+    const after = await getMatch(actor, match.id);
+    expect(after.status).toBe("scheduled");
+    expect(after.winnerSide).toBeNull();
+    expect(after.isClosed).toBe(false);
+    expect(after.sides.every((s) => !s.isWinner && s.gamesWon === 0)).toBe(true);
+    expect(await prisma.game.count({ where: { matchId: match.id } })).toBe(0);
+    expect(await prisma.pointTransaction.count({ where: { matchId: match.id } })).toBe(0);
+    // Leaderboard rolled back for the (former) winner's team.
+    const rolled = await prisma.leaderboardEntry.findFirst({ where: { tournamentId: id, teamId: winnerTeamId } });
+    expect(rolled?.wins ?? 0).toBe(0);
+    expect(rolled?.points ?? 0).toBe(0);
+    expect(rolled?.matchesPlayed ?? 0).toBe(0);
+  });
+
+  it("resetMatchResult on an already-scheduled match is a harmless no-op", async () => {
+    const { id, teamIds } = await doublesTournamentWithTeams(6);
+    await generateFixtures(id, { stageName: "Group Stage", matchType: "doubles", bestOf: 1, rounds: 1, mode: "groups", groups: [teamIds.slice(0, 3), teamIds.slice(3, 6)] }, actor);
+    const match = await prisma.match.findFirstOrThrow({ where: { tournamentId: id }, orderBy: { createdAt: "asc" } });
+    const res = await resetMatchResult(actor, match.id);
+    expect(res).toMatchObject({ status: "scheduled", wasScored: false });
   });
 
   it("cannot score a cancelled match (clean 4xx)", async () => {

@@ -328,3 +328,71 @@ export async function submitScore(
     // with P2028 — surfacing to users as a generic 500 on "Save score".
   }, { maxWait: 15000, timeout: 30000 });
 }
+
+/**
+ * Undo a match's result: wipe its games + point-ledger, clear the winner, and put
+ * it back to `scheduled` (as if never played) — then recompute the tournament +
+ * global standings so the leaderboard and every affected player's stats reflect
+ * the reversal. The participants (teams/players) and the match itself are kept;
+ * only the *result* is cleared. Used to fix a match scored by mistake.
+ *
+ * Scorer-gated (same rule as saving a score). If the match fed a bracket slot,
+ * that downstream slot is vacated too, keeping the bracket consistent.
+ */
+export async function resetMatchResult(actor: AuthUser, matchId: string) {
+  return prisma.$transaction(async (tx) => {
+    const match = await tx.match.findFirst({
+      where: { id: matchId, deletedAt: null },
+      include: {
+        participants: true,
+        tournament: { select: { id: true, organizerId: true, createdById: true } },
+      },
+    });
+    if (!match) throw Errors.notFound("Match");
+    await assertCanScoreTournament(actor, match.tournament, tx);
+
+    const wasScored = match.status !== "scheduled" || match.winnerSide != null || match.closedAt != null;
+
+    // Clear the recorded result.
+    await tx.game.deleteMany({ where: { matchId: match.id } });
+    await tx.pointTransaction.deleteMany({ where: { matchId: match.id } });
+    // Vacate any downstream bracket slot this match had fed.
+    await propagateWinner(tx, match, null);
+    await tx.matchParticipant.updateMany({
+      where: { matchId: match.id },
+      data: { isWinner: false, gamesWon: 0 },
+    });
+    await tx.match.update({
+      where: { id: match.id },
+      data: {
+        status: "scheduled",
+        winnerSide: null,
+        closedAt: null,
+        liveA: null,
+        liveB: null,
+        version: { increment: 1 },
+      },
+    });
+
+    // Roll stage status back if this reversal makes a "completed" stage active
+    // again, then recompute every derived standing for the tournament.
+    await maybeAdvanceStages(tx, match.tournamentId);
+    const playerIds = await tournamentPlayerIds(tx, match.tournamentId);
+    await recomputeAfterMatch(tx, match.tournamentId, playerIds);
+
+    if (wasScored) {
+      await audit(
+        {
+          actorUserId: actor.id,
+          action: "match.result.reset",
+          entityType: "Match",
+          entityId: match.id,
+          previousValue: { status: match.status, winnerSide: match.winnerSide },
+          newValue: { status: "scheduled" },
+        },
+        tx
+      );
+    }
+    return { matchId: match.id, status: "scheduled" as const, wasScored };
+  }, { maxWait: 15000, timeout: 30000 });
+}
