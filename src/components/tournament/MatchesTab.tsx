@@ -32,12 +32,17 @@ export function MatchesTab({
   tournamentId,
   format,
   canManage: canManageTournament = false,
+  canScore = false,
 }: {
   tournamentId: string;
   format: string;
   /** Whether the VIEWER can manage THIS tournament (owner/admin). Draw-building
    *  and match-lifecycle actions require it, so the tab is read-only for others. */
   canManage?: boolean;
+  /** Whether the VIEWER may enter scores for THIS tournament (organizer/creator,
+   *  platform admin, or a nominated scorer). Server-computed and per-tournament,
+   *  so a nominated player can score and a non-owning organizer cannot. */
+  canScore?: boolean;
 }) {
   const { can } = useAuth();
   const toast = useToast();
@@ -138,6 +143,7 @@ export function MatchesTab({
                     key={m.id}
                     m={m}
                     canManage={canManage}
+                    canScore={canScore}
                     busy={busyId === m.id}
                     onScore={() => setScoreMatch(m)}
                     onPatch={patchMatch}
@@ -209,6 +215,7 @@ function FilterChip({ active, onClick, children }: { active: boolean; onClick: (
 function MatchRow({
   m,
   canManage,
+  canScore,
   busy,
   onScore,
   onPatch,
@@ -216,18 +223,17 @@ function MatchRow({
 }: {
   m: MatchDTO;
   canManage: boolean;
+  canScore: boolean;
   busy: boolean;
   onScore: () => void;
   onPatch: (m: MatchDTO, body: Record<string, unknown>, successMsg: string) => void;
   onRefresh: () => void;
 }) {
-  const { can } = useAuth();
   const [showComments, setShowComments] = useState(false);
   const bothSet = m.sides[0]?.label !== "TBD" && m.sides[1]?.label !== "TBD";
-  // Scoring stays permission-based — nominated scorers needn't own the tournament,
-  // and the server enforces it. Match-lifecycle actions require management of THIS
-  // tournament (`canManage`), so the tab is read-only for non-owners.
-  const canScore = can(PERMS.SCORE_EDIT);
+  // Scoring is per-tournament (`canScore`): organizer/creator, platform admin, or
+  // a nominated scorer. Everyone else sees the score controls disabled/hidden.
+  // Match-lifecycle actions still require `canManage` (owner/admin).
 
   async function setLive(a: number, b: number) {
     try {
@@ -277,7 +283,7 @@ function MatchRow({
             </Button>
           )}
           {/* Score entry — blocked once the match is closed (item 6). */}
-          {can(PERMS.SCORE_EDIT) && m.status !== "cancelled" && !m.isClosed && bothSet && (
+          {canScore && m.status !== "cancelled" && !m.isClosed && bothSet && (
             <Button size="sm" variant="outline" onClick={onScore}>
               <Pencil className="h-3.5 w-3.5" /> {m.status === "completed" ? "Edit score" : "Score"}
             </Button>

@@ -198,6 +198,11 @@ export async function updateTeam(id: string, input: UpdateInput, actor: AuthUser
   const existing = await prisma.team.findFirst({ where: { id, deletedAt: null }, include: { teamPlayers: true } });
   if (!existing) throw Errors.notFound("Team");
   assertOrgAccess(actor, existing.organizationId);
+  // Renaming a team is restricted to platform admins; everyone else is told to
+  // contact support (the UI shows the same message before it even calls this).
+  if (input.name !== undefined && input.name !== existing.name && !isPlatformAdmin(actor)) {
+    throw Errors.forbidden("Only an admin can rename a team. Please contact support@smashhero.app to request a change.");
+  }
   const status = input.playerIds ? await classifyTeamPlayers(input.playerIds, actor, existing.tournamentId) : null;
 
   const updated = await prisma.$transaction(async (tx) => {

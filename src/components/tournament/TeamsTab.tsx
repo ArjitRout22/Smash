@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import useSWR from "swr";
-import { Plus, Trash2, Shuffle, Swords, Lock, LockOpen, Repeat, History } from "lucide-react";
+import { Plus, Trash2, Shuffle, Swords, Lock, LockOpen, Repeat, History, Pencil } from "lucide-react";
 import { api, ApiClientError, swrFetcher } from "@/lib/client/api";
 import { Card, Button, Badge, Input, Select, Field } from "@/components/ui/primitives";
 import { EmptyState, ErrorState, ListSkeleton } from "@/components/ui/states";
@@ -27,9 +27,11 @@ export function TeamsTab({
    *  it, so the tab reads like the others for non-owners. */
   canManage?: boolean;
 }) {
-  const { can } = useAuth();
+  const { can, user } = useAuth();
   const toast = useToast();
   const canManage = canManageTournament && can(PERMS.TEAM_MANAGE);
+  const isAdmin = user?.role === "ADMIN"; // only a platform admin may rename a team
+  const [renameFor, setRenameFor] = useState<TeamDTO | null>(null);
   const [creating, setCreating] = useState(false);
   const [randomOpen, setRandomOpen] = useState(false);
   const [genMatches, setGenMatches] = useState(false);
@@ -126,6 +128,17 @@ export function TeamsTab({
                   </h3>
                   <div className="flex items-center gap-2">
                     <Badge color="slate">{team.teamType}</Badge>
+                    <button
+                      onClick={() =>
+                        isAdmin
+                          ? setRenameFor(team)
+                          : toast.error("Only an admin can rename a team. Please contact support@smashhero.app to request a change.")
+                      }
+                      className="text-muted hover:text-foreground"
+                      aria-label="Edit team name"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
                     {canManage && (
                       <button onClick={() => setDeleteId(team.id)} className="text-muted hover:text-[var(--danger)]" aria-label="Delete team">
                         <Trash2 className="h-4 w-4" />
@@ -204,6 +217,17 @@ export function TeamsTab({
 
       {historyFor && (
         <PairingHistoryModal team={historyFor} onClose={() => setHistoryFor(null)} />
+      )}
+
+      {renameFor && (
+        <RenameTeamModal
+          team={renameFor}
+          onClose={() => setRenameFor(null)}
+          onSaved={() => {
+            setRenameFor(null);
+            mutate();
+          }}
+        />
       )}
 
       <ConfirmDialog
@@ -346,6 +370,48 @@ function ChangePairModal({
           <p className="text-xs text-amber-600 dark:text-amber-400">This team is locked — confirm to change its pairing.</p>
         )}
       </div>
+    </Modal>
+  );
+}
+
+/** Admin-only: rename a team. Applies to the team and its still-scheduled fixtures. */
+function RenameTeamModal({ team, onClose, onSaved }: { team: TeamDTO; onClose: () => void; onSaved: () => void }) {
+  const toast = useToast();
+  const [name, setName] = useState(team.name);
+  const [saving, setSaving] = useState(false);
+  const trimmed = name.trim();
+  const dirty = trimmed !== team.name && trimmed.length >= 1;
+
+  async function save() {
+    if (!dirty) return;
+    setSaving(true);
+    try {
+      await api.put(`/api/teams/${team.id}`, { name: trimmed });
+      toast.success("Team name updated");
+      onSaved();
+    } catch (err) {
+      toast.error(err instanceof ApiClientError ? err.message : "Could not rename team");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title="Rename team"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button onClick={save} loading={saving} disabled={!dirty}>Save</Button>
+        </>
+      }
+    >
+      <Field label="Team name">
+        <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={120} autoFocus />
+      </Field>
+      <p className="mt-2 text-xs text-muted">Renaming applies to this team and its still-scheduled matches. Completed matches keep the name they were played under.</p>
     </Modal>
   );
 }

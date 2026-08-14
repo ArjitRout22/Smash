@@ -51,6 +51,17 @@ export async function getTournament(actor: AuthUser, id: string) {
   if (!t) throw Errors.notFound("Tournament");
   await assertCanView(actor, t);
   const canManage = isPlatformAdmin(actor) || t.organizationId === actor.organizationId;
+  // Who may enter scores for THIS tournament (mirrors assertCanScoreTournament):
+  // a platform admin, the organizer/creator, or a nominated scorer. Everyone else
+  // is view-only, so the UI can disable score controls instead of 403-ing them.
+  const isScorer =
+    !isPlatformAdmin(actor) && actor.id !== t.organizerId && actor.id !== t.createdById
+      ? (await prisma.tournamentScorer.findUnique({
+          where: { tournamentId_userId: { tournamentId: id, userId: actor.id } },
+          select: { id: true },
+        })) != null
+      : false;
+  const canScore = isPlatformAdmin(actor) || actor.id === t.organizerId || actor.id === t.createdById || isScorer;
   // The viewer's own participation status, so the UI shows Pending/Joined
   // instead of a stale "Request to join" (works for non-owners too).
   let viewerStatus: string | null = null;
@@ -61,7 +72,7 @@ export async function getTournament(actor: AuthUser, id: string) {
     });
     viewerStatus = part?.status ?? null;
   }
-  return { ...t, canManage, viewerStatus };
+  return { ...t, canManage, canScore, viewerStatus };
 }
 
 /** True if the caller may VIEW this tournament (owner, public, or participant). */
