@@ -163,11 +163,24 @@ export async function recomputePlayerAggregates(tx: Tx, playerId: string) {
   const wins = participants.filter((p) => p.isWinner).length;
   const losses = matchesPlayed - wins;
   const tournamentsPlayed = new Set(participants.map((p) => p.match.tournamentId)).size;
-  const titles = new Set(
-    participants
-      .filter((p) => p.isWinner && p.match.stage?.type === "final")
-      .map((p) => p.match.tournamentId)
-  ).size;
+
+  // A "title" = winning a tournament. That's either winning a knockout final, OR
+  // finishing #1 in the final standings of a COMPLETED tournament (covers
+  // round-robin / group play, which has no final match). For a doubles winner,
+  // every player on the #1 team gets the title.
+  const finalWinTournamentIds = participants
+    .filter((p) => p.isWinner && p.match.stage?.type === "final")
+    .map((p) => p.match.tournamentId);
+  const standingWins = await tx.leaderboardEntry.findMany({
+    where: {
+      rank: 1,
+      matchesPlayed: { gt: 0 },
+      tournament: { status: "completed", deletedAt: null },
+      OR: [{ playerId }, { team: { teamPlayers: { some: { playerId } } } }],
+    },
+    select: { tournamentId: true },
+  });
+  const titles = new Set([...finalWinTournamentIds, ...standingWins.map((s) => s.tournamentId)]).size;
 
   const totals = await tx.pointTransaction.aggregate({
     where: {
@@ -248,4 +261,29 @@ export async function recomputeGlobalRanks(tx: Tx) {
 export async function recomputeAfterMatch(tx: Tx, tournamentId: string, playerIds: string[]) {
   await recomputeTournamentLeaderboard(tx, tournamentId);
   for (const pid of playerIds) await recomputePlayerAggregates(tx, pid);
+}
+
+/**
+ * Recompute a tournament's leaderboard AND every involved player's aggregate
+ * stats + global ranks. Use when a change affects the whole tournament rather
+ * than one match — e.g. marking it completed (credits the winner's title), or
+ * deleting a match (so everyone's stats stop counting it).
+ */
+export async function recomputeTournamentAndPlayers(tx: Tx, tournamentId: string) {
+  await recomputeTournamentLeaderboard(tx, tournamentId);
+  const ids = new Set<string>();
+  (await tx.tournamentPlayer.findMany({ where: { tournamentId }, select: { playerId: true } })).forEach((t) => ids.add(t.playerId));
+  const teams = await tx.team.findMany({ where: { tournamentId }, select: { id: true } });
+  if (teams.length) {
+    (await tx.teamPlayer.findMany({ where: { teamId: { in: teams.map((t) => t.id) } }, select: { playerId: true } })).forEach((t) => ids.add(t.playerId));
+  }
+  // Include anyone with a snapshot in this tournament's matches (covers players
+  // swapped off a team but who still have frozen history here).
+  (await tx.matchParticipantPlayer.findMany({
+    where: { participant: { match: { tournamentId } } },
+    select: { playerId: true },
+    distinct: ["playerId"],
+  })).forEach((s) => ids.add(s.playerId));
+  for (const pid of ids) await recomputePlayerAggregates(tx, pid);
+  await recomputeGlobalRanks(tx);
 }
