@@ -203,7 +203,9 @@ export async function getPlayerInsights(actor: AuthUser, id: string) {
 
   const parts = await prisma.matchParticipant.findMany({
     where: {
-      playerId: id,
+      // Singles → this player; doubles → the per-match snapshot the player was in
+      // (playerId is null on a doubles participant), so doubles results count too.
+      OR: [{ playerId: id }, { snapshotPlayers: { some: { playerId: id } } }],
       match: { status: "completed", deletedAt: null, tournament: { deletedAt: null } },
     },
     orderBy: { match: { createdAt: "desc" } },
@@ -320,7 +322,10 @@ export async function getPlayerMatches(actor: AuthUser, id: string, p: Paginatio
 export async function getPlayerTournaments(actor: AuthUser, id: string) {
   await getPlayer(actor, id);
   const entries = await prisma.leaderboardEntry.findMany({
-    where: { playerId: id },
+    // Singles entries are keyed by playerId; doubles standings are keyed by TEAM,
+    // so also match tournaments where the player is on the team — otherwise a
+    // doubles player's tournament history comes back empty.
+    where: { OR: [{ playerId: id }, { team: { teamPlayers: { some: { playerId: id } } } }] },
     include: { tournament: { select: { id: true, name: true, status: true } } },
     orderBy: { updatedAt: "desc" },
   });
