@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import { prisma } from "@/lib/db/prisma";
 import { resolvePointsConfig, pointsForMatch, sumAwards } from "@/lib/engines/points";
 import { assignRanks, winPercentage, type RankableStat } from "@/lib/engines/leaderboard";
 import type { StageType } from "@/lib/domain/constants";
@@ -308,26 +309,33 @@ export async function recomputeAfterMatch(tx: Tx, tournamentId: string, playerId
 
 /**
  * Recompute a tournament's leaderboard AND every involved player's aggregate
- * stats + global ranks. Use when a change affects the whole tournament rather
- * than one match — e.g. marking it completed (credits the winner's title), or
- * deleting a match (so everyone's stats stop counting it).
+ * stats. Use when a change affects the whole tournament rather than one match —
+ * e.g. marking it completed (credits the winner's title), or deleting a match.
+ *
+ * Runs as SEVERAL short transactions (leaderboard, then each player), NOT one
+ * long interactive transaction: recomputing the whole field in a single tx makes
+ * ~5 round-trips per player, which against a distant DB (Neon) blows past the
+ * transaction timeout (observed 33s > 30s). Each piece here is small and
+ * idempotent, so splitting them is safe. Ranks stay on-read (no global rewrite).
  */
-export async function recomputeTournamentAndPlayers(tx: Tx, tournamentId: string) {
-  await recomputeTournamentLeaderboard(tx, tournamentId);
+export async function recomputeTournamentAndPlayers(tournamentId: string) {
+  await prisma.$transaction((tx) => recomputeTournamentLeaderboard(tx, tournamentId), { timeout: 20000 });
+
   const ids = new Set<string>();
-  (await tx.tournamentPlayer.findMany({ where: { tournamentId }, select: { playerId: true } })).forEach((t) => ids.add(t.playerId));
-  const teams = await tx.team.findMany({ where: { tournamentId }, select: { id: true } });
+  (await prisma.tournamentPlayer.findMany({ where: { tournamentId }, select: { playerId: true } })).forEach((t) => ids.add(t.playerId));
+  const teams = await prisma.team.findMany({ where: { tournamentId }, select: { id: true } });
   if (teams.length) {
-    (await tx.teamPlayer.findMany({ where: { teamId: { in: teams.map((t) => t.id) } }, select: { playerId: true } })).forEach((t) => ids.add(t.playerId));
+    (await prisma.teamPlayer.findMany({ where: { teamId: { in: teams.map((t) => t.id) } }, select: { playerId: true } })).forEach((t) => ids.add(t.playerId));
   }
   // Include anyone with a snapshot in this tournament's matches (covers players
   // swapped off a team but who still have frozen history here).
-  (await tx.matchParticipantPlayer.findMany({
+  (await prisma.matchParticipantPlayer.findMany({
     where: { participant: { match: { tournamentId } } },
     select: { playerId: true },
     distinct: ["playerId"],
   })).forEach((s) => ids.add(s.playerId));
-  for (const pid of ids) await recomputePlayerAggregates(tx, pid);
-  // Ranks are derived on-read (getPlayerStatistics / the global leaderboard), so
-  // there's no global rank rewrite here — keeping this scoped to the tournament.
+
+  for (const pid of ids) {
+    await prisma.$transaction((tx) => recomputePlayerAggregates(tx, pid), { timeout: 20000 });
+  }
 }

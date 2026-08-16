@@ -176,27 +176,26 @@ export async function updateTournament(id: string, input: UpdateInput, actor: Au
   // so the winner's (and ex-winner's) stats must be recomputed.
   const statusChanged = input.status !== undefined && input.status !== existing.status;
 
-  const updated = await prisma.$transaction(async (tx) => {
-    const row = await tx.tournament.update({
-      where: { id },
-      data: {
-        name: input.name ?? undefined,
-        description: input.description === undefined ? undefined : input.description,
-        location: input.location === undefined ? undefined : input.location,
-        locationLat: input.locationLat === undefined ? undefined : input.locationLat,
-        locationLng: input.locationLng === undefined ? undefined : input.locationLng,
-        startDate: input.startDate === undefined ? undefined : input.startDate,
-        endDate: input.endDate === undefined ? undefined : input.endDate,
-        format: input.format ?? undefined,
-        status: input.status ?? undefined,
-        visibility: input.visibility ?? undefined,
-        organizerId: input.organizerId ?? undefined,
-        pointsConfig: input.pointsConfig === undefined ? undefined : input.pointsConfig ?? undefined,
-      },
-    });
-    if (scoringChanged || statusChanged) await recomputeTournamentAndPlayers(tx, id);
-    return row;
+  const updated = await prisma.tournament.update({
+    where: { id },
+    data: {
+      name: input.name ?? undefined,
+      description: input.description === undefined ? undefined : input.description,
+      location: input.location === undefined ? undefined : input.location,
+      locationLat: input.locationLat === undefined ? undefined : input.locationLat,
+      locationLng: input.locationLng === undefined ? undefined : input.locationLng,
+      startDate: input.startDate === undefined ? undefined : input.startDate,
+      endDate: input.endDate === undefined ? undefined : input.endDate,
+      format: input.format ?? undefined,
+      status: input.status ?? undefined,
+      visibility: input.visibility ?? undefined,
+      organizerId: input.organizerId ?? undefined,
+      pointsConfig: input.pointsConfig === undefined ? undefined : input.pointsConfig ?? undefined,
+    },
   });
+  // Recompute standings + player stats AFTER the update (its own short
+  // transactions), so a distant DB doesn't time out one giant transaction.
+  if (scoringChanged || statusChanged) await recomputeTournamentAndPlayers(id);
   await audit({
     actorUserId: actor.id,
     action: "tournament.updated",
@@ -215,7 +214,7 @@ export async function updateTournament(id: string, input: UpdateInput, actor: Au
  */
 export async function recomputeTournament(actor: AuthUser, tournamentId: string) {
   await loadOwnedTournament(actor, tournamentId);
-  await prisma.$transaction(async (tx) => recomputeTournamentAndPlayers(tx, tournamentId), { maxWait: 15000, timeout: 30000 });
+  await recomputeTournamentAndPlayers(tournamentId);
   await audit({ actorUserId: actor.id, action: "tournament.recomputed", entityType: "Tournament", entityId: tournamentId });
   return { recomputed: true };
 }
