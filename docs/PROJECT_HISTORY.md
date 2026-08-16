@@ -634,6 +634,24 @@ no new message table. Migration `20260814080811`. Integration-tested.
 - **Stale stats fix:** `softDeleteMatch` now recomputes standings + player stats
   when a scored match is deleted.
 
+### Phase 28 — Doubles profile stats, group-winner titles, joined tournaments (PRs #36, #37)
+- **Doubles recent form + tournament history** were empty (queried `playerId` only);
+  now `getPlayerInsights` also matches the per-match snapshot and
+  `getPlayerTournaments` also matches team-keyed standings.
+- **Titles = which group won:** for a completed group-stage tournament, EVERY team
+  in the group with the most total points wins (all their players get a title) —
+  not just the single top team; non-group tournaments still use the #1 standing.
+  (`tournamentWinners()` helper.) Verified on prod: all Maple/Group-B players got
+  titles=1, all Amigo/Group-A players 0.
+- **Tournaments list** now includes tournaments the user JOINED (not just their org).
+- **Leaderboard** tables gain a "Total points" footer row per group.
+- **Maintenance:** `POST /api/tournaments/[id]/recompute` (owner/admin) refreshes a
+  finished tournament's standings + stats.
+- **PR #37:** `recomputeTournamentAndPlayers` now runs as several SHORT transactions
+  (leaderboard, then one per player) instead of one interactive transaction — the
+  full-field recompute was ~5 round-trips/player and blew past Prisma's 30s tx
+  timeout against Neon (33s → 500). Callers invoke it after their own write.
+
 ---
 
 ## Key decisions
@@ -742,6 +760,10 @@ no new message table. Migration `20260814080811`. Integration-tested.
   dashboard "Your profile" CTA; titles for round-robin/group winners (all
   winning-team players); global community dashboard; deleting a scored match now
   recomputes stats.
+- ✅ **Phase 28 live** (PRs #36, #37): doubles recent-form/tournament-history fixed;
+  titles credit the winning GROUP's players; tournaments list includes joined
+  events; leaderboard "Total points" row; recompute split into short transactions
+  (fixed a 30s Neon tx-timeout 500).
 - ✅ CI green on every push; 54 unit + 17 integration tests.
 - ✅ **Custom domain live:** https://smashhero.app (HTTPS; Vercel primary = `www`,
   apex 308-redirects to it).
