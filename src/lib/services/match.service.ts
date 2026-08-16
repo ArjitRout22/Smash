@@ -622,10 +622,9 @@ export async function softDeleteMatch(id: string, actor: AuthUser) {
   // Deleting a match must roll its result out of the standings + every player's
   // stats — otherwise leaderboards/profiles keep counting a match that's gone.
   const wasScored = existing.status === "completed";
-  await prisma.$transaction(async (tx) => {
-    await tx.match.update({ where: { id }, data: { deletedAt: new Date() } });
-    if (wasScored) await recomputeTournamentAndPlayers(tx, existing.tournamentId);
-  });
+  await prisma.match.update({ where: { id }, data: { deletedAt: new Date() } });
+  // Roll the deleted result out of standings + player stats (short transactions).
+  if (wasScored) await recomputeTournamentAndPlayers(existing.tournamentId);
   await audit({ actorUserId: actor.id, action: "match.deleted", entityType: "Match", entityId: id, previousValue: { status: existing.status } });
 }
 
