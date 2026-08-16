@@ -5,7 +5,7 @@ import { audit } from "@/lib/audit";
 import { skipTake, type Pagination } from "@/lib/api/pagination";
 import { TOURNAMENT_TRANSITIONS, type TournamentStatus } from "@/lib/domain/constants";
 import type { AuthUser } from "@/lib/auth/authorize";
-import { orgFilter, assertOrgAccess, ownOrgId, isPlatformAdmin } from "@/lib/auth/tenancy";
+import { assertOrgAccess, ownOrgId, isPlatformAdmin } from "@/lib/auth/tenancy";
 import { sendTournamentInviteEmail } from "@/lib/email/notifications";
 import { LEAGUE_POINTS_CONFIG } from "@/lib/engines/points";
 import { recomputeTournamentAndPlayers } from "@/lib/services/recompute";
@@ -18,9 +18,21 @@ type CreateInput = z.infer<typeof CreateTournamentSchema>;
 type UpdateInput = z.infer<typeof UpdateTournamentSchema>;
 
 export async function listTournaments(actor: AuthUser, p: Pagination, filters: { status?: string }) {
+  // A user's tournaments = ones in their workspace PLUS any they've joined/requested
+  // as a player (e.g. a public tournament in another org). Admins see everything.
+  const scope = isPlatformAdmin(actor)
+    ? {}
+    : {
+        OR: [
+          { organizationId: actor.organizationId ?? "__no_org__" },
+          ...(actor.playerId
+            ? [{ tournamentPlayers: { some: { playerId: actor.playerId, status: { in: ["registered", "requested"] } } } }]
+            : []),
+        ],
+      };
   const where = {
     deletedAt: null,
-    ...orgFilter(actor),
+    ...scope,
     ...(filters.status ? { status: filters.status } : {}),
     ...(p.search ? { name: { contains: p.search, mode: "insensitive" as const } } : {}),
   };
@@ -194,6 +206,18 @@ export async function updateTournament(id: string, input: UpdateInput, actor: Au
     newValue: updated,
   });
   return updated;
+}
+
+/**
+ * Owner/admin maintenance: recompute a tournament's leaderboard + every involved
+ * player's aggregate stats (titles, wins, points, ranks). Useful after logic
+ * changes to refresh an already-finished tournament without changing its data.
+ */
+export async function recomputeTournament(actor: AuthUser, tournamentId: string) {
+  await loadOwnedTournament(actor, tournamentId);
+  await prisma.$transaction(async (tx) => recomputeTournamentAndPlayers(tx, tournamentId), { maxWait: 15000, timeout: 30000 });
+  await audit({ actorUserId: actor.id, action: "tournament.recomputed", entityType: "Tournament", entityId: tournamentId });
+  return { recomputed: true };
 }
 
 export async function softDeleteTournament(id: string, actor: AuthUser) {

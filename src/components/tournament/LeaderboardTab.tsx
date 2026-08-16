@@ -46,6 +46,10 @@ export function LeaderboardTab({ tournamentId, pointsConfig }: { tournamentId: s
 }
 
 function StandingsTable({ title, rows }: { title?: string; rows: LeaderboardRow[] }) {
+  const totals = rows.reduce(
+    (acc, r) => ({ p: acc.p + r.matchesPlayed, w: acc.w + r.wins, l: acc.l + r.losses, pts: acc.pts + r.points }),
+    { p: 0, w: 0, l: 0, pts: 0 }
+  );
   return (
     <Card className="overflow-hidden">
       {title && <CardHeader title={title} />}
@@ -82,6 +86,17 @@ function StandingsTable({ title, rows }: { title?: string; rows: LeaderboardRow[
               </tr>
             ))}
           </tbody>
+          <tfoot>
+            <tr className="border-t-2 border-[var(--border)] font-semibold">
+              <td className="px-4 py-3" />
+              <td className="px-4 py-3 text-muted">Total points</td>
+              <td className="px-4 py-3 text-center text-muted">{totals.p}</td>
+              <td className="px-4 py-3 text-center text-muted">{totals.w}</td>
+              <td className="px-4 py-3 text-center text-muted">{totals.l}</td>
+              <td className="px-4 py-3 text-center font-bold">{totals.pts}</td>
+              <td className="px-4 py-3" />
+            </tr>
+          </tfoot>
         </table>
       </div>
     </Card>

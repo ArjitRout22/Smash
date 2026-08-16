@@ -144,6 +144,43 @@ export async function recomputeTournamentLeaderboard(tx: Tx, tournamentId: strin
   if (entries.length) await tx.leaderboardEntry.createMany({ data: entries });
 }
 
+/**
+ * Which team/player ids WON a tournament (from its final standings). For group
+ * play it's every team in the group with the most total points ("which group
+ * won"); otherwise the #1-ranked entry. Only counts entries that actually played.
+ */
+async function tournamentWinners(tx: Tx, tournamentId: string): Promise<{ teamIds: Set<string>; playerIds: Set<string> }> {
+  const entries = await tx.leaderboardEntry.findMany({
+    where: { tournamentId },
+    select: { teamId: true, playerId: true, points: true, rank: true, matchesPlayed: true, team: { select: { group: true } } },
+  });
+  const played = entries.filter((e) => e.matchesPlayed > 0);
+  const teamIds = new Set<string>();
+  const playerIds = new Set<string>();
+  if (!played.length) return { teamIds, playerIds };
+
+  const hasGroups = played.some((e) => e.team?.group);
+  if (hasGroups) {
+    const totals = new Map<string, number>();
+    for (const e of played) {
+      const g = e.team?.group;
+      if (g) totals.set(g, (totals.get(g) ?? 0) + e.points);
+    }
+    let bestGroup: string | null = null;
+    let bestPts = -Infinity;
+    for (const [g, pts] of totals) if (pts > bestPts) { bestPts = pts; bestGroup = g; }
+    for (const e of played) if (e.teamId && e.team?.group === bestGroup) teamIds.add(e.teamId);
+    return { teamIds, playerIds };
+  }
+
+  for (const e of played) {
+    if (e.rank !== 1) continue;
+    if (e.teamId) teamIds.add(e.teamId);
+    if (e.playerId) playerIds.add(e.playerId);
+  }
+  return { teamIds, playerIds };
+}
+
 /** Rebuild one player's global aggregate stats from matches + the ledger. */
 export async function recomputePlayerAggregates(tx: Tx, playerId: string) {
   const participants = await tx.matchParticipant.findMany({
@@ -164,23 +201,29 @@ export async function recomputePlayerAggregates(tx: Tx, playerId: string) {
   const losses = matchesPlayed - wins;
   const tournamentsPlayed = new Set(participants.map((p) => p.match.tournamentId)).size;
 
-  // A "title" = winning a tournament. That's either winning a knockout final, OR
-  // finishing #1 in the final standings of a COMPLETED tournament (covers
-  // round-robin / group play, which has no final match). For a doubles winner,
-  // every player on the #1 team gets the title.
+  // A "title" = winning a tournament. Either winning a knockout final, OR being
+  // on the winning side of a COMPLETED tournament's final standings. The winner
+  // is: for group play, EVERY team in the group with the most total points
+  // ("which group won"); otherwise the #1 entry. Every player on a winning team
+  // gets the title.
   const finalWinTournamentIds = participants
     .filter((p) => p.isWinner && p.match.stage?.type === "final")
     .map((p) => p.match.tournamentId);
-  const standingWins = await tx.leaderboardEntry.findMany({
+  const myEntries = await tx.leaderboardEntry.findMany({
     where: {
-      rank: 1,
-      matchesPlayed: { gt: 0 },
       tournament: { status: "completed", deletedAt: null },
       OR: [{ playerId }, { team: { teamPlayers: { some: { playerId } } } }],
     },
-    select: { tournamentId: true },
+    select: { tournamentId: true, teamId: true, playerId: true },
   });
-  const titles = new Set([...finalWinTournamentIds, ...standingWins.map((s) => s.tournamentId)]).size;
+  const standingTitleTournamentIds: string[] = [];
+  for (const me of myEntries) {
+    const winners = await tournamentWinners(tx, me.tournamentId);
+    if ((me.teamId && winners.teamIds.has(me.teamId)) || (me.playerId && winners.playerIds.has(me.playerId))) {
+      standingTitleTournamentIds.push(me.tournamentId);
+    }
+  }
+  const titles = new Set([...finalWinTournamentIds, ...standingTitleTournamentIds]).size;
 
   const totals = await tx.pointTransaction.aggregate({
     where: {
@@ -285,5 +328,6 @@ export async function recomputeTournamentAndPlayers(tx: Tx, tournamentId: string
     distinct: ["playerId"],
   })).forEach((s) => ids.add(s.playerId));
   for (const pid of ids) await recomputePlayerAggregates(tx, pid);
-  await recomputeGlobalRanks(tx);
+  // Ranks are derived on-read (getPlayerStatistics / the global leaderboard), so
+  // there's no global rank rewrite here — keeping this scoped to the tournament.
 }
