@@ -616,6 +616,24 @@ no new message table. Migration `20260814080811`. Integration-tested.
   now shows only to managers/admins (admins rename; a non-admin manager gets the
   contact-support toast).
 
+### Phase 27 — Join gating, profile results/rating, titles, community dashboard (PR #35)
+- **Join CTA** hidden once a tournament isn't `upcoming` ("Registration closed");
+  `requestToJoin` rejects any non-upcoming status.
+- **Public profile recent results** now shows the full completed-match history for
+  public tournaments (was capped at 10).
+- **SmashHero Rating** = the player's global leaderboard points (International
+  win 10 / loss 2); added a **"Your profile"** dashboard CTA → detailed profile.
+- **Titles** are won by the #1 team/player in a **completed** tournament's
+  standings (covers round-robin/group), credited to every player on the winning
+  team. `recomputePlayerAggregates` adds standings titles; marking a tournament
+  completed recomputes tournament + players so titles land immediately
+  (`recomputeTournamentAndPlayers`).
+- **Dashboard** is now a global community overview (whole-app counts + global top
+  players); match feeds limited to public tournaments (no private cross-tenant
+  leakage) — fixes wrong-looking stats for joined players.
+- **Stale stats fix:** `softDeleteMatch` now recomputes standings + player stats
+  when a scored match is deleted.
+
 ---
 
 ## Key decisions
@@ -719,6 +737,11 @@ no new message table. Migration `20260814080811`. Integration-tested.
 - ✅ **Phase 26 live** (PR #34): At-a-glance counts exclude soft-deleted
   matches/teams; a tournament's teams are visible read-only to any viewer
   (participant/public), not just its org.
+- ✅ **Phase 27 live** (PR #35): join CTA hidden after a tournament starts;
+  public-profile full recent results; SmashHero Rating = global points +
+  dashboard "Your profile" CTA; titles for round-robin/group winners (all
+  winning-team players); global community dashboard; deleting a scored match now
+  recomputes stats.
 - ✅ CI green on every push; 54 unit + 17 integration tests.
 - ✅ **Custom domain live:** https://smashhero.app (HTTPS; Vercel primary = `www`,
   apex 308-redirects to it).
