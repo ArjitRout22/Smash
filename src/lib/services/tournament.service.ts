@@ -8,7 +8,7 @@ import type { AuthUser } from "@/lib/auth/authorize";
 import { orgFilter, assertOrgAccess, ownOrgId, isPlatformAdmin } from "@/lib/auth/tenancy";
 import { sendTournamentInviteEmail } from "@/lib/email/notifications";
 import { LEAGUE_POINTS_CONFIG } from "@/lib/engines/points";
-import { recomputeTournamentLeaderboard } from "@/lib/services/recompute";
+import { recomputeTournamentAndPlayers } from "@/lib/services/recompute";
 import type {
   CreateTournamentSchema,
   UpdateTournamentSchema,
@@ -160,6 +160,9 @@ export async function updateTournament(id: string, input: UpdateInput, actor: Au
   const scoringChanged =
     input.pointsConfig !== undefined &&
     JSON.stringify(input.pointsConfig ?? null) !== JSON.stringify(existing.pointsConfig ?? null);
+  // A status change to/from "completed" changes who holds the tournament title,
+  // so the winner's (and ex-winner's) stats must be recomputed.
+  const statusChanged = input.status !== undefined && input.status !== existing.status;
 
   const updated = await prisma.$transaction(async (tx) => {
     const row = await tx.tournament.update({
@@ -179,7 +182,7 @@ export async function updateTournament(id: string, input: UpdateInput, actor: Au
         pointsConfig: input.pointsConfig === undefined ? undefined : input.pointsConfig ?? undefined,
       },
     });
-    if (scoringChanged) await recomputeTournamentLeaderboard(tx, id);
+    if (scoringChanged || statusChanged) await recomputeTournamentAndPlayers(tx, id);
     return row;
   });
   await audit({
@@ -340,7 +343,9 @@ export async function requestToJoin(actor: AuthUser, tournamentId: string) {
     throw Errors.validation("This tournament is already in your workspace");
   }
   if (t.visibility !== "public") throw Errors.forbidden("This tournament isn't open to join");
-  if (t.status === "completed" || t.status === "cancelled") {
+  // Only an upcoming tournament accepts new players — once it's ongoing/completed/
+  // cancelled, registration is closed.
+  if (t.status !== "upcoming") {
     throw Errors.invalidState("This tournament is no longer accepting players");
   }
 

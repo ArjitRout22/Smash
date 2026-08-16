@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
-import { smashHeroRating, globalRankingPoints } from "@/lib/engines/points";
+import { globalRankingPoints } from "@/lib/engines/points";
 
 /**
  * Read-only, no-login "viral" player profile. Aggregate numbers come from the
@@ -33,7 +33,7 @@ export async function getPublicPlayerProfile(id: string) {
       match: { status: "completed", deletedAt: null, tournament: { deletedAt: null, visibility: "public" } },
     },
     orderBy: { match: { createdAt: "desc" } },
-    take: 40,
+    take: 200,
     select: {
       side: true,
       isWinner: true,
@@ -62,7 +62,9 @@ export async function getPublicPlayerProfile(id: string) {
   const sideLabel = (p: { team: { name: string } | null; player: { displayName: string } | null; snapshotPlayers: { displayName: string }[] }) =>
     p.snapshotPlayers.length ? p.snapshotPlayers.map((s) => s.displayName).join(" & ") : p.team?.name ?? p.player?.displayName ?? "TBD";
 
-  const recentResults = parts.slice(0, 10).map((p) => {
+  // Show the player's full completed-match history for public tournaments (not
+  // just the last 10) so a tournament's results are all visible.
+  const recentResults = parts.map((p) => {
     const opp = p.match.participants.find((x) => x.side !== p.side) ?? null;
     const mine = p.match.participants.find((x) => x.side === p.side) ?? null;
     return {
@@ -103,7 +105,9 @@ export async function getPublicPlayerProfile(id: string) {
     displayName: player.displayName,
     fullName: player.fullName,
     city: player.city,
-    rating: smashHeroRating(wins, losses),
+    // SmashHero Rating = the player's global leaderboard points (International
+    // scoring: win 10 / loss 2), so the shared card matches the leaderboard.
+    rating: globalRankingPoints(wins, losses),
     wins,
     losses,
     matchesPlayed,

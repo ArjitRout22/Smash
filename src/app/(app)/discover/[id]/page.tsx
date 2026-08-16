@@ -72,8 +72,11 @@ export default function PublicTournamentPage() {
             <Badge color="amber">Request pending</Badge>
           ) : myStatus === "registered" ? (
             <Badge color="green">You&apos;re in</Badge>
-          ) : (
+          ) : data.status === "upcoming" ? (
             <Button onClick={join} loading={joining} disabled={!user?.playerId}>Request to join</Button>
+          ) : (
+            // Registration is closed once the tournament has started/finished.
+            <Badge color="slate">Registration closed</Badge>
           )
         }
       />

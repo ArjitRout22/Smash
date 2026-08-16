@@ -10,6 +10,7 @@ import { buildBracket, type BracketMatchInput } from "@/lib/engines/bracket";
 import type { AuthUser } from "@/lib/auth/authorize";
 import { assertOrgAccess, isPlatformAdmin } from "@/lib/auth/tenancy";
 import { loadOwnedTournament, loadViewableTournament, assertCanScoreTournament } from "@/lib/services/tournament.service";
+import { recomputeTournamentAndPlayers } from "@/lib/services/recompute";
 import type { CreateMatchSchema, UpdateMatchSchema, GenerateFixturesInput } from "@/lib/validation/schemas";
 
 type CreateInput = z.infer<typeof CreateMatchSchema>;
@@ -618,7 +619,13 @@ export async function softDeleteMatch(id: string, actor: AuthUser) {
   });
   if (!existing) throw Errors.notFound("Match");
   assertOrgAccess(actor, existing.tournament.organizationId);
-  await prisma.match.update({ where: { id }, data: { deletedAt: new Date() } });
+  // Deleting a match must roll its result out of the standings + every player's
+  // stats — otherwise leaderboards/profiles keep counting a match that's gone.
+  const wasScored = existing.status === "completed";
+  await prisma.$transaction(async (tx) => {
+    await tx.match.update({ where: { id }, data: { deletedAt: new Date() } });
+    if (wasScored) await recomputeTournamentAndPlayers(tx, existing.tournamentId);
+  });
   await audit({ actorUserId: actor.id, action: "match.deleted", entityType: "Match", entityId: id, previousValue: { status: existing.status } });
 }
 

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import useSWR from "swr";
-import { Trophy, Users, UsersRound, Activity, Plus, Mail, Zap, Compass, MapPin } from "lucide-react";
+import { Trophy, Users, UsersRound, Activity, Plus, Mail, Zap, Compass, MapPin, UserCircle } from "lucide-react";
 import { api, ApiClientError, swrFetcher, swrFetcherWithMeta } from "@/lib/client/api";
 import { PageHeader, CardGridSkeleton, ErrorState, EmptyState } from "@/components/ui/states";
 import { Card, CardHeader, Badge, statusColor, Button, Avatar } from "@/components/ui/primitives";
@@ -63,6 +63,11 @@ export default function DashboardPage() {
             {can(PERMS.PLAYER_MANAGE) && (
               <Link href="/players?new=1">
                 <Button size="sm" variant="outline"><Plus className="h-4 w-4" /> Add player</Button>
+              </Link>
+            )}
+            {user?.playerId && (
+              <Link href={`/players/${user.playerId}`}>
+                <Button size="sm" variant="outline"><UserCircle className="h-4 w-4" /> Your profile</Button>
               </Link>
             )}
             <ShareButton

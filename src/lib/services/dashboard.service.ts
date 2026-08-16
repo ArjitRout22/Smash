@@ -2,7 +2,7 @@ import { prisma } from "@/lib/db/prisma";
 import { serializeMatch } from "@/lib/services/match.service";
 import { globalRankingPoints } from "@/lib/engines/points";
 import type { AuthUser } from "@/lib/auth/authorize";
-import { orgFilter, isPlatformAdmin } from "@/lib/auth/tenancy";
+import { isPlatformAdmin } from "@/lib/auth/tenancy";
 
 const matchInclude = {
   tournament: { select: { id: true, name: true, format: true, organizationId: true } },
@@ -24,13 +24,12 @@ const matchInclude = {
 } as const;
 
 export async function getDashboard(actor: AuthUser) {
-  const org = orgFilter(actor); // {} for platform admin, else { organizationId }
-  const matchOrg = isPlatformAdmin(actor)
-    ? {}
-    : { tournament: { organizationId: actor.organizationId ?? "__no_org__" } };
-  const playerRankOrg = isPlatformAdmin(actor)
-    ? {}
-    : { player: { organizationId: actor.organizationId ?? "__no_org__" } };
+  // The dashboard is a COMMUNITY overview: counts + the leaderboard are global
+  // (whole-app totals) so every user — organizer, joined player, or spectator —
+  // sees the same meaningful numbers, not their own (often empty) workspace.
+  // Match feeds are limited to PUBLIC tournaments so private cross-tenant data is
+  // never surfaced on someone else's dashboard.
+  const publicMatch = { tournament: { visibility: "public", deletedAt: null } };
 
   const [
     totalTournaments,
@@ -43,27 +42,24 @@ export async function getDashboard(actor: AuthUser) {
     topPlayersRaw,
     recentActivity,
   ] = await Promise.all([
-    prisma.tournament.count({ where: { deletedAt: null, ...org } }),
-    prisma.tournament.count({ where: { deletedAt: null, status: "ongoing", ...org } }),
-    prisma.tournament.count({ where: { deletedAt: null, status: "completed", ...org } }),
-    // Players are a GLOBAL directory across all workspaces — show the whole
-    // community total, not just this org's roster.
+    prisma.tournament.count({ where: { deletedAt: null } }),
+    prisma.tournament.count({ where: { deletedAt: null, status: "ongoing" } }),
+    prisma.tournament.count({ where: { deletedAt: null, status: "completed" } }),
     prisma.player.count({ where: { deletedAt: null } }),
-    prisma.team.count({ where: { deletedAt: null, ...org } }),
+    prisma.team.count({ where: { deletedAt: null } }),
     prisma.match.findMany({
-      where: { deletedAt: null, status: "completed", ...matchOrg },
+      where: { deletedAt: null, status: "completed", ...publicMatch },
       orderBy: { updatedAt: "desc" },
       take: 5,
       include: matchInclude,
     }),
     prisma.match.findMany({
-      where: { deletedAt: null, status: { in: ["scheduled", "in_progress"] }, ...matchOrg },
+      where: { deletedAt: null, status: { in: ["scheduled", "in_progress"] }, ...publicMatch },
       orderBy: [{ scheduledAt: "asc" }, { createdAt: "asc" }],
       take: 5,
       include: matchInclude,
     }),
     prisma.playerRanking.findMany({
-      where: playerRankOrg,
       orderBy: [{ wins: "desc" }, { winPercentage: "desc" }],
       take: 5,
       include: { player: { select: { id: true, displayName: true, photoUrl: true } } },
