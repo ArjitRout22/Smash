@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import useSWR from "swr";
-import { Trophy, Users, UsersRound, Activity, Plus, Mail, Zap, Compass, MapPin, UserCircle } from "lucide-react";
+import { Trophy, Users, UsersRound, Activity, Plus, Mail, Zap, Compass, MapPin, UserCircle, Check } from "lucide-react";
 import { api, ApiClientError, swrFetcher, swrFetcherWithMeta } from "@/lib/client/api";
 import { PageHeader, CardGridSkeleton, ErrorState, EmptyState } from "@/components/ui/states";
 import { Card, CardHeader, Badge, statusColor, Button, Avatar } from "@/components/ui/primitives";
@@ -20,8 +20,11 @@ type MatchDTO = {
   id: string;
   status: string;
   scheduledAt: string | null;
-  tournament: { name: string };
+  tournament: { id: string; name: string };
   bestOf: number;
+  stage: { name: string } | null;
+  round: number | null;
+  courtNumber: string | null;
   sides: { label: string; gamesWon: number; isWinner: boolean }[];
 };
 
@@ -114,7 +117,7 @@ export default function DashboardPage() {
               <CardHeader title="Recent results" />
               <div className="divide-y divide-[var(--border)]">
                 {data.recentMatches.length === 0 && (
-                  <div className="p-5"><EmptyState title="No results yet" message="Completed matches will show here." /></div>
+                  <div className="p-5"><EmptyState title="No matches yet" message="Completed matches will appear here." /></div>
                 )}
                 {data.recentMatches.map((m) => <MatchRow key={m.id} m={m} />)}
               </div>
@@ -125,7 +128,7 @@ export default function DashboardPage() {
             <CardHeader title="Top players" action={<Link href="/leaderboard" className="text-sm text-primary hover:underline">View leaderboard</Link>} />
             <div className="divide-y divide-[var(--border)]">
               {data.topPlayers.length === 0 && (
-                <div className="p-5"><EmptyState title="No ranked players yet" message="Rankings appear once matches are played." /></div>
+                <div className="p-5"><EmptyState title="No rankings yet" message="Rankings will appear after matches are completed." /></div>
               )}
               {data.topPlayers.map((p, i) => (
                 <Link key={p.playerId} href={`/players/${p.playerId}`} className="flex items-center justify-between px-5 py-3 hover:bg-surface-2">
@@ -427,20 +430,47 @@ function Stat({ icon: Icon, label, value, hint, href }: { icon: React.ComponentT
 
 function MatchRow({ m }: { m: MatchDTO }) {
   const [a, b] = m.sides;
+  const done = m.status === "completed";
+  // Match context from fields that actually exist — distinguishes otherwise
+  // identical-looking round-robin repeats. Wraps rather than truncating.
+  const context = [
+    `Best of ${m.bestOf}`,
+    m.stage?.name,
+    m.round != null ? `Round ${m.round}` : null,
+    m.courtNumber,
+    !done && m.scheduledAt ? formatDateTime(m.scheduledAt) : null,
+  ].filter(Boolean).join(" · ");
+
+  const side = (s: (typeof m.sides)[number] | undefined) => (
+    <span className="flex min-w-0 items-center gap-1">
+      <span className={`truncate ${done && s?.isWinner ? "font-bold text-foreground" : "text-foreground"}`}>{s?.label ?? "TBD"}</span>
+      {done && s?.isWinner && <Check className="h-3.5 w-3.5 shrink-0 text-[var(--success)]" aria-label="Winner" />}
+    </span>
+  );
+
   return (
-    <div className="flex items-center justify-between px-5 py-3">
-      <div className="min-w-0">
-        <div className="flex items-center gap-2 text-sm">
-          <span className={a?.isWinner ? "font-semibold" : ""}>{a?.label ?? "TBD"}</span>
-          <span className="text-muted">vs</span>
-          <span className={b?.isWinner ? "font-semibold" : ""}>{b?.label ?? "TBD"}</span>
+    <Link
+      href={`/t/${m.tournament.id}`}
+      aria-label={`${a?.label ?? "TBD"} vs ${b?.label ?? "TBD"}${done ? `, ${a?.gamesWon}–${b?.gamesWon}, ${a?.isWinner ? a?.label : b?.label} won` : ""} — ${m.tournament.name}`}
+      className="flex items-center justify-between gap-3 px-5 py-3 transition hover:bg-surface-2 focus:bg-surface-2 focus:outline-none"
+    >
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5 text-sm">
+          {side(a)}
+          <span className="shrink-0 text-xs text-muted">vs</span>
+          {side(b)}
         </div>
-        <p className="truncate text-xs text-muted">{m.tournament.name} · Best of {m.bestOf} · {m.scheduledAt ? formatDateTime(m.scheduledAt) : "unscheduled"}</p>
+        <p className="mt-0.5 truncate text-xs font-medium text-foreground/80">{m.tournament.name}</p>
+        <p className="text-xs text-muted">{context}</p>
       </div>
-      <div className="flex items-center gap-3">
-        {m.status === "completed" && <span className="text-sm font-semibold">{a?.gamesWon}–{b?.gamesWon}</span>}
+      <div className="flex shrink-0 flex-col items-end gap-1">
+        {done && (
+          <span className="text-base font-bold tabular-nums text-foreground">
+            {a?.gamesWon}<span className="px-0.5 font-normal text-muted">–</span>{b?.gamesWon}
+          </span>
+        )}
         <Badge color={statusColor(m.status)}>{titleCase(m.status)}</Badge>
       </div>
-    </div>
+    </Link>
   );
 }

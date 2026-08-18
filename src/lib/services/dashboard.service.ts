@@ -86,15 +86,19 @@ export async function getDashboard(actor: AuthUser) {
     },
     recentMatches: recentMatchesRaw.map(serializeMatch),
     upcomingMatches: upcomingMatchesRaw.map(serializeMatch),
-    topPlayers: topPlayersRaw.map((r, i) => ({
-      playerId: r.playerId,
-      name: r.player.displayName,
-      photoUrl: r.player.photoUrl,
-      points: globalRankingPoints(r.wins, r.losses),
-      wins: r.wins,
-      losses: r.losses,
-      rank: i + 1, // position within this top-N (ranks are computed on-read now)
-    })),
+    // Competition ranking: players tied on global points share a rank (e.g.
+    // 1,1,1,1,5) instead of arbitrary 1,2,3,4 — matches the leaderboard engine.
+    topPlayers: (() => {
+      let lastPts: number | null = null;
+      let lastRank = 0;
+      return topPlayersRaw.map((r, i) => {
+        const points = globalRankingPoints(r.wins, r.losses);
+        const rank = points === lastPts ? lastRank : i + 1;
+        lastPts = points;
+        lastRank = rank;
+        return { playerId: r.playerId, name: r.player.displayName, photoUrl: r.player.photoUrl, points, wins: r.wins, losses: r.losses, rank };
+      });
+    })(),
     recentActivity,
   };
 }
