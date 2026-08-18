@@ -652,6 +652,23 @@ no new message table. Migration `20260814080811`. Integration-tested.
   full-field recompute was ~5 round-trips/player and blew past Prisma's 30s tx
   timeout against Neon (33s → 500). Callers invoke it after their own write.
 
+### Phase 29 — Dashboard P0 polish + tile match-count fix (PR #38)
+- **Recent Results** cards redesigned (no taller): winner shown by **weight + a
+  check icon** (not color alone), prominent score, and a context line built from
+  existing fields (`Best of · Stage · Round · Court`) that **wraps instead of
+  truncating** — so duplicate-looking round-robin matches are distinguishable. The
+  whole card is now a keyboard-accessible link (with an aria-label describing the
+  result) to the tournament's public page `/t/[id]` (no new match-detail route).
+- **Top Players** now uses **competition ranking** (ties share a rank → 1,1,1,1,5)
+  computed in the service from global points — fixes the confusing 1,2,3,4 on
+  equal 60-pt players. Names already link to public profiles; still top-5 +
+  "View leaderboard →". No new algorithm (mirrors the leaderboard engine).
+- **Bug: tile showed 36 matches instead of 18** — `listTournaments` `_count`
+  counted soft-deleted rows (18 deleted + 18 regenerated). Now filters
+  `matches`/`teams` to `deletedAt: null` (same fix already in getTournament).
+- Zero DB changes; no new queries (uses the existing `/api/dashboard` payload).
+  Better empty-state copy. Business logic stays in service/engine.
+
 ---
 
 ## Key decisions

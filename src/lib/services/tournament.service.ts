@@ -43,7 +43,9 @@ export async function listTournaments(actor: AuthUser, p: Pagination, filters: {
       orderBy: { createdAt: p.sortDir },
       include: {
         organizer: { select: { id: true, name: true, phone: true } },
-        _count: { select: { tournamentPlayers: true, teams: true, matches: true } },
+        // Exclude soft-deleted rows so a tile's match/team counts reflect what's
+        // actually there (regenerating fixtures after a delete must not double it).
+        _count: { select: { tournamentPlayers: true, teams: { where: { deletedAt: null } }, matches: { where: { deletedAt: null } } } },
       },
     }),
     prisma.tournament.count({ where }),
