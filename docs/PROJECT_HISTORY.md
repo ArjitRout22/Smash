@@ -669,6 +669,36 @@ no new message table. Migration `20260814080811`. Integration-tested.
 - Zero DB changes; no new queries (uses the existing `/api/dashboard` payload).
   Better empty-state copy. Business logic stays in service/engine.
 
+### Phase 30 — SEO cluster + configurable League scoring + hide platform admin (PR #39)
+- **SEO (public, no-login surface):**
+  - New `Tournament.slug` (unique, nullable), backfilled from the name (migration
+    `20260819090000_tournament_slug`: `regexp_replace` + `row_number()` de-dupe →
+    unique index). `createTournament` stamps a unique slug (`src/lib/slug.ts`).
+  - Public `/t/[id]` now resolves by **slug or uuid**, **308-redirects** a raw uuid
+    to `/t/<slug>`, sets `alternates.canonical`, and emits **SportsEvent JSON-LD**.
+    (Couldn't use `/tournaments/[slug]` — collides with the authed
+    `/tournaments/[id]` management route — so the existing public `/t/` route was
+    reused.)
+  - New public **`/explore`** browse page (ISR, `revalidate=3600`) listing public
+    tournaments with ItemList JSON-LD; in-app Share/QR/Public-page links now use the
+    pretty slug.
+  - **`app/sitemap.ts`** (public tournaments + public player profiles) and
+    **`app/robots.ts`** (only `/explore`, `/t/`, `/player/` indexable). Middleware
+    matcher bypass added for `robots.txt`/`sitemap.xml`/`explore`.
+- **Configurable League scoring:** the League default is now a **flat win 2 / loss 0**
+  (dropped the old reach-15 = 1 consolation floor). `PointsConfig` carries an explicit
+  `system` field (the floor is no longer a reliable discriminator now that values are
+  editable; legacy floor-only rows still classify as League). Settings → Scoring now
+  exposes **editable win/loss inputs** plus an **optional** close-loss bonus;
+  International stays a fixed preset. The scoring engine is unchanged.
+- **Hide the platform admin:** `listPlayers` (global directory + invite picker) and the
+  nearby-players query exclude ADMIN-role players for non-admin callers — the admin
+  itself still sees everyone.
+- Tests: updated points-unit + scoring-integration for the new default + custom values
+  + optional floor; new `admin-visibility` integration test. Verified tsc + eslint +
+  unit(57) + integration(66) + build + prod smoke (slug page, uuid→slug 308, JSON-LD,
+  robots/sitemap/explore). Prod backfill confirmed (Freedom Cup → `freedom-cup-2026`).
+
 ---
 
 ## Key decisions
