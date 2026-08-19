@@ -203,7 +203,7 @@ d("league scoring — default flat 2/0 + optional configurable floor (integratio
 
   it("honours CUSTOM league point values (win 5 / loss 1)", async () => {
     await updateMatch(matchId, { closed: false }, actor);
-    let cur = await prisma.match.findUniqueOrThrow({ where: { id: matchId } });
+    const cur = await prisma.match.findUniqueOrThrow({ where: { id: matchId } });
     await submitScore(matchId, { games: [{ scoreA: 21, scoreB: 9 }], expectedVersion: cur.version }, actor);
     await updateTournament(
       tournamentId,

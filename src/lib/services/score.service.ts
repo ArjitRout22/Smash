@@ -4,7 +4,7 @@ import { Errors } from "@/lib/errors";
 import { audit } from "@/lib/audit";
 import { resolveMatch } from "@/lib/engines/scoring";
 import { resolvePointsConfig, pointsForMatch } from "@/lib/engines/points";
-import { recomputeAfterMatch } from "@/lib/services/recompute";
+import { recomputeAfterMatch, involvedPlayerIds } from "@/lib/services/recompute";
 import { attachMatchSnapshots } from "@/lib/services/match.service";
 import type { Side, StageType } from "@/lib/domain/constants";
 import type { SubmitScoreInput } from "@/lib/validation/schemas";
@@ -112,38 +112,6 @@ async function maybeAdvanceStages(tx: Tx, tournamentId: string) {
       }
     }
   }
-}
-
-/** All player ids that have any stake in a tournament (bounded by field size). */
-async function tournamentPlayerIds(tx: Tx, tournamentId: string): Promise<string[]> {
-  const ids = new Set<string>();
-  (await tx.tournamentPlayer.findMany({ where: { tournamentId }, select: { playerId: true } })).forEach(
-    (t) => ids.add(t.playerId)
-  );
-  const teams = await tx.team.findMany({ where: { tournamentId }, select: { id: true } });
-  if (teams.length) {
-    (
-      await tx.teamPlayer.findMany({
-        where: { teamId: { in: teams.map((t) => t.id) } },
-        select: { playerId: true },
-      })
-    ).forEach((t) => ids.add(t.playerId));
-  }
-  (
-    await tx.pointTransaction.findMany({
-      where: { tournamentId },
-      select: { playerId: true },
-      distinct: ["playerId"],
-    })
-  ).forEach((p) => ids.add(p.playerId));
-  // Also any players sitting in bracket slots via direct participation.
-  (
-    await tx.matchParticipant.findMany({
-      where: { match: { tournamentId }, playerId: { not: null } },
-      select: { playerId: true },
-    })
-  ).forEach((p) => p.playerId && ids.add(p.playerId));
-  return [...ids];
 }
 
 export type SubmitScoreResult = {
@@ -295,8 +263,14 @@ export async function submitScore(
 
     await maybeAdvanceStages(tx, match.tournamentId);
 
-    // Recompute all derived standings for the tournament + affected players.
-    const playerIds = await tournamentPlayerIds(tx, match.tournamentId);
+    // Recompute derived standings: the tournament leaderboard (rebuilt in full,
+    // one bounded op) + ONLY the players who actually played this match. A single
+    // score can't change any other player's global aggregate (their win/loss,
+    // points and titles are unaffected until the tournament itself is marked
+    // completed, which recomputes the whole field separately). Recomputing every
+    // registered player here was the main cause of slow "Save score" on large
+    // fields — each player added ~5+ cross-region round-trips inside the txn.
+    const playerIds = await involvedPlayerIds(tx, match.id);
     await recomputeAfterMatch(tx, match.tournamentId, playerIds);
 
     await audit(
@@ -377,7 +351,8 @@ export async function resetMatchResult(actor: AuthUser, matchId: string) {
     // Roll stage status back if this reversal makes a "completed" stage active
     // again, then recompute every derived standing for the tournament.
     await maybeAdvanceStages(tx, match.tournamentId);
-    const playerIds = await tournamentPlayerIds(tx, match.tournamentId);
+    // Only the players who played this match are affected (see submitScore).
+    const playerIds = await involvedPlayerIds(tx, match.id);
     await recomputeAfterMatch(tx, match.tournamentId, playerIds);
 
     if (wasScored) {

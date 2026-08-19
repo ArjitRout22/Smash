@@ -8,6 +8,11 @@ import { LiveNow } from "@/components/LiveNow";
 
 const APP_URL = process.env.APP_URL ?? "https://smashhero.app";
 
+// Cache the public page (ISR) — standings change slowly and live scores come
+// from the client LiveNow poller, so a 60s window keeps navigation snappy
+// without a DB round-trip on every visit.
+export const revalidate = 60;
+
 function titleCase(s: string) {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }

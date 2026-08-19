@@ -13,6 +13,9 @@ const OPEN_PATHS = ["/verify-email"];
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  // The marketing home is public for everyone (signed in or not) — never gate or
+  // redirect it, so a shared smashhero.app link lands on the landing page.
+  if (pathname === "/") return NextResponse.next();
   const hasSession = Boolean(req.cookies.get(SESSION_COOKIE)?.value);
   const isPublic = PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
   const isOpen = OPEN_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
