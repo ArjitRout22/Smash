@@ -42,6 +42,7 @@ export async function getPublicPlayerProfile(id: string) {
         select: {
           id: true,
           createdAt: true,
+          closedAt: true,
           tournament: { select: { id: true, name: true } },
           participants: {
             select: {
@@ -69,6 +70,7 @@ export async function getPublicPlayerProfile(id: string) {
     const mine = p.match.participants.find((x) => x.side === p.side) ?? null;
     return {
       matchId: p.match.id,
+      date: (p.match.closedAt ?? p.match.createdAt).toISOString(),
       tournamentId: p.match.tournament.id,
       tournamentName: p.match.tournament.name,
       opponent: opp ? sideLabel(opp) : "—",
@@ -261,6 +263,36 @@ export async function listPublicTournaments(limit = 200) {
     playerCount: t._count.tournamentPlayers,
     href: `/t/${t.slug ?? t.id}`,
   }));
+}
+
+/**
+ * Everything the public marketing landing page (`/`) needs, in one call:
+ * community-scale counts, the current top players (admin excluded), and a few
+ * featured public tournaments. No auth, no private data.
+ */
+export async function getLandingData() {
+  const [tournaments, players, matchesPlayed, topRaw, featured] = await Promise.all([
+    prisma.tournament.count({ where: { deletedAt: null } }),
+    prisma.player.count({ where: { deletedAt: null } }),
+    prisma.match.count({ where: { deletedAt: null, status: "completed" } }),
+    prisma.playerRanking.findMany({
+      where: { player: { deletedAt: null, user: { is: { role: { is: { name: { not: "ADMIN" } } } } } } },
+      orderBy: [{ wins: "desc" }, { winPercentage: "desc" }],
+      take: 5,
+      select: { playerId: true, wins: true, losses: true, player: { select: { displayName: true } } },
+    }),
+    listPublicTournaments(6),
+  ]);
+
+  const topPlayers = topRaw.map((r) => ({
+    id: r.playerId,
+    name: r.player.displayName,
+    points: globalRankingPoints(r.wins, r.losses),
+    wins: r.wins,
+    losses: r.losses,
+  }));
+
+  return { stats: { tournaments, players, matchesPlayed }, topPlayers, tournaments: featured };
 }
 
 /**

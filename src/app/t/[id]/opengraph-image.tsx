@@ -9,7 +9,6 @@ export const contentType = "image/png";
 
 const GREEN = "#22c55e";
 const BG = "#0b1220";
-const SUBTLE = "#94a3b8";
 
 function titleCase(s: string) {
   return s.charAt(0).toUpperCase() + s.slice(1);
@@ -92,10 +91,26 @@ export default async function Image({ params }: { params: Promise<{ id: string }
           )}
         </div>
 
-        {/* Body: tournament name + meta */}
+        {/* Body: tournament name + meta pills */}
         <div style={{ display: "flex", flexDirection: "column" }}>
-          <div style={{ fontSize: 76, fontWeight: 800, lineHeight: 1.05, letterSpacing: -1.5 }}>{name}</div>
-          <div style={{ display: "flex", marginTop: 24, fontSize: 32, color: SUBTLE }}>{metaParts.join("  ·  ")}</div>
+          <div style={{ display: "flex", fontSize: 76, fontWeight: 800, lineHeight: 1.05, letterSpacing: -1.5 }}>{name}</div>
+          <div style={{ display: "flex", marginTop: 28, gap: 16 }}>
+            {metaParts.map((m, i) => (
+              <div
+                key={i}
+                style={{
+                  display: "flex",
+                  fontSize: 28,
+                  color: "#e2e8f0",
+                  background: "rgba(148,163,184,0.14)",
+                  padding: "10px 22px",
+                  borderRadius: 999,
+                }}
+              >
+                {m}
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Footer: leader / tagline + domain */}

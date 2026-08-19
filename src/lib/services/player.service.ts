@@ -310,7 +310,10 @@ export async function getPlayerMatches(actor: AuthUser, id: string, p: Paginatio
       x?.team?.name ?? x?.player?.displayName ?? "TBD";
     return {
       matchId: m.id,
-      date: m.scheduledAt,
+      // Generated fixtures have no scheduledAt, so fall back to when the result
+      // was finalized (closedAt), then the row's creation time — never null, so
+      // the Match-history "Date" column stops showing "—".
+      date: m.closedAt ?? m.scheduledAt ?? m.createdAt,
       tournament: m.tournament,
       stage: m.stage,
       opponent: label(opponent),

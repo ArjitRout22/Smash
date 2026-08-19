@@ -699,6 +699,35 @@ no new message table. Migration `20260814080811`. Integration-tested.
   unit(57) + integration(66) + build + prod smoke (slug page, uuid→slug 308, JSON-LD,
   robots/sitemap/explore). Prod backfill confirmed (Freedom Cup → `freedom-cup-2026`).
 
+### Phase 31 — Date fix, faster scoring/dashboard, performance graph, marketing landing
+- **Match-history date showed "—":** rows used `scheduledAt`, which is null for
+  generated fixtures. Now `date = closedAt ?? scheduledAt ?? createdAt` (the finalize
+  time) in `getPlayerMatches`; the public profile's results also carry a `date`.
+- **Slow "Save score":** `submitScore` recomputed EVERY registered player's global
+  aggregate on each save (~5+ cross-region round-trips per player). A single score only
+  changes the players who played it — others' win/loss/points/titles don't move until
+  the tournament is marked completed (handled separately). Now recomputes just the
+  **involved players** (`involvedPlayerIds`) + the full tournament leaderboard (one
+  bounded op). Same fix in `resetMatchResult`. Removed the now-unused `tournamentPlayerIds`.
+- **Slow dashboard:** the shared community block (counts, public match feeds, top
+  players — identical for everyone) is now wrapped in `unstable_cache` (30s TTL, tag
+  `dashboard`); only the per-user activity feed stays live. Turns ~8 cross-region
+  queries into a cached read for most loads.
+- **Slow page navigation:** added ISR `revalidate` to the public `/t/[id]` (60s) and
+  `/player/[id]` (60s) pages so repeat/ shared visits skip the DB.
+- **Performance graph:** new dependency-free inline-SVG `PerformanceChart` — a
+  cumulative wins-minus-losses "form curve" (per-match win/loss dots, area fill,
+  trend caption). Shown on BOTH the in-app and public player profiles (≥2 matches).
+- **Marketing (both):** (1) real public **landing page at `/`** (was a redirect to
+  login) — hero, feature grid, live community stats + top players + featured public
+  tournaments, CTAs to /explore and sign-up; static/ISR (1h), middleware now lets `/`
+  through for everyone. (2) **Polished OG share cards** — player card gains a
+  Rank/Record/Titles chip row; tournament card meta rendered as pills.
+- Root cause note: the deepest latency (cross-region Neon-Singapore ↔ Vercel-US-East)
+  is still best fixed by the pending infra PR #1 (pooled DB + region move, user action);
+  these changes cut avoidable work and cache shared reads. Verified tsc + eslint +
+  unit(57) + integration(66) + build + dev smoke (landing, profile graph SVG).
+
 ---
 
 ## Key decisions

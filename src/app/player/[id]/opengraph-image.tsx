@@ -8,6 +8,16 @@ export const contentType = "image/png";
 
 const GREEN = "#22c55e";
 const BG = "#0b1220";
+const SUBTLE = "#94a3b8";
+
+function Chip({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column" }}>
+      <div style={{ display: "flex", fontSize: 22, letterSpacing: 2, color: SUBTLE }}>{label}</div>
+      <div style={{ display: "flex", fontSize: 40, fontWeight: 800, color: "#f8fafc" }}>{value}</div>
+    </div>
+  );
+}
 
 /**
  * Shareable "player card" — the viral hook. Big SmashHero Rating + record, on the
@@ -65,11 +75,17 @@ export default async function Image({ params }: { params: Promise<{ id: string }
           <div style={{ display: "flex", fontSize: 132, fontWeight: 800, lineHeight: 1, marginTop: 4 }}>{String(p?.rating ?? 1000)}</div>
         </div>
 
-        {/* Footer: record + domain */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ display: "flex", fontSize: 34, color: "#e2e8f0" }}>
-            {p ? `${p.wins} Wins · ${p.matchesPlayed} Matches` : "Play. Win. Climb."}
-          </div>
+        {/* Footer: stat chips + domain */}
+        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between" }}>
+          {p ? (
+            <div style={{ display: "flex", gap: 56 }}>
+              <Chip label="RANK" value={p.rank != null ? `#${p.rank}` : "—"} />
+              <Chip label="RECORD" value={`${p.wins}W · ${p.losses}L`} />
+              <Chip label="TITLES" value={String(p.titles)} />
+            </div>
+          ) : (
+            <div style={{ display: "flex", fontSize: 34, color: "#e2e8f0" }}>Play. Win. Climb.</div>
+          )}
           <div style={{ display: "flex", fontSize: 30, fontWeight: 700, color: GREEN }}>smashhero.app</div>
         </div>
       </div>

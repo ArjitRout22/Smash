@@ -3,8 +3,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getPublicPlayerProfile } from "@/lib/services/public.service";
 import { ShareButton } from "@/components/ShareButton";
+import { PerformanceChart } from "@/components/PerformanceChart";
 
 const APP_URL = process.env.APP_URL ?? "https://smashhero.app";
+
+// Public profile — cache (ISR) so repeat visits and shared links load fast.
+export const revalidate = 60;
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params;
@@ -76,6 +80,14 @@ export default async function PublicPlayerPage({ params }: { params: Promise<{ i
           <Stat label="Wins" value={p.wins} accent />
           <Stat label="Losses" value={p.losses} />
         </div>
+
+        {/* Performance trend */}
+        {p.recentResults.length >= 2 && (
+          <div className="mt-6 rounded-2xl border border-[var(--border)] bg-surface p-5">
+            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">Performance</h2>
+            <PerformanceChart results={p.recentResults} />
+          </div>
+        )}
 
         {/* Recent results */}
         <h2 className="mt-8 mb-2 text-sm font-semibold uppercase tracking-wide text-muted">Recent results</h2>

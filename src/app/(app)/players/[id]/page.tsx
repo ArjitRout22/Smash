@@ -8,6 +8,7 @@ import { PageHeader, ErrorState, ListSkeleton, CardGridSkeleton } from "@/compon
 import { Card, CardHeader, Badge, statusColor, Avatar } from "@/components/ui/primitives";
 import { ViewOnMapButton } from "@/components/LocationPicker";
 import { ShareButton } from "@/components/ShareButton";
+import { PerformanceChart } from "@/components/PerformanceChart";
 import { formatDate, pct, titleCase } from "@/lib/client/format";
 
 type Player = {
@@ -197,6 +198,20 @@ export default function PlayerDetailPage() {
           )}
         </div>
       )}
+
+      {/* Performance trend */}
+      {(() => {
+        const played = (matches?.data ?? [])
+          .filter((m) => m.result === "win" || m.result === "loss")
+          .map((m) => ({ won: m.result === "win" }));
+        if (played.length < 2) return null;
+        return (
+          <Card className="mt-6 p-5">
+            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">Performance</h2>
+            <PerformanceChart results={played} />
+          </Card>
+        );
+      })()}
 
       {/* Tournament history */}
       <Card className="mt-6 overflow-hidden">
