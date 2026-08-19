@@ -252,6 +252,7 @@ model Tournament {
   id             String    @id @default(uuid())
   organizationId String?
   name           String
+  slug           String?   @unique // human-readable public URL: /t/<slug> (SEO)
   description    String?
   location       String?
   locationLat    Float? // selected place coordinates (OpenStreetMap search)

@@ -152,20 +152,60 @@ const SCORING_OPTIONS: { value: PointsSystem; title: string; hint: string }[] = 
 
 /**
  * Choose how the per-tournament points table is scored. Switching recomputes the
- * standings from stored results, so the table updates immediately.
+ * standings from stored results, so the table updates immediately. The League
+ * system additionally exposes editable point values (win / loss) and an optional
+ * close-loss bonus; International stays a fixed BWF-style preset.
  */
 function ScoringCard({ tournament, onChanged }: { tournament: TournamentDetail; onChanged: () => void }) {
   const toast = useToast();
-  const current = pointsSystemOf(resolvePointsConfig(tournament.pointsConfig ?? undefined));
+  const resolved = resolvePointsConfig(tournament.pointsConfig ?? undefined);
+  const current = pointsSystemOf(resolved);
   const [system, setSystem] = useState<PointsSystem>(current);
   const [saving, setSaving] = useState(false);
-  const dirty = system !== current;
+
+  // Editable League values — seeded from the current config (or the League
+  // preset when the tournament is currently on International).
+  const seed = current === "league" ? resolved : LEAGUE_POINTS_CONFIG;
+  const [win, setWin] = useState(String(seed.matchWin));
+  const [loss, setLoss] = useState(String(seed.matchLoss));
+  const [bonusOn, setBonusOn] = useState(seed.lossBonusThreshold != null);
+  const [threshold, setThreshold] = useState(String(seed.lossBonusThreshold ?? 15));
+  const [bonusPts, setBonusPts] = useState(String(seed.lossBonusPoints ?? 1));
+
+  const winN = Number(win);
+  const lossN = Number(loss);
+  const thresholdN = Number(threshold);
+  const bonusPtsN = Number(bonusPts);
+  const valid =
+    Number.isInteger(winN) && winN >= 0 &&
+    Number.isInteger(lossN) && lossN >= 0 &&
+    (!bonusOn || (Number.isInteger(thresholdN) && thresholdN >= 0 && Number.isInteger(bonusPtsN) && bonusPtsN >= 0));
+
+  function leagueConfig() {
+    return {
+      ...LEAGUE_POINTS_CONFIG,
+      matchWin: winN,
+      matchLoss: lossN,
+      lossBonusThreshold: bonusOn ? thresholdN : null,
+      lossBonusPoints: bonusOn ? bonusPtsN : null,
+    };
+  }
+
+  // "Dirty" when the system changed, or (on League) any point value changed.
+  const leagueChanged =
+    system === "league" &&
+    (current !== "league" ||
+      winN !== resolved.matchWin ||
+      lossN !== resolved.matchLoss ||
+      (bonusOn ? thresholdN : null) !== resolved.lossBonusThreshold ||
+      (bonusOn ? bonusPtsN : null) !== resolved.lossBonusPoints);
+  const dirty = (system !== current || leagueChanged) && (system === "standard" || valid);
 
   async function save() {
     setSaving(true);
     try {
       await api.put(`/api/tournaments/${tournament.id}`, {
-        pointsConfig: system === "league" ? LEAGUE_POINTS_CONFIG : STANDARD_POINTS_CONFIG,
+        pointsConfig: system === "league" ? leagueConfig() : STANDARD_POINTS_CONFIG,
       });
       toast.success("Scoring updated — standings recomputed");
       onChanged();
@@ -204,8 +244,42 @@ function ScoringCard({ tournament, onChanged }: { tournament: TournamentDetail; 
             );
           })}
         </div>
+
+        {system === "league" && (
+          <div className="rounded-xl border border-[var(--border)] bg-surface-2/40 p-4">
+            <p className="mb-3 text-sm font-medium text-foreground">League points</p>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Points for a win">
+                <Input type="number" min={0} step={1} value={win} onChange={(e) => setWin(e.target.value)} />
+              </Field>
+              <Field label="Points for a loss">
+                <Input type="number" min={0} step={1} value={loss} onChange={(e) => setLoss(e.target.value)} />
+              </Field>
+            </div>
+
+            <label className="mt-4 flex items-center gap-2 text-sm text-foreground">
+              <input type="checkbox" checked={bonusOn} onChange={(e) => setBonusOn(e.target.checked)} className="h-4 w-4" />
+              Award a close-loss bonus
+            </label>
+            {bonusOn && (
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <Field label="Loser reaches at least" hint="Best single-game score">
+                  <Input type="number" min={0} step={1} value={threshold} onChange={(e) => setThreshold(e.target.value)} />
+                </Field>
+                <Field label="Bonus points">
+                  <Input type="number" min={0} step={1} value={bonusPts} onChange={(e) => setBonusPts(e.target.value)} />
+                </Field>
+              </div>
+            )}
+
+            <p className="mt-3 text-xs text-muted">
+              {valid ? describePointsSystem(leagueConfig()) : "Enter whole numbers (0 or more)."}
+            </p>
+          </div>
+        )}
+
         <div className="flex justify-end">
-          <Button onClick={save} loading={saving} disabled={!dirty}>Save scoring</Button>
+          <Button onClick={save} loading={saving} disabled={!dirty || saving}>Save scoring</Button>
         </div>
       </div>
     </Card>

@@ -8,6 +8,7 @@ import type { AuthUser } from "@/lib/auth/authorize";
 import { assertOrgAccess, ownOrgId, isPlatformAdmin } from "@/lib/auth/tenancy";
 import { sendTournamentInviteEmail } from "@/lib/email/notifications";
 import { LEAGUE_POINTS_CONFIG } from "@/lib/engines/points";
+import { uniqueTournamentSlug } from "@/lib/slug";
 import { recomputeTournamentAndPlayers } from "@/lib/services/recompute";
 import type {
   CreateTournamentSchema,
@@ -130,9 +131,11 @@ export async function loadViewableTournament(actor: AuthUser, id: string) {
 }
 
 export async function createTournament(input: CreateInput, actor: AuthUser) {
+  const slug = await uniqueTournamentSlug(input.name);
   const t = await prisma.tournament.create({
     data: {
       name: input.name,
+      slug,
       description: input.description,
       location: input.location,
       locationLat: input.locationLat,
@@ -144,8 +147,8 @@ export async function createTournament(input: CreateInput, actor: AuthUser) {
       organizerId: input.organizerId ?? actor.id,
       createdById: actor.id,
       organizationId: ownOrgId(actor),
-      // New tournaments default to the League system (win 3 / close-loss 1 /
-      // heavy-loss 0). Organizers can switch to International in Settings.
+      // New tournaments default to the League system (flat win 2 / loss 0).
+      // Organizers can edit the values or switch to International in Settings.
       pointsConfig: input.pointsConfig ?? LEAGUE_POINTS_CONFIG,
       status: "upcoming",
     },

@@ -41,7 +41,9 @@ export async function listNearbyPlayers(actor: AuthUser) {
       discoverable: true,
       deletedAt: null,
       id: { not: actor.playerId },
-      user: { is: { isActive: true, deletedAt: null } }, // must have an account to receive requests
+      // must have an account to receive requests, and never surface the platform
+      // admin (an operator account, not a real player looking for games)
+      user: { is: { isActive: true, deletedAt: null, role: { is: { name: { not: "ADMIN" } } } } },
       locationLat: { gte: me.locationLat - dLat, lte: me.locationLat + dLat },
       locationLng: { gte: me.locationLng - dLng, lte: me.locationLng + dLng },
     },

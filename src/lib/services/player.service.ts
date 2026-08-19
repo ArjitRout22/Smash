@@ -22,6 +22,10 @@ export async function listPlayers(
     deletedAt: null,
     // "all" = global player directory (view-only); default = your workspace.
     ...(opts.scope === "all" ? {} : orgFilter(actor)),
+    // The platform admin is an operator, not a participant — never surface its
+    // profile in anyone else's directory / invite picker. (The admin itself
+    // still sees everyone.)
+    ...(isPlatformAdmin(actor) ? {} : { NOT: { user: { is: { role: { is: { name: "ADMIN" } } } } } }),
     ...(p.search
       ? {
           OR: [

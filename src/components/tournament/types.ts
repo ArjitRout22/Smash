@@ -1,5 +1,6 @@
 export type TournamentDetail = {
   id: string;
+  slug: string | null; // readable public URL segment (/t/<slug>)
   name: string;
   description: string | null;
   location: string | null;

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { MapPin } from "lucide-react";
 import { getPublicTournamentView } from "@/lib/services/public.service";
 import { ShareButton } from "@/components/ShareButton";
@@ -35,12 +35,14 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const t = await getPublicTournamentView(id);
   if (!t) return { title: "Tournament not found" };
   const desc = `${titleCase(t.format)} · ${t.players.length} players${t.location ? ` · ${t.location}` : ""} — follow live standings and results on Smash.`;
+  const canonical = `${APP_URL}/t/${t.slug ?? t.id}`;
   // og:image / twitter:image are supplied by the colocated opengraph-image.tsx /
   // twitter-image.tsx; here we just opt into the large-image Twitter card.
   return {
     title: t.name, // root layout template appends " · Smash"
     description: desc,
-    openGraph: { title: `${t.name} · Smash`, description: desc, url: `${APP_URL}/t/${id}`, type: "website" },
+    alternates: { canonical },
+    openGraph: { title: `${t.name} · Smash`, description: desc, url: canonical, type: "website" },
     twitter: { card: "summary_large_image", title: `${t.name} · Smash`, description: desc },
   };
 }
@@ -49,13 +51,34 @@ export default async function PublicTournamentPage({ params }: { params: Promise
   const { id } = await params;
   const t = await getPublicTournamentView(id);
   if (!t) notFound();
+  // Canonicalise: if reached by raw uuid (or a stale slug) and a slug exists,
+  // 308-redirect to the readable /t/<slug> URL so search engines index one path.
+  if (t.slug && id !== t.slug) permanentRedirect(`/t/${t.slug}`);
 
-  const url = `${APP_URL}/t/${id}`;
+  const canonicalPath = `/t/${t.slug ?? t.id}`;
+  const url = `${APP_URL}${canonicalPath}`;
   const map = mapUrl(t.location, t.locationLat, t.locationLng);
-  const joinHref = `/login?next=${encodeURIComponent(`/discover/${id}`)}`;
+  const joinHref = `/login?next=${encodeURIComponent(`/discover/${t.id}`)}`;
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "SportsEvent",
+    name: t.name,
+    sport: "Badminton",
+    url,
+    eventStatus:
+      t.status === "cancelled"
+        ? "https://schema.org/EventCancelled"
+        : "https://schema.org/EventScheduled",
+    ...(t.startDate ? { startDate: t.startDate.toISOString() } : {}),
+    ...(t.endDate ? { endDate: t.endDate.toISOString() } : {}),
+    ...(t.location ? { location: { "@type": "Place", name: t.location } } : {}),
+    ...(t.organizerName ? { organizer: { "@type": "Organization", name: t.organizerName } } : {}),
+    description: t.description ?? undefined,
+  };
 
   return (
     <div className="min-h-screen bg-background">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       {/* Public top bar */}
       <header className="border-b border-[var(--border)] bg-surface">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3">
@@ -101,7 +124,7 @@ export default async function PublicTournamentPage({ params }: { params: Promise
           </Link>
         </div>
 
-        <LiveNow tournamentId={id} />
+        <LiveNow tournamentId={t.id} />
 
         {/* Standings */}
         {t.standings.length > 0 && (

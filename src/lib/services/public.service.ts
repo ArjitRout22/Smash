@@ -126,11 +126,17 @@ export async function getPublicPlayerProfile(id: string) {
  * exposed. Only non-sensitive competition data is selected (names, scores,
  * standings); no emails, no contact info, no cross-tenant data.
  */
-export async function getPublicTournamentView(id: string) {
+/**
+ * Public tournament view, resolvable by EITHER the readable `slug` (canonical,
+ * SEO) or the raw uuid `id` (legacy / share links). Only public, non-deleted
+ * tournaments are returned.
+ */
+export async function getPublicTournamentView(idOrSlug: string) {
   const t = await prisma.tournament.findFirst({
-    where: { id, deletedAt: null, visibility: "public" },
+    where: { OR: [{ slug: idOrSlug }, { id: idOrSlug }], deletedAt: null, visibility: "public" },
     select: {
       id: true,
+      slug: true,
       name: true,
       description: true,
       status: true,
@@ -145,6 +151,7 @@ export async function getPublicTournamentView(id: string) {
     },
   });
   if (!t) return null;
+  const id = t.id; // canonical uuid for the sub-queries (param may be a slug)
 
   const [players, standings, matches] = await Promise.all([
     prisma.tournamentPlayer.findMany({
@@ -177,6 +184,7 @@ export async function getPublicTournamentView(id: string) {
 
   return {
     id: t.id,
+    slug: t.slug,
     name: t.name,
     description: t.description,
     status: t.status,
@@ -215,6 +223,62 @@ export async function getPublicTournamentView(id: string) {
 }
 
 export type PublicTournamentView = NonNullable<Awaited<ReturnType<typeof getPublicTournamentView>>>;
+
+/**
+ * PUBLIC, no-auth browse list for /explore and the sitemap. Returns public,
+ * non-deleted tournaments with a light summary + registered-player count,
+ * newest first. Cross-tenant by design — only ever public tournaments.
+ */
+export async function listPublicTournaments(limit = 200) {
+  const rows = await prisma.tournament.findMany({
+    where: { deletedAt: null, visibility: "public" },
+    orderBy: [{ startDate: "desc" }, { createdAt: "desc" }],
+    take: limit,
+    select: {
+      id: true,
+      slug: true,
+      name: true,
+      status: true,
+      format: true,
+      location: true,
+      startDate: true,
+      updatedAt: true,
+      organizer: { select: { name: true } },
+      organization: { select: { name: true } },
+      _count: { select: { tournamentPlayers: { where: { status: "registered" } } } },
+    },
+  });
+  return rows.map((t) => ({
+    id: t.id,
+    slug: t.slug,
+    name: t.name,
+    status: t.status,
+    format: t.format,
+    location: t.location,
+    startDate: t.startDate,
+    updatedAt: t.updatedAt,
+    organizerName: t.organizer?.name ?? t.organization?.name ?? null,
+    playerCount: t._count.tournamentPlayers,
+    href: `/t/${t.slug ?? t.id}`,
+  }));
+}
+
+/**
+ * Public player ids + last-activity for the sitemap. Only players with a linked
+ * account (real, claimable public profiles) and at least one ranking row.
+ */
+export async function listPublicPlayerIds(limit = 500) {
+  const rows = await prisma.player.findMany({
+    where: {
+      deletedAt: null,
+      user: { is: { isActive: true, deletedAt: null, role: { is: { name: { not: "ADMIN" } } } } },
+    },
+    orderBy: { updatedAt: "desc" },
+    take: limit,
+    select: { id: true, updatedAt: true },
+  });
+  return rows;
+}
 
 /** In-progress matches + their live scores for a PUBLIC tournament (spectator poll). */
 export async function getPublicLiveMatches(id: string) {
