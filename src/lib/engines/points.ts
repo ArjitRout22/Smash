@@ -9,7 +9,18 @@ import type { PointTxType, StageType } from "@/lib/domain/constants";
  * the per-tournament standings are recomputed from stored match results, so
  * they always reflect the tournament's CURRENT config.
  */
+/** Which shipped system a (resolved) config represents. */
+export type PointsSystem = "standard" | "league";
+
 export type PointsConfig = {
+  /**
+   * Which system this config belongs to. Persisted explicitly so a fully
+   * custom League table (e.g. flat win 2 / loss 0, no consolation floor) is
+   * still recognised as League — the floor alone is no longer a reliable
+   * discriminator now that League values are editable. Legacy rows with no
+   * `system` fall back to the floor heuristic (see `resolvePointsConfig`).
+   */
+  system: PointsSystem;
   matchWin: number;
   /** Points for a loss (a loss BELOW the league floor, when a floor is set). */
   matchLoss: number;
@@ -19,9 +30,10 @@ export type PointsConfig = {
   /** Bonus for winning the tournament (title). */
   title: number;
   /**
-   * "League" consolation floor. When set, a LOSER whose match score reaches
-   * `lossBonusThreshold` earns `lossBonusPoints` instead of `matchLoss`.
-   * Both null = classic flat win/loss scoring (no score-based consolation).
+   * "League" consolation floor (OPTIONAL). When set, a LOSER whose match score
+   * reaches `lossBonusThreshold` earns `lossBonusPoints` instead of `matchLoss`.
+   * Both null = flat win/loss scoring (the League default) — no score-based
+   * consolation.
    */
   lossBonusThreshold: number | null;
   lossBonusPoints: number | null;
@@ -29,6 +41,7 @@ export type PointsConfig = {
 
 /** International (BWF-style) scoring: 10 per win, 2 per loss, plus knockout-stage bonuses. */
 export const STANDARD_POINTS_CONFIG: PointsConfig = {
+  system: "standard",
   matchWin: 10,
   matchLoss: 2,
   participation: 0,
@@ -43,12 +56,14 @@ export const STANDARD_POINTS_CONFIG: PointsConfig = {
 };
 
 /**
- * League scoring (the default for new tournaments): win = 3; lose but reach the
- * floor (15 points) = 1; lose below the floor = 0. No stage bonuses — the
- * explicit zeros stop the partial-override merge from re-adding them.
+ * League scoring (the default for new tournaments): a simple flat table —
+ * win = 2, everything else = 0. No stage bonuses and NO consolation floor by
+ * default. Organizers can customise these values (and optionally re-enable a
+ * close-loss bonus) per tournament from Settings → Scoring system.
  */
 export const LEAGUE_POINTS_CONFIG: PointsConfig = {
-  matchWin: 3,
+  system: "league",
+  matchWin: 2,
   matchLoss: 0,
   participation: 0,
   stageWinBonus: {
@@ -57,8 +72,8 @@ export const LEAGUE_POINTS_CONFIG: PointsConfig = {
     final: 0,
   },
   title: 0,
-  lossBonusThreshold: 15,
-  lossBonusPoints: 1,
+  lossBonusThreshold: null,
+  lossBonusPoints: null,
 };
 
 /**
@@ -70,6 +85,7 @@ export const DEFAULT_POINTS_CONFIG = STANDARD_POINTS_CONFIG;
 
 export const PointsConfigSchema = z
   .object({
+    system: z.enum(["standard", "league"]).optional(),
     matchWin: z.number().int().min(0).optional(),
     matchLoss: z.number().int().min(0).optional(),
     participation: z.number().int().min(0).optional(),
@@ -85,13 +101,19 @@ export function resolvePointsConfig(override?: unknown): PointsConfig {
   const parsed = PointsConfigSchema.safeParse(override);
   if (!parsed.success) return DEFAULT_POINTS_CONFIG;
   const o = parsed.data;
+  // Prefer the explicit system; fall back to the legacy floor heuristic for
+  // rows persisted before `system` existed (a floor meant League).
+  const system: PointsSystem =
+    o.system ?? (o.lossBonusThreshold != null ? "league" : "standard");
+  const base = system === "league" ? LEAGUE_POINTS_CONFIG : STANDARD_POINTS_CONFIG;
   return {
-    matchWin: o.matchWin ?? DEFAULT_POINTS_CONFIG.matchWin,
-    matchLoss: o.matchLoss ?? DEFAULT_POINTS_CONFIG.matchLoss,
-    participation: o.participation ?? DEFAULT_POINTS_CONFIG.participation,
-    title: o.title ?? DEFAULT_POINTS_CONFIG.title,
+    system,
+    matchWin: o.matchWin ?? base.matchWin,
+    matchLoss: o.matchLoss ?? base.matchLoss,
+    participation: o.participation ?? base.participation,
+    title: o.title ?? base.title,
     stageWinBonus: {
-      ...DEFAULT_POINTS_CONFIG.stageWinBonus,
+      ...base.stageWinBonus,
       ...(o.stageWinBonus as Partial<Record<StageType, number>> | undefined),
     },
     lossBonusThreshold: o.lossBonusThreshold ?? null,
@@ -99,16 +121,13 @@ export function resolvePointsConfig(override?: unknown): PointsConfig {
   };
 }
 
-/** Which shipped system a (resolved) config represents. */
-export type PointsSystem = "standard" | "league";
-
 /**
- * A stored config is "league" iff it carries a consolation floor — the single
- * feature that distinguishes the two shipped systems. Legacy/null configs
- * resolve to STANDARD (no floor).
+ * Which shipped system a (resolved) config represents. Reads the explicit
+ * `system` field; resolvePointsConfig always sets it (including the legacy
+ * floor fallback), so this is a plain accessor.
  */
 export function pointsSystemOf(config: PointsConfig): PointsSystem {
-  return config.lossBonusThreshold != null ? "league" : "standard";
+  return config.system;
 }
 
 /** One-line, human description of a system's rule — for Settings / Help / caption. */

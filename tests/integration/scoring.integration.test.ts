@@ -144,7 +144,7 @@ d("scoring → leaderboard → correction (integration)", () => {
   });
 });
 
-d("league (Sunday) scoring — default + 15-point floor (integration)", () => {
+d("league scoring — default flat 2/0 + optional configurable floor (integration)", () => {
   let actor: AuthUser;
   let tournamentId: string;
   let playerA: string;
@@ -187,35 +187,63 @@ d("league (Sunday) scoring — default + 15-point floor (integration)", () => {
     return lb.find((r) => r.entity?.id === id)!.points;
   }
 
-  it("defaults new tournaments to League: win = 3, close loss (16) = 1", async () => {
+  it("defaults new tournaments to League: flat win = 2, any loss = 0", async () => {
     await submitScore(matchId, { games: [{ scoreA: 21, scoreB: 16 }] }, actor);
-    expect(await pointsFor(playerA)).toBe(3); // win
-    expect(await pointsFor(playerB)).toBe(1); // lost but reached 15
+    expect(await pointsFor(playerA)).toBe(2); // win
+    expect(await pointsFor(playerB)).toBe(0); // loss (no consolation floor by default)
   });
 
-  it("a heavy loss below the floor earns 0", async () => {
+  it("a heavy loss also earns 0 (no score-based bonus)", async () => {
     await updateMatch(matchId, { closed: false }, actor);
     const cur = await prisma.match.findUniqueOrThrow({ where: { id: matchId } });
     await submitScore(matchId, { games: [{ scoreA: 21, scoreB: 9 }], expectedVersion: cur.version }, actor);
-    expect(await pointsFor(playerA)).toBe(3);
-    expect(await pointsFor(playerB)).toBe(0); // 9 < 15
+    expect(await pointsFor(playerA)).toBe(2);
+    expect(await pointsFor(playerB)).toBe(0);
   });
 
-  it("the floor is inclusive: exactly 15 still earns 1", async () => {
+  it("honours CUSTOM league point values (win 5 / loss 1)", async () => {
+    await updateMatch(matchId, { closed: false }, actor);
+    let cur = await prisma.match.findUniqueOrThrow({ where: { id: matchId } });
+    await submitScore(matchId, { games: [{ scoreA: 21, scoreB: 9 }], expectedVersion: cur.version }, actor);
+    await updateTournament(
+      tournamentId,
+      { pointsConfig: { ...LEAGUE_POINTS_CONFIG, matchWin: 5, matchLoss: 1 } },
+      actor
+    );
+    expect(await pointsFor(playerA)).toBe(5);
+    expect(await pointsFor(playerB)).toBe(1);
+    // reset back to the default flat table for the following tests
+    await updateTournament(tournamentId, { pointsConfig: LEAGUE_POINTS_CONFIG }, actor);
+  });
+
+  it("honours an OPTIONAL close-loss bonus when the organizer enables one", async () => {
+    await updateTournament(
+      tournamentId,
+      { pointsConfig: { ...LEAGUE_POINTS_CONFIG, lossBonusThreshold: 15, lossBonusPoints: 1 } },
+      actor
+    );
+    // last submitted game was 21–9, so the loser is below the floor → 0
+    expect(await pointsFor(playerB)).toBe(0);
+
     await updateMatch(matchId, { closed: false }, actor);
     const cur = await prisma.match.findUniqueOrThrow({ where: { id: matchId } });
     await submitScore(matchId, { games: [{ scoreA: 21, scoreB: 15 }], expectedVersion: cur.version }, actor);
-    expect(await pointsFor(playerB)).toBe(1);
+    expect(await pointsFor(playerB)).toBe(1); // reached 15 → bonus
+    await updateTournament(tournamentId, { pointsConfig: LEAGUE_POINTS_CONFIG }, actor);
   });
 
   it("switching to Standard rescores the existing standings immediately", async () => {
+    await updateMatch(matchId, { closed: false }, actor);
+    const cur = await prisma.match.findUniqueOrThrow({ where: { id: matchId } });
+    await submitScore(matchId, { games: [{ scoreA: 21, scoreB: 15 }], expectedVersion: cur.version }, actor);
+
     await updateTournament(tournamentId, { pointsConfig: STANDARD_POINTS_CONFIG }, actor);
     expect(await pointsFor(playerA)).toBe(10); // matchWin
-    expect(await pointsFor(playerB)).toBe(2); // matchLoss (score no longer matters)
+    expect(await pointsFor(playerB)).toBe(2); // matchLoss
 
-    // …and back to League.
+    // …and back to the default League table (flat 2 / 0).
     await updateTournament(tournamentId, { pointsConfig: LEAGUE_POINTS_CONFIG }, actor);
-    expect(await pointsFor(playerA)).toBe(3);
-    expect(await pointsFor(playerB)).toBe(1); // 15 reached
+    expect(await pointsFor(playerA)).toBe(2);
+    expect(await pointsFor(playerB)).toBe(0);
   });
 });

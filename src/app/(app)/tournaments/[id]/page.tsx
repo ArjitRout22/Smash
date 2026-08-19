@@ -64,18 +64,18 @@ export default function TournamentDetailPage() {
           data.visibility === "public" ? (
             <div className="flex flex-wrap gap-2">
               <ShareButton
-                url={typeof window !== "undefined" ? `${window.location.origin}/t/${id}` : `/t/${id}`}
+                url={typeof window !== "undefined" ? `${window.location.origin}/t/${data.slug ?? id}` : `/t/${data.slug ?? id}`}
                 title={`${data.name} · Smash`}
                 text={`Join "${data.name}" on Smash.`}
                 label="Share"
               />
               <QrButton
-                url={typeof window !== "undefined" ? `${window.location.origin}/t/${id}` : `/t/${id}`}
+                url={typeof window !== "undefined" ? `${window.location.origin}/t/${data.slug ?? id}` : `/t/${data.slug ?? id}`}
                 title={`${data.name} — scan to join`}
                 caption="Players can scan this to open the tournament and join."
               />
               <a
-                href={`/t/${id}`}
+                href={`/t/${data.slug ?? id}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[var(--border)] bg-surface px-3 text-sm font-medium text-foreground hover:bg-surface-2"

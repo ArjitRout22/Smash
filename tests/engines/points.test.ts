@@ -55,7 +55,7 @@ describe("points engine", () => {
     expect(resolvePointsConfig(null)).toEqual(DEFAULT_POINTS_CONFIG);
   });
 
-  describe("league (Sunday) scoring", () => {
+  describe("league scoring (default: flat win 2 / loss 0)", () => {
     const cfg = LEAGUE_POINTS_CONFIG;
 
     it("default fallback is the Standard system, not League", () => {
@@ -64,29 +64,46 @@ describe("points engine", () => {
       expect(pointsSystemOf(LEAGUE_POINTS_CONFIG)).toBe("league");
     });
 
-    it("winner gets 3 points, no stage bonus even in the final", () => {
-      expect(sumAwards(pointsForMatch({ config: cfg, isWinner: true }))).toBe(3);
-      expect(sumAwards(pointsForMatch({ config: cfg, isWinner: true, stageType: "final" }))).toBe(3);
+    it("winner gets 2 points, no stage bonus even in the final", () => {
+      expect(sumAwards(pointsForMatch({ config: cfg, isWinner: true }))).toBe(2);
+      expect(sumAwards(pointsForMatch({ config: cfg, isWinner: true, stageType: "final" }))).toBe(2);
     });
 
-    it("loser who reaches the 15-point floor gets 1", () => {
-      expect(sumAwards(pointsForMatch({ config: cfg, isWinner: false, sideScore: 15 }))).toBe(1);
-      expect(sumAwards(pointsForMatch({ config: cfg, isWinner: false, sideScore: 19 }))).toBe(1);
-    });
-
-    it("loser below the floor gets 0", () => {
-      expect(sumAwards(pointsForMatch({ config: cfg, isWinner: false, sideScore: 14 }))).toBe(0);
+    it("loser gets 0 by default — no consolation floor regardless of score", () => {
+      expect(sumAwards(pointsForMatch({ config: cfg, isWinner: false }))).toBe(0);
+      expect(sumAwards(pointsForMatch({ config: cfg, isWinner: false, sideScore: 20 }))).toBe(0);
       expect(sumAwards(pointsForMatch({ config: cfg, isWinner: false, sideScore: 0 }))).toBe(0);
     });
 
-    it("without a side score, a league loss earns the base (0)", () => {
-      expect(sumAwards(pointsForMatch({ config: cfg, isWinner: false }))).toBe(0);
+    it("honours CUSTOM league point values (configurable win/loss)", () => {
+      const custom = resolvePointsConfig({ system: "league", matchWin: 5, matchLoss: 1 });
+      expect(pointsSystemOf(custom)).toBe("league");
+      expect(sumAwards(pointsForMatch({ config: custom, isWinner: true }))).toBe(5);
+      expect(sumAwards(pointsForMatch({ config: custom, isWinner: false }))).toBe(1);
+    });
+
+    it("honours an OPTIONAL close-loss bonus when the organizer enables one", () => {
+      const withFloor = resolvePointsConfig({
+        system: "league",
+        matchWin: 2,
+        matchLoss: 0,
+        lossBonusThreshold: 15,
+        lossBonusPoints: 1,
+      });
+      expect(sumAwards(pointsForMatch({ config: withFloor, isWinner: false, sideScore: 15 }))).toBe(1);
+      expect(sumAwards(pointsForMatch({ config: withFloor, isWinner: false, sideScore: 14 }))).toBe(0);
     });
 
     it("resolves a stored league config back to the league system (no bonus creep)", () => {
       const resolved = resolvePointsConfig(LEAGUE_POINTS_CONFIG);
       expect(pointsSystemOf(resolved)).toBe("league");
       expect(Object.values(resolved.stageWinBonus).every((v) => (v ?? 0) === 0)).toBe(true);
+    });
+
+    it("classifies a LEGACY league config (floor, no explicit system) as league", () => {
+      // Pre-`system` rows carried a floor to mark themselves League.
+      const legacy = resolvePointsConfig({ matchWin: 3, matchLoss: 0, lossBonusThreshold: 15, lossBonusPoints: 1 });
+      expect(pointsSystemOf(legacy)).toBe("league");
     });
   });
 
