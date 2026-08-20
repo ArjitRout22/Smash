@@ -54,6 +54,23 @@ export async function listTournaments(actor: AuthUser, p: Pagination, filters: {
   return { items, total };
 }
 
+/**
+ * Tournaments the actor can invite players INTO right now — ones they manage
+ * (own org, or everything for a platform admin) that are still open (upcoming or
+ * ongoing; completed/cancelled are excluded). Minimal fields for a picker.
+ */
+export async function listInvitableTournaments(actor: AuthUser) {
+  return prisma.tournament.findMany({
+    where: {
+      deletedAt: null,
+      status: { in: ["upcoming", "ongoing"] },
+      ...(isPlatformAdmin(actor) ? {} : { organizationId: actor.organizationId ?? "__no_org__" }),
+    },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, name: true, status: true, format: true },
+  });
+}
+
 export async function getTournament(actor: AuthUser, id: string) {
   const t = await prisma.tournament.findFirst({
     where: { id, deletedAt: null },

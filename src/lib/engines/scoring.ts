@@ -5,15 +5,24 @@ import type { Side } from "@/lib/domain/constants";
  * Badminton scoring engine — pure, no DB, fully unit-tested.
  *
  * Rules are supplied via a config object so they can be tuned or extended
- * (different point targets, no-cap formats, etc.) WITHOUT touching call sites
- * or the UI. Defaults implement standard BWF rally scoring.
+ * (different point targets, win-by-2/BWF, no-cap formats, etc.) WITHOUT touching
+ * call sites or the UI. The DEFAULT is "first to 21, win by 1" (no deuce/cap).
  */
 export type ScoringRules = {
   pointsToWin: number; // first to this many points…
-  winBy: number; // …with at least this margin
-  cap: number; // hard ceiling: at (cap-1)-(cap-1), next point wins
+  winBy: number; // …with at least this margin (1 = no deuce; play stops at the target)
+  cap: number; // hard ceiling: at (cap-1)-(cap-1), next point wins (win-by ≥ 2 only)
 };
 
+/**
+ * Default scoring: first to 21, WIN BY 1 — a game is decided the moment a side
+ * reaches 21, so 21-20 and 21-15 are both valid (no deuce, no 30-point cap).
+ * The engine still supports classic win-by-N (e.g. BWF's win-by-2, cap 30) via a
+ * custom `ScoringRules`; see BWF_RULES.
+ */
+export const DEFAULT_RULES: ScoringRules = { pointsToWin: 21, winBy: 1, cap: 21 };
+
+/** Classic BWF rally scoring (win by 2, cap 30) — available for tournaments that want it. */
 export const BWF_RULES: ScoringRules = { pointsToWin: 21, winBy: 2, cap: 30 };
 
 export type GameScore = { scoreA: number; scoreB: number };
@@ -31,7 +40,7 @@ function assertIntInRange(n: number, max: number, label: string) {
 export function completedGameWinner(
   scoreA: number,
   scoreB: number,
-  rules: ScoringRules = BWF_RULES
+  rules: ScoringRules = DEFAULT_RULES
 ): Side {
   assertIntInRange(scoreA, rules.cap, "Game score");
   assertIntInRange(scoreB, rules.cap, "Game score");
@@ -46,17 +55,27 @@ export function completedGameWinner(
 
   const { pointsToWin, winBy, cap } = rules;
 
-  const legal =
-    winnerScore === cap
-      ? // reached the hard cap: only possible finishing scores are cap-1 / cap-2 loser
-        loserScore >= cap - winBy && loserScore <= cap - 1
-      : winnerScore >= pointsToWin &&
-        (winnerScore - loserScore === winBy ||
-          (winnerScore === pointsToWin && loserScore <= pointsToWin - winBy));
+  let legal: boolean;
+  if (winBy <= 1) {
+    // Win by 1: the game is decided the instant a side reaches the target, so a
+    // completed game has the winner EXACTLY at pointsToWin (no deuce, no cap) and
+    // the loser anywhere below it. (loserScore < winnerScore always holds here.)
+    legal = winnerScore === pointsToWin && loserScore < winnerScore;
+  } else {
+    legal =
+      winnerScore === cap
+        ? // reached the hard cap: only possible finishing scores are cap-1 / cap-2 loser
+          loserScore >= cap - winBy && loserScore <= cap - 1
+        : winnerScore >= pointsToWin &&
+          (winnerScore - loserScore === winBy ||
+            (winnerScore === pointsToWin && loserScore <= pointsToWin - winBy));
+  }
 
   if (!legal) {
     throw Errors.invalidScore(
-      `${scoreA}-${scoreB} is not a valid ${pointsToWin}-point game (win by ${winBy}, cap ${cap})`
+      winBy <= 1
+        ? `${scoreA}-${scoreB} is not a valid game — the winner must reach exactly ${pointsToWin} points`
+        : `${scoreA}-${scoreB} is not a valid ${pointsToWin}-point game (win by ${winBy}, cap ${cap})`
     );
   }
   return winner;
@@ -66,7 +85,7 @@ export function completedGameWinner(
 export function isCompletedGame(
   scoreA: number,
   scoreB: number,
-  rules: ScoringRules = BWF_RULES
+  rules: ScoringRules = DEFAULT_RULES
 ): boolean {
   try {
     completedGameWinner(scoreA, scoreB, rules);
@@ -92,7 +111,7 @@ export type MatchResult = {
 export function resolveMatch(
   bestOf: number,
   games: GameScore[],
-  rules: ScoringRules = BWF_RULES
+  rules: ScoringRules = DEFAULT_RULES
 ): MatchResult {
   if (bestOf !== 1 && bestOf !== 3) {
     throw Errors.invalidMatchConfig("bestOf must be 1 or 3");

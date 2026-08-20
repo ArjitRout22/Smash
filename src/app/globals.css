@@ -52,6 +52,13 @@
   border-color: var(--border);
 }
 
+/* Paint the themed background on the root element too, so the very first frame
+   (e.g. a cold PWA launch, before the app renders) is on-brand — not white. */
+html {
+  background: var(--background);
+  color-scheme: light dark;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);

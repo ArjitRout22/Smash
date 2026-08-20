@@ -728,6 +728,25 @@ no new message table. Migration `20260814080811`. Integration-tested.
   these changes cut avoidable work and cache shared reads. Verified tsc + eslint +
   unit(57) + integration(66) + build + dev smoke (landing, profile graph SVG).
 
+### Phase 32 — win-by-1 scoring, branded loaders, admin-hidden in challenges, dashboard invite
+- **Scoring is now win-by-1 by default:** a game is decided the moment a side
+  reaches 21, so 21-20 and 21-15 are both valid — no deuce, no 30-cap. The engine's
+  `DEFAULT_RULES` = `{ pointsToWin: 21, winBy: 1, cap: 21 }`; the win-by-N/BWF path is
+  retained (`BWF_RULES`) for anyone passing custom rules. `completedGameWinner` gained
+  a `winBy <= 1` branch (winner must equal the target exactly). Unit + copy updated
+  (ScoreEntryModal hint, Help FAQ).
+- **Branded loader everywhere:** new root `app/loading.tsx` (shuttlecock `BrandedLoader`)
+  covers public routes + cold PWA launch (the authed segment already had one); `html`
+  now paints `var(--background)` + `color-scheme` so the first frame isn't white.
+- **Admin still leaked into the challenge picker:** `listCasualOpponents` didn't apply
+  the Phase-30 admin exclusion — now filters `role != ADMIN` like the directory/nearby.
+- **Dashboard "Invite a player" shortcut** (the core action, surfaced up front): a
+  primary CTA opens `InvitePlayerModal` — search a player (accounts, admin excluded) +
+  pick one of YOUR open tournaments (`GET /api/tournaments/invitable` →
+  `listInvitableTournaments`, excludes completed/cancelled) → send → invitation email
+  (reuses `inviteToTournament`). Verified tsc + eslint + unit(58) + integration(66) +
+  build + dev smoke.
+
 ---
 
 ## Key decisions
