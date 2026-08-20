@@ -3,40 +3,46 @@ import {
   completedGameWinner,
   isCompletedGame,
   resolveMatch,
+  BWF_RULES,
 } from "@/lib/engines/scoring";
 import { AppError } from "@/lib/errors";
 
-describe("completedGameWinner", () => {
-  it("awards a standard 21-x game", () => {
+describe("completedGameWinner (default: first to 21, win by 1)", () => {
+  it("awards a 21-x game", () => {
     expect(completedGameWinner(21, 15)).toBe("A");
     expect(completedGameWinner(10, 21)).toBe("B");
     expect(completedGameWinner(21, 19)).toBe("A");
   });
 
-  it("requires a 2-point margin below the cap (deuce)", () => {
-    expect(() => completedGameWinner(21, 20)).toThrow(AppError); // margin 1
-    expect(completedGameWinner(22, 20)).toBe("A");
-    expect(completedGameWinner(24, 22)).toBe("A");
-    expect(() => completedGameWinner(23, 20)).toThrow(AppError); // margin 3 in deuce
+  it("allows a 1-point win (no deuce): 21-20 is valid", () => {
+    expect(completedGameWinner(21, 20)).toBe("A");
+    expect(completedGameWinner(20, 21)).toBe("B");
+    expect(completedGameWinner(21, 0)).toBe("A");
   });
 
-  it("honours the hard cap of 30", () => {
-    expect(completedGameWinner(30, 29)).toBe("A");
-    expect(completedGameWinner(30, 28)).toBe("A");
-    expect(() => completedGameWinner(31, 29)).toThrow(AppError); // above cap
-    expect(() => completedGameWinner(30, 27)).toThrow(AppError); // impossible loser score
+  it("requires the winner to reach EXACTLY 21 (play stops at the target)", () => {
+    expect(() => completedGameWinner(22, 20)).toThrow(AppError); // past the target
+    expect(() => completedGameWinner(30, 29)).toThrow(AppError); // no cap/deuce anymore
+    expect(() => completedGameWinner(5, 3)).toThrow(AppError); // winner < 21
   });
 
   it("rejects ties and out-of-range values", () => {
     expect(() => completedGameWinner(21, 21)).toThrow(AppError);
     expect(() => completedGameWinner(-1, 21)).toThrow(AppError);
-    expect(() => completedGameWinner(5, 3)).toThrow(AppError); // winner < 21
+    expect(() => completedGameWinner(22, 10)).toThrow(AppError); // above the target/cap
     expect(() => completedGameWinner(20.5, 10)).toThrow(AppError);
+  });
+
+  it("still supports classic BWF (win by 2, cap 30) when those rules are passed", () => {
+    expect(completedGameWinner(22, 20, BWF_RULES)).toBe("A"); // deuce
+    expect(completedGameWinner(30, 29, BWF_RULES)).toBe("A"); // cap
+    expect(() => completedGameWinner(21, 20, BWF_RULES)).toThrow(AppError); // margin 1 illegal under BWF
   });
 
   it("isCompletedGame is a non-throwing mirror", () => {
     expect(isCompletedGame(21, 15)).toBe(true);
-    expect(isCompletedGame(21, 20)).toBe(false);
+    expect(isCompletedGame(21, 20)).toBe(true); // now valid
+    expect(isCompletedGame(22, 20)).toBe(false);
   });
 });
 
@@ -103,7 +109,7 @@ describe("resolveMatch — best of 3", () => {
     expect(() =>
       resolveMatch(3, [
         { scoreA: 21, scoreB: 17 },
-        { scoreA: 21, scoreB: 20 }, // illegal margin
+        { scoreA: 22, scoreB: 20 }, // illegal: winner past the 21 target
       ])
     ).toThrow(AppError);
   });

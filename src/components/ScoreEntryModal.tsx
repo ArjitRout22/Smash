@@ -152,7 +152,7 @@ export function ScoreEntryModal({
       </div>
 
       <p className={`mt-3 text-sm ${preview.ok ? "text-muted" : "text-[var(--danger)]"}`}>{preview.text}</p>
-      <p className="mt-1 text-xs text-muted">Best of {bestOf} · standard rules: 21 points, win by 2, cap 30.</p>
+      <p className="mt-1 text-xs text-muted">Best of {bestOf} · first to 21 points wins the game (win by 1).</p>
     </Modal>
   );
 }

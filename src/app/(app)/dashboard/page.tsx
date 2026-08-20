@@ -13,6 +13,7 @@ import { ShareButton } from "@/components/ShareButton";
 import { mapUrl } from "@/components/LocationPicker";
 import { NearbyPlayers } from "@/components/NearbyPlayers";
 import { PlayRequests } from "@/components/PlayRequests";
+import { InvitePlayerModal } from "@/components/InvitePlayerModal";
 import { PERMS } from "@/lib/client/perms";
 import { formatDateTime, titleCase } from "@/lib/client/format";
 
@@ -50,6 +51,7 @@ function greetName(user: { displayName?: string | null; name?: string | null } |
 export default function DashboardPage() {
   const { user, can } = useAuth();
   const { data, error, isLoading, mutate } = useSWR<Dashboard>("/api/dashboard", swrFetcher);
+  const [inviteOpen, setInviteOpen] = useState(false);
 
   return (
     <div>
@@ -58,9 +60,12 @@ export default function DashboardPage() {
         subtitle="Here's what's happening across your club."
         actions={
           <>
+            {can(PERMS.TOURNAMENT_EDIT) && (
+              <Button size="sm" onClick={() => setInviteOpen(true)}><Mail className="h-4 w-4" /> Invite a player</Button>
+            )}
             {can(PERMS.TOURNAMENT_CREATE) && (
               <Link href="/tournaments/create">
-                <Button size="sm"><Plus className="h-4 w-4" /> Create tournament</Button>
+                <Button size="sm" variant="outline"><Plus className="h-4 w-4" /> Create tournament</Button>
               </Link>
             )}
             {can(PERMS.PLAYER_MANAGE) && (
@@ -82,6 +87,8 @@ export default function DashboardPage() {
           </>
         }
       />
+
+      <InvitePlayerModal open={inviteOpen} onClose={() => setInviteOpen(false)} />
 
       <InvitationsCard />
       <TeamInvitesCard />

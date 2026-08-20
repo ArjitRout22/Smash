@@ -115,7 +115,9 @@ export async function listCasualOpponents(actor: AuthUser, search?: string) {
   const players = await prisma.player.findMany({
     where: {
       deletedAt: null,
-      user: { is: { deletedAt: null, isActive: true } },
+      // Must have an active account, and never the platform admin (an operator
+      // account, not a real opponent — keeps it out of the challenge picker too).
+      user: { is: { deletedAt: null, isActive: true, role: { is: { name: { not: "ADMIN" } } } } },
       ...(actor.playerId ? { id: { not: actor.playerId } } : {}),
       ...(search
         ? {

@@ -77,7 +77,7 @@ const SECTIONS: { title: string; items: Item[] }[] = [
       },
       {
         q: "Best of 1 vs best of 3",
-        a: "Best of 1 is a single game; best of 3 is first to two games. Standard badminton rules apply: to 21, win by 2, hard cap at 30.",
+        a: "Best of 1 is a single game; best of 3 is first to two games. Each game is first to 21 points — a single-point lead wins it (e.g. 21-20), so there's no deuce or cap.",
       },
       {
         q: "Live scoring",
