@@ -26,6 +26,8 @@ jobs:
 
     env:
       DATABASE_URL: postgresql://badminton:badminton@localhost:5432/badminton_test?schema=public
+      # CI runs a plain Postgres (no pgbouncer), so the direct URL is the same DB.
+      DIRECT_DATABASE_URL: postgresql://badminton:badminton@localhost:5432/badminton_test?schema=public
       SESSION_SECRET: ci-session-secret-0123456789abcdef0123456789abcdef
       DEFAULT_PHONE_REGION: IN
 
