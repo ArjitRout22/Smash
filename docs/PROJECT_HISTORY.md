@@ -760,9 +760,20 @@ no new message table. Migration `20260814080811`. Integration-tested.
   grid); no API/schema/logic change. Verified tsc + eslint + build + a logged-in dev
   smoke (Schedule 1 / Live 0 / Completed 5 rendered correctly).
 
+### Phase 35 — First-paint splash (no white screen on cold load / PWA launch)
+- The root `loading.tsx` only covers Next route-transition Suspense, not the true first
+  paint before React hydrates — so a cold load / PWA launch still flashed white. Added a
+  **static splash baked into the initial HTML** (`#app-splash` in `layout.tsx`: green mark
+  + 🏸 + "Smash" + spinner) styled by **inline critical CSS** (hardcoded light/dark colors
+  via `prefers-color-scheme`), so it paints on the very first frame with no JS.
+- `SplashHider` (client) fades + removes it on hydration; a 10s inline-script safety net
+  clears it even if hydration is slow/blocked. Verified: `#app-splash` present in the
+  server HTML of `/` and `/login`; tsc + eslint + build + dev browser smoke (splash → app
+  shell, no white flash).
+
 ### Status (2026-08-24) — active development paused here
-Feature/infra work on Smash is paused at Phase 34. Everything through Phase 34 is
-**live on prod** (smashhero.app). Infra is done: pooled Neon (`directUrl`), Neon
+Feature/infra work on Smash is paused (last change: Phase 35, the first-paint splash).
+Everything through Phase 35 is **live on prod** (smashhero.app). Infra is done: pooled Neon (`directUrl`), Neon
 password rotated, Vercel functions moved to Singapore (`sin1`, co-located with the DB).
 Only open item: rotate the local GitHub PAT (see `docs/OPS_ROTATE_AND_POOL.md`).
 
