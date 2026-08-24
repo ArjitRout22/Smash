@@ -26,6 +26,9 @@ jobs:
 
     env:
       DATABASE_URL: postgresql://badminton:badminton@localhost:5432/badminton_test?schema=public
+      # Prisma needs a direct URL for migrations; in CI there's no pooler, so it
+      # points at the same local Postgres as DATABASE_URL.
+      DIRECT_DATABASE_URL: postgresql://badminton:badminton@localhost:5432/badminton_test?schema=public
       SESSION_SECRET: ci-session-secret-0123456789abcdef0123456789abcdef
       DEFAULT_PHONE_REGION: IN
 

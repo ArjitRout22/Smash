@@ -20,7 +20,11 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  // Runtime queries go through the POOLED connection (Neon PgBouncer). Schema
+  // migrations (`prisma migrate deploy`, run at build) go through the DIRECT
+  // connection — PgBouncer's transaction pooling can't run them reliably.
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_DATABASE_URL")
 }
 
 // ---------------------------------------------------------------------------
