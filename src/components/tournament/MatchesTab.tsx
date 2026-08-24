@@ -14,12 +14,20 @@ import { ScoreEntryModal, type ScorableMatch } from "@/components/ScoreEntryModa
 import { MatchComments } from "@/components/MatchComments";
 import { BracketTab } from "./BracketTab";
 import { CreateStageModal, GenerateFixturesModal, GenerateBracketModal } from "./FixtureModals";
-import { formatDateTime, titleCase } from "@/lib/client/format";
+import { formatDateTime } from "@/lib/client/format";
 import type { MatchDTO, StageDTO, TournamentPlayerDTO, TeamDTO } from "./types";
 
 type View = "list" | "bracket";
 
 const EMPTY_MATCHES: MatchDTO[] = [];
+
+// The three status buckets shown as columns in the List view. Cancelled matches
+// are finished, so they sit with Completed (their card keeps a "Cancelled" tag).
+const MATCH_COLUMNS: { key: string; label: string; statuses: string[]; empty: string }[] = [
+  { key: "scheduled", label: "Schedule", statuses: ["scheduled"], empty: "Nothing scheduled" },
+  { key: "live", label: "Live", statuses: ["in_progress"], empty: "No live matches" },
+  { key: "completed", label: "Completed", statuses: ["completed", "cancelled"], empty: "Nothing completed yet" },
+];
 
 /**
  * The unified draw-and-play tab. Folds what used to be three separate tabs
@@ -137,23 +145,46 @@ export function MatchesTab({
                 </div>
               )}
 
-              <div className="space-y-2">
-                {visibleMatches.map((m) => (
-                  <MatchRow
-                    key={m.id}
-                    m={m}
-                    canManage={canManage}
-                    canScore={canScore}
-                    busy={busyId === m.id}
-                    onScore={() => setScoreMatch(m)}
-                    onPatch={patchMatch}
-                    onRefresh={() => mutate()}
-                  />
-                ))}
-                {visibleMatches.length === 0 && (
-                  <p className="py-6 text-center text-sm text-muted">No matches in this stage.</p>
-                )}
-              </div>
+              {visibleMatches.length === 0 ? (
+                <p className="py-6 text-center text-sm text-muted">No matches in this stage.</p>
+              ) : (
+                <div className="grid gap-4 lg:grid-cols-3">
+                  {MATCH_COLUMNS.map((col) => {
+                    const items = visibleMatches.filter((m) => col.statuses.includes(m.status));
+                    return (
+                      <section key={col.key} className="space-y-2">
+                        <div className="flex items-center gap-2 px-1">
+                          {col.key === "live" && items.length > 0 && (
+                            <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" aria-hidden="true" />
+                          )}
+                          <h3 className="text-sm font-semibold text-foreground">{col.label}</h3>
+                          <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs font-medium tabular-nums text-muted">
+                            {items.length}
+                          </span>
+                        </div>
+                        {items.length === 0 ? (
+                          <p className="rounded-lg border border-dashed border-[var(--border)] px-3 py-6 text-center text-xs text-muted">
+                            {col.empty}
+                          </p>
+                        ) : (
+                          items.map((m) => (
+                            <MatchRow
+                              key={m.id}
+                              m={m}
+                              canManage={canManage}
+                              canScore={canScore}
+                              busy={busyId === m.id}
+                              onScore={() => setScoreMatch(m)}
+                              onPatch={patchMatch}
+                              onRefresh={() => mutate()}
+                            />
+                          ))
+                        )}
+                      </section>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
         </>
@@ -264,7 +295,9 @@ function MatchRow({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Badge color={statusColor(m.status)}>{titleCase(m.status)}</Badge>
+          {/* The column header already conveys Scheduled/Live/Completed, so only
+              the exceptional states get a badge here — keeps the cards clean. */}
+          {m.status === "cancelled" && <Badge color={statusColor(m.status)}>Cancelled</Badge>}
           {m.isClosed && (
             <Badge color="slate"><span className="inline-flex items-center gap-1"><Lock className="h-3 w-3" /> Closed</span></Badge>
           )}
