@@ -760,6 +760,16 @@ no new message table. Migration `20260814080811`. Integration-tested.
   grid); no API/schema/logic change. Verified tsc + eslint + build + a logged-in dev
   smoke (Schedule 1 / Live 0 / Completed 5 rendered correctly).
 
+### Phase 34 — Matches: three columns → a Schedule/Live/Completed segmented toggle
+- Follow-up to Phase 33: instead of showing all three columns at once, the List view
+  now has a **segmented toggle** (Schedule · Live · Completed, each with a count and a
+  live dot on a non-empty Live) that shows **one** bucket at a time — cleaner on mobile.
+- Smart default until the user picks a segment: surfaces the most relevant bucket —
+  **Live** if any, else **Schedule**, else **Completed**. Stage-filter chips still apply.
+- Same `MATCH_COLUMNS` config, reused for the toggle. Pure presentational. Verified
+  tsc + eslint + build + a logged-in dev smoke (toggling Schedule↔Completed swaps the
+  shown matches correctly).
+
 ---
 
 ## Key decisions

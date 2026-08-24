@@ -59,6 +59,7 @@ export function MatchesTab({
 
   const [view, setView] = useState<View>("list");
   const [stageFilter, setStageFilter] = useState<string>("all"); // stage id or "all"
+  const [statusPick, setStatusPick] = useState<string | null>(null); // Schedule/Live/Completed segment (null = smart default)
   const [creating, setCreating] = useState(false);
   const [addingStage, setAddingStage] = useState(false);
   const [genFixtures, setGenFixtures] = useState(false);
@@ -148,26 +149,54 @@ export function MatchesTab({
               {visibleMatches.length === 0 ? (
                 <p className="py-6 text-center text-sm text-muted">No matches in this stage.</p>
               ) : (
-                <div className="grid gap-4 lg:grid-cols-3">
-                  {MATCH_COLUMNS.map((col) => {
-                    const items = visibleMatches.filter((m) => col.statuses.includes(m.status));
-                    return (
-                      <section key={col.key} className="space-y-2">
-                        <div className="flex items-center gap-2 px-1">
-                          {col.key === "live" && items.length > 0 && (
-                            <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" aria-hidden="true" />
-                          )}
-                          <h3 className="text-sm font-semibold text-foreground">{col.label}</h3>
-                          <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs font-medium tabular-nums text-muted">
-                            {items.length}
-                          </span>
-                        </div>
-                        {items.length === 0 ? (
-                          <p className="rounded-lg border border-dashed border-[var(--border)] px-3 py-6 text-center text-xs text-muted">
-                            {col.empty}
+                (() => {
+                  // Bucket the (stage-filtered) matches by status, then show ONE
+                  // bucket at a time via a Schedule/Live/Completed segmented toggle.
+                  const cols = MATCH_COLUMNS.map((c) => ({
+                    ...c,
+                    items: visibleMatches.filter((m) => c.statuses.includes(m.status)),
+                  }));
+                  // Smart default (until the user picks): surface the most relevant
+                  // bucket — Live if any, else Schedule, else Completed.
+                  const defaultKey =
+                    ["live", "scheduled", "completed"].find((k) => (cols.find((c) => c.key === k)?.items.length ?? 0) > 0) ??
+                    "scheduled";
+                  const activeKey = statusPick ?? defaultKey;
+                  const active = cols.find((c) => c.key === activeKey) ?? cols[0];
+
+                  return (
+                    <div className="space-y-3">
+                      <div className="inline-flex flex-wrap gap-1.5 rounded-xl border border-[var(--border)] p-1">
+                        {cols.map((c) => {
+                          const on = c.key === activeKey;
+                          return (
+                            <button
+                              key={c.key}
+                              type="button"
+                              onClick={() => setStatusPick(c.key)}
+                              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+                                on ? "bg-surface-2 text-foreground" : "text-muted hover:text-foreground"
+                              }`}
+                            >
+                              {c.key === "live" && c.items.length > 0 && (
+                                <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" aria-hidden="true" />
+                              )}
+                              {c.label}
+                              <span className="rounded-full bg-[var(--border)]/60 px-1.5 py-0.5 text-xs tabular-nums text-muted">
+                                {c.items.length}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <div className="space-y-2">
+                        {active.items.length === 0 ? (
+                          <p className="rounded-lg border border-dashed border-[var(--border)] px-3 py-8 text-center text-sm text-muted">
+                            {active.empty}
                           </p>
                         ) : (
-                          items.map((m) => (
+                          active.items.map((m) => (
                             <MatchRow
                               key={m.id}
                               m={m}
@@ -180,10 +209,10 @@ export function MatchesTab({
                             />
                           ))
                         )}
-                      </section>
-                    );
-                  })}
-                </div>
+                      </div>
+                    </div>
+                  );
+                })()
               )}
             </div>
           )}
