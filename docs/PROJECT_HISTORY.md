@@ -760,6 +760,18 @@ no new message table. Migration `20260814080811`. Integration-tested.
   grid); no API/schema/logic change. Verified tsc + eslint + build + a logged-in dev
   smoke (Schedule 1 / Live 0 / Completed 5 rendered correctly).
 
+### Status (2026-08-24) — active development paused here
+Feature/infra work on Smash is paused at Phase 34. Everything through Phase 34 is
+**live on prod** (smashhero.app). Infra is done: pooled Neon (`directUrl`), Neon
+password rotated, Vercel functions moved to Singapore (`sin1`, co-located with the DB).
+Only open item: rotate the local GitHub PAT (see `docs/OPS_ROTATE_AND_POOL.md`).
+
+**First-load performance (measured):** the landing `/` is static/ISR and edge-cached
+(Vercel Mumbai `bom1`, cache HIT) — HTML TTFB ~0.15–0.35s. The "first visit feels slow"
+cost is the usual one-time SPA cost: downloading/parsing the JS bundle + React hydration,
+plus a cold serverless spin-up on the first authed request. Repeat visits are fast. Not
+urgent; cheap future levers if revisited = trim/split first-load JS, keep a function warm.
+
 ### Phase 34 — Matches: three columns → a Schedule/Live/Completed segmented toggle
 - Follow-up to Phase 33: instead of showing all three columns at once, the List view
   now has a **segmented toggle** (Schedule · Live · Completed, each with a count and a
