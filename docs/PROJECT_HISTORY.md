@@ -747,6 +747,19 @@ no new message table. Migration `20260814080811`. Integration-tested.
   (reuses `inviteToTournament`). Verified tsc + eslint + unit(58) + integration(66) +
   build + dev smoke.
 
+### Phase 33 — Matches tab grouped into Schedule / Live / Completed columns
+- The Matches **List** view was a flat, mixed status list. It's now grouped into three
+  status columns — **Schedule** (scheduled), **Live** (in_progress), **Completed**
+  (completed + cancelled) — each with a count and a subtle empty state; a pulsing dot
+  marks a non-empty Live column. Responsive: side-by-side on desktop (`lg:grid-cols-3`),
+  stacked sections on mobile.
+- Decluttered the cards: the column header now conveys the status, so the redundant
+  per-row status badge was dropped — only the exceptional **Cancelled** tag and the
+  **Closed** lock remain. Stage-filter chips still filter across all three columns.
+- Pure presentational change in `MatchesTab.tsx` (`MATCH_COLUMNS` config + a grouped
+  grid); no API/schema/logic change. Verified tsc + eslint + build + a logged-in dev
+  smoke (Schedule 1 / Live 0 / Completed 5 rendered correctly).
+
 ---
 
 ## Key decisions
