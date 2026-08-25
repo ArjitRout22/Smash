@@ -90,6 +90,7 @@ model User {
   playerId       String?  @unique // optional link to a Player profile
   isActive       Boolean  @default(true)
   lastLoginAt    DateTime?
+  termsAcceptedAt DateTime? // when the user accepted the Terms (incl. name/results marketing use) at signup
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   deletedAt      DateTime?

@@ -228,8 +228,13 @@ function DiscoverCard() {
     swrFetcherWithMeta
   );
 
-  // Hide the viewer's own workspace tournaments — you can't join those.
-  const tournaments = (data?.data ?? []).filter((t) => !t.isOwnWorkspace).slice(0, 4);
+  // Hide the viewer's own workspace tournaments — you can't join those — and
+  // order so the most relevant come first: live, then upcoming, then completed.
+  const STATUS_ORDER: Record<string, number> = { ongoing: 0, upcoming: 1, completed: 2, cancelled: 3 };
+  const tournaments = (data?.data ?? [])
+    .filter((t) => !t.isOwnWorkspace)
+    .sort((a, b) => (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9))
+    .slice(0, 8);
 
   async function join(id: string) {
     setBusy(id);
@@ -252,23 +257,36 @@ function DiscoverCard() {
         title={<span className="flex items-center gap-2"><Compass className="h-4 w-4" /> Public tournaments to join</span>}
         action={<Link href="/discover" className="text-sm text-primary hover:underline">Browse all</Link>}
       />
-      <div className="divide-y divide-[var(--border)]">
+      {/* Horizontal carousel — swipe through joinable tournaments (native scroll,
+          snap; no timers, so it stays smooth). */}
+      <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto px-5 py-4 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {tournaments.map((t) => (
-          <div key={t.id} className="flex flex-col gap-2 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0">
-              <Link href={`/discover/${t.id}`} className="font-medium hover:underline">{t.name}</Link>
-              <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted">
-                <Badge color="slate">{titleCase(t.format)}</Badge>
-                {t.location && (
-                  <a href={mapUrl(t.location, t.locationLat, t.locationLng) ?? "#"} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline">
-                    <MapPin className="h-3 w-3 shrink-0" />{t.location}
-                  </a>
-                )}
-                <span>· {t._count.tournamentPlayers} players</span>
-                <span>· hosted by {t.organization?.name ?? t.organizer?.name ?? "—"}</span>
-              </p>
+          <div
+            key={t.id}
+            className="flex w-[78%] shrink-0 snap-start flex-col rounded-xl border border-[var(--border)] bg-surface p-4 sm:w-72"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <Link href={`/discover/${t.id}`} className="min-w-0 font-medium leading-snug hover:underline [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] overflow-hidden">
+                {t.name}
+              </Link>
+              <span className="shrink-0 text-[11px] font-medium text-muted">{titleCase(t.status)}</span>
             </div>
-            <div className="shrink-0">
+            <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
+              <Badge color="slate">{titleCase(t.format)}</Badge>
+              <span>{t._count.tournamentPlayers} players</span>
+            </div>
+            {t.location && (
+              <a
+                href={mapUrl(t.location, t.locationLat, t.locationLng) ?? "#"}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-1 inline-flex items-center gap-1 truncate text-xs text-primary hover:underline"
+              >
+                <MapPin className="h-3 w-3 shrink-0" /><span className="truncate">{t.location}</span>
+              </a>
+            )}
+            <p className="mt-1 truncate text-xs text-muted">by {t.organization?.name ?? t.organizer?.name ?? "—"}</p>
+            <div className="mt-3">
               {t.viewerStatus === "registered" ? (
                 <Badge color="green">Joined</Badge>
               ) : t.viewerStatus === "requested" ? (
@@ -276,7 +294,7 @@ function DiscoverCard() {
               ) : t.viewerStatus === "invited" ? (
                 <Badge color="blue">Invited</Badge>
               ) : (
-                <Button size="sm" variant="outline" loading={busy === t.id} onClick={() => join(t.id)}>Request to join</Button>
+                <Button size="sm" variant="outline" className="w-full" loading={busy === t.id} onClick={() => join(t.id)}>Request to join</Button>
               )}
             </div>
           </div>

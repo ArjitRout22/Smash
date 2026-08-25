@@ -8,7 +8,7 @@ export default function robots(): MetadataRoute.Robots {
       userAgent: "*",
       // Only the public, no-login surface is indexable. Everything behind auth
       // (dashboards, management, directories, APIs) is disallowed.
-      allow: ["/explore", "/t/", "/player/"],
+      allow: ["/explore", "/t/", "/player/", "/terms"],
       disallow: [
         "/api/",
         "/dashboard",

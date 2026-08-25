@@ -23,6 +23,7 @@ function LoginInner() {
   // A claim-invite link arrives as ?mode=register&email=… — open on signup, prefilled.
   const [mode, setMode] = useState<Mode>(search.get("mode") === "register" ? "register" : "login");
   const [form, setForm] = useState({ name: "", email: search.get("email") ?? "", password: "" });
+  const [agree, setAgree] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -39,6 +40,7 @@ function LoginInner() {
           name: form.name.trim(),
           email: form.email.trim(),
           password: form.password,
+          acceptedTerms: agree,
         });
       } else {
         await api.post("/api/auth/login", { email: form.email.trim(), password: form.password });
@@ -62,7 +64,7 @@ function LoginInner() {
   const canSubmit =
     form.email.trim().length > 3 &&
     form.password.length >= (mode === "register" ? 8 : 1) &&
-    (mode === "login" || form.name.trim().length >= 2);
+    (mode === "login" || (form.name.trim().length >= 2 && agree));
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -133,6 +135,23 @@ function LoginInner() {
                   Forgot password?
                 </Link>
               </div>
+            )}
+
+            {mode === "register" && (
+              <label className="flex items-start gap-2 text-xs text-muted">
+                <input
+                  type="checkbox"
+                  checked={agree}
+                  onChange={(e) => setAgree(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 shrink-0"
+                  required
+                />
+                <span>
+                  I agree to the{" "}
+                  <Link href="/terms" target="_blank" className="text-primary hover:underline">Terms &amp; Conditions</Link>
+                  , and allow Smash to feature my name and results to promote the app.
+                </span>
+              </label>
             )}
 
             {error && <p className="text-sm text-[var(--danger)]">{error}</p>}

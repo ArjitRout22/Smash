@@ -77,9 +77,9 @@ export function PlayersTab({ tournamentId }: { tournamentId: string }) {
           <div className="divide-y divide-[var(--border)]">
             {requests.map((tp) => (
               <div key={tp.id} className="flex items-center justify-between gap-2 px-5 py-3">
-                <Link href={`/players/${tp.player.id}`} className="min-w-0 hover:underline">
-                  <span className="font-medium">{tp.player.displayName}</span>
-                  <span className="ml-2 text-sm text-muted">{tp.player.fullName}</span>
+                <Link href={`/players/${tp.player.id}`} className="min-w-0 flex-1 hover:underline">
+                  <span className="block truncate font-medium">{tp.player.displayName}</span>
+                  <span className="block truncate text-sm text-muted">{tp.player.fullName}</span>
                 </Link>
                 <div className="flex shrink-0 gap-2">
                   <Button size="sm" onClick={() => respond(tp.player.id, "accept")} loading={busy === tp.player.id}>Accept</Button>
@@ -101,16 +101,16 @@ export function PlayersTab({ tournamentId }: { tournamentId: string }) {
         <Card>
           <div className="divide-y divide-[var(--border)]">
             {roster.map((tp) => (
-              <div key={tp.id} className="flex items-center justify-between px-5 py-3">
-                <Link href={`/players/${tp.player.id}`} className="hover:underline">
-                  <span className="font-medium">{tp.player.displayName}</span>
-                  <span className="ml-2 text-sm text-muted">{tp.player.fullName}</span>
+              <div key={tp.id} className="flex items-center justify-between gap-3 px-5 py-3">
+                <Link href={`/players/${tp.player.id}`} className="min-w-0 flex-1 hover:underline">
+                  <span className="block truncate font-medium">{tp.player.displayName}</span>
+                  <span className="block truncate text-sm text-muted">{tp.player.fullName}</span>
                 </Link>
-                <div className="flex items-center gap-3 text-sm text-muted">
-                  {tp.player.ranking && <span>{tp.player.ranking.wins}W · {tp.player.ranking.losses}L</span>}
+                <div className="flex shrink-0 items-center gap-2 whitespace-nowrap text-sm text-muted">
+                  {tp.player.ranking && <span className="tabular-nums">{tp.player.ranking.wins}W · {tp.player.ranking.losses}L</span>}
                   <StatusBadge status={tp.status} />
                   {canManage && (
-                    <button onClick={() => remove(tp.player.id, tp.status === "invited")} disabled={busy === tp.player.id} className="text-xs text-muted hover:text-[var(--danger)] disabled:opacity-50">
+                    <button onClick={() => remove(tp.player.id, tp.status === "invited")} disabled={busy === tp.player.id} className="whitespace-nowrap text-xs text-muted hover:text-[var(--danger)] disabled:opacity-50">
                       {tp.status === "invited" ? "Cancel invite" : "Remove"}
                     </button>
                   )}

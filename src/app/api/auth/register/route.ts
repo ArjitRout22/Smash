@@ -9,6 +9,8 @@ const Body = z.object({
   email: z.string().trim().email().max(200),
   password: z.string().min(8).max(200),
   phone: z.string().trim().max(20).optional(),
+  // Must tick the Terms box (which grants name/results marketing use) to sign up.
+  acceptedTerms: z.boolean().refine((v) => v === true, "You must accept the Terms to sign up"),
 });
 
 export const POST = route(async (req) => {
