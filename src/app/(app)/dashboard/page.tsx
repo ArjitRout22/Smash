@@ -13,6 +13,7 @@ import { ShareButton } from "@/components/ShareButton";
 import { mapUrl } from "@/components/LocationPicker";
 import { NearbyPlayers } from "@/components/NearbyPlayers";
 import { PlayRequests } from "@/components/PlayRequests";
+import { BwfCalendarStrip } from "@/components/BwfCalendarStrip";
 import { InvitePlayerModal } from "@/components/InvitePlayerModal";
 import { PERMS } from "@/lib/client/perms";
 import { formatDateTime, titleCase } from "@/lib/client/format";
@@ -89,6 +90,8 @@ export default function DashboardPage() {
       />
 
       <InvitePlayerModal open={inviteOpen} onClose={() => setInviteOpen(false)} />
+
+      <BwfCalendarStrip />
 
       <InvitationsCard />
       <TeamInvitesCard />
