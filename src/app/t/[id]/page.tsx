@@ -5,6 +5,7 @@ import { MapPin } from "lucide-react";
 import { getPublicTournamentView } from "@/lib/services/public.service";
 import { ShareButton } from "@/components/ShareButton";
 import { LiveNow } from "@/components/LiveNow";
+import { AndroidAppBanner } from "@/components/AndroidAppBanner";
 
 const APP_URL = process.env.APP_URL ?? "https://smashhero.app";
 
@@ -97,6 +98,8 @@ export default async function PublicTournamentPage({ params }: { params: Promise
       </header>
 
       <main className="mx-auto max-w-3xl px-4 py-8">
+        <AndroidAppBanner className="mb-6" />
+
         {/* Header */}
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">

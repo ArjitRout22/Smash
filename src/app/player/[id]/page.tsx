@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { getPublicPlayerProfile } from "@/lib/services/public.service";
 import { ShareButton } from "@/components/ShareButton";
 import { PerformanceChart } from "@/components/PerformanceChart";
+import { AndroidAppBanner } from "@/components/AndroidAppBanner";
 
 const APP_URL = process.env.APP_URL ?? "https://smashhero.app";
 
@@ -53,6 +54,8 @@ export default async function PublicPlayerPage({ params }: { params: Promise<{ i
       </header>
 
       <main className="mx-auto max-w-3xl px-4 py-8">
+        <AndroidAppBanner className="mb-6" />
+
         {/* Identity + rating */}
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">

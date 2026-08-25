@@ -89,6 +89,7 @@ export const UpdateTournamentSchema = z.object({
   format: z.enum(TOURNAMENT_FORMATS).optional(),
   status: z.enum(TOURNAMENT_STATUSES).optional(),
   visibility: z.enum(TOURNAMENT_VISIBILITIES).optional(),
+  joinRequestsOpen: z.boolean().optional(),
   organizerId: z.string().uuid().optional(),
   pointsConfig: PointsConfigSchema.nullable().optional(),
 });

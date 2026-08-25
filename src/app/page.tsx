@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Trophy, Users, Zap, Share2, BarChart3, ShieldCheck } from "lucide-react";
 import { getLandingData } from "@/lib/services/public.service";
+import { AndroidAppBanner } from "@/components/AndroidAppBanner";
 
 const APP_URL = process.env.APP_URL ?? "https://smashhero.app";
 
@@ -65,6 +66,9 @@ export default async function LandingPage() {
       </header>
 
       <main>
+        <div className="mx-auto max-w-5xl px-4">
+          <AndroidAppBanner className="mt-4" />
+        </div>
         {/* Hero */}
         <section className="mx-auto max-w-5xl px-4 py-16 text-center sm:py-24">
           <div className="mx-auto inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-surface px-3 py-1 text-xs font-medium text-muted">
