@@ -3,9 +3,9 @@
     "relation": ["delegate_permission/common.handle_all_urls"],
     "target": {
       "namespace": "android_app",
-      "package_name": "app.smashhero.twa",
+      "package_name": "app.smashhero.www.twa",
       "sha256_cert_fingerprints": [
-        "B8:E3:86:3B:54:7F:5F:C3:1F:71:8F:A1:25:44:83:5E:EC:8C:F6:94:79:7A:2F:D9:DC:FC:8A:C5:4F:1A:BF:BA"
+        "51:0E:58:91:A9:30:45:06:31:9A:6E:06:71:A8:C8:92:CB:01:D6:75:D6:AA:B5:8E:CF:65:8D:37:52:49:0C:3A"
       ]
     }
   }
