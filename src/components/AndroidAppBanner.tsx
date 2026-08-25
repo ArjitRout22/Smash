@@ -48,23 +48,21 @@ export function AndroidAppBanner({ className = "" }: { className?: string }) {
 
     if (!isAndroid || standalone || dismissed) return;
 
-    // Progressive enhancement: if Chrome can tell us the TWA is already installed,
-    // don't nag. Unsupported browsers just skip this and rely on the checks above.
+    // Show optimistically as soon as the environment qualifies — a synchronous
+    // state update in the effect body reliably renders (an async-only path can be
+    // dropped during hydration). Then, as progressive enhancement, RETRACT it if
+    // Chrome can confirm the TWA is already installed.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setShow(true);
     if (typeof nav.getInstalledRelatedApps === "function") {
       nav
         .getInstalledRelatedApps()
         .then((apps) => {
-          if (cancelled) return;
-          const installed = apps.some((a) => a.id === TWA_PACKAGE);
-          if (!installed) setShow(true);
+          if (!cancelled && apps.some((a) => a.id === TWA_PACKAGE)) setShow(false);
         })
         .catch(() => {
-          if (!cancelled) setShow(true);
+          /* unsupported / denied — keep showing */
         });
-    } else {
-      // One-time environment read; can't derive during render after SSR.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setShow(true);
     }
 
     return () => {
