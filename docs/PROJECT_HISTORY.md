@@ -852,6 +852,10 @@ BWF World Tour events are live/upcoming — costs ~one row until tapped.
   year); `selectInternationalEvents(now)` is pure + unit-tested (drops past, live/upcoming,
   soonest-first, inclusive end-of-day). `src/components/BwfCalendarStrip.tsx` computes on the
   client after mount (no SSR date drift). Zero DB changes. Suite **129** (5 new).
+- Curation rule (follow-up): international majors (Super 300+) + Finals, **plus every
+  India-hosted BWF event of any tier** (Guwahati Masters & Odisha Masters Super 100s added).
+- The Android TWA wraps the live site, so this (and every web change) reaches the installed
+  APK automatically — no rebuild needed unless the native wrapper/icon/splash/signing changes.
 
 ### Status (2026-08-25) — development PAUSED / handoff point
 Everything through **Phase 40 is live on prod** (https://www.smashhero.app). Infra done:
