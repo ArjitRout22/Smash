@@ -790,9 +790,19 @@ no new message table. Migration `20260814080811`. Integration-tested.
 - Verified: tsc + eslint + unit(58) + integration(66) + build + dev browser smoke (signup
   checkbox gates the button, `/terms` renders, splash gone).
 
+### Phase 37 — Fix: dashboard carousel was hiding your own tournaments
+- The Phase-36 carousel filtered out `isOwnWorkspace` tournaments (a leftover from when it
+  was "tournaments to *join*"), so an organizer's own upcoming tournament never showed —
+  only others' tournaments did (e.g. a completed one). Removed that filter: the carousel
+  now includes your own tournaments too, still ordered live → upcoming → completed. Own
+  cards link to `/tournaments/[id]` with a **"Manage"** CTA (others keep Join/Joined/
+  Pending/Invited). Header renamed "Public tournaments to join" → "Public tournaments".
+- Verified in a logged-in dev smoke: the organizer's own tournament now appears with Manage
+  (it was fully hidden before). tsc + eslint + build green.
+
 ### Status (2026-08-24) — active development paused here
-Feature/infra work on Smash is paused (last change: Phase 36 — final polish batch).
-Everything through Phase 36 is **live on prod** (smashhero.app). Infra is done: pooled Neon (`directUrl`), Neon
+Feature/infra work on Smash is paused (last change: Phase 37).
+Everything through Phase 37 is **live on prod** (smashhero.app). Infra is done: pooled Neon (`directUrl`), Neon
 password rotated, Vercel functions moved to Singapore (`sin1`, co-located with the DB).
 Only open item: rotate the local GitHub PAT (see `docs/OPS_ROTATE_AND_POOL.md`).
 
