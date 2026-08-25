@@ -760,7 +760,10 @@ no new message table. Migration `20260814080811`. Integration-tested.
   grid); no API/schema/logic change. Verified tsc + eslint + build + a logged-in dev
   smoke (Schedule 1 / Live 0 / Completed 5 rendered correctly).
 
-### Phase 35 — First-paint splash (no white screen on cold load / PWA launch)
+### Phase 35 — First-paint splash (no white screen on cold load / PWA launch) — REVERTED in Phase 36
+> Reverted: the splash didn't solve the perceived slowness and was removed in Phase 36
+> (the root `loading.tsx` + themed `html` background from Phase 32 remain).
+
 - The root `loading.tsx` only covers Next route-transition Suspense, not the true first
   paint before React hydrates — so a cold load / PWA launch still flashed white. Added a
   **static splash baked into the initial HTML** (`#app-splash` in `layout.tsx`: green mark
@@ -771,9 +774,25 @@ no new message table. Migration `20260814080811`. Integration-tested.
   server HTML of `/` and `/login`; tsc + eslint + build + dev browser smoke (splash → app
   shell, no white flash).
 
+### Phase 36 — Final polish: revert splash, fix roster overflow, tournament carousel, signup T&C
+- **Reverted the Phase-35 splash** (didn't help; removed `#app-splash` + `SplashHider`).
+- **Players tab overflow:** long names pushed the row actions off-screen. The name is now
+  a `min-w-0 flex-1` link with `block truncate` display/full name; the actions group is
+  `shrink-0` + `whitespace-nowrap` — so nothing clips (roster + join-request rows).
+- **Dashboard tournaments carousel:** the "Public tournaments to join" card is now a
+  horizontal snap-scroll **carousel** of tournament cards (native scroll, no timers),
+  ordered live → upcoming → completed. (Was a vertical list of ≤4.)
+- **T&C at signup (marketing consent):** signup now has a required checkbox — "I agree to
+  the Terms & Conditions, and allow Smash to feature my name and results to promote the app"
+  (`z.boolean().refine(v=>v===true)` server-side too). New `User.termsAcceptedAt` (migration
+  `20260824120000_user_terms_accepted`) stamped at register. New public **`/terms`** page
+  (middleware + robots allow it) with the name/results marketing clause. Simple UI.
+- Verified: tsc + eslint + unit(58) + integration(66) + build + dev browser smoke (signup
+  checkbox gates the button, `/terms` renders, splash gone).
+
 ### Status (2026-08-24) — active development paused here
-Feature/infra work on Smash is paused (last change: Phase 35, the first-paint splash).
-Everything through Phase 35 is **live on prod** (smashhero.app). Infra is done: pooled Neon (`directUrl`), Neon
+Feature/infra work on Smash is paused (last change: Phase 36 — final polish batch).
+Everything through Phase 36 is **live on prod** (smashhero.app). Infra is done: pooled Neon (`directUrl`), Neon
 password rotated, Vercel functions moved to Singapore (`sin1`, co-located with the DB).
 Only open item: rotate the local GitHub PAT (see `docs/OPS_ROTATE_AND_POOL.md`).
 

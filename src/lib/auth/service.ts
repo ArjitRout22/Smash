@@ -79,6 +79,9 @@ export async function register(
         organizationId: org.id,
         playerId: player.id,
         lastLoginAt: new Date(),
+        // Consent captured at signup (Terms + name/results marketing use). The
+        // route enforces the checkbox, so reaching here means it was accepted.
+        termsAcceptedAt: new Date(),
       },
       include: { role: true },
     });
