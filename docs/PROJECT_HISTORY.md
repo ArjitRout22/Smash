@@ -813,8 +813,32 @@ no new message table. Migration `20260814080811`. Integration-tested.
 - Verified: tsc + eslint + build + dev serve check (assetlinks.json 200/valid JSON, splash PNGs
   200, startup-image link tags present).
 
+### Phase 39 — Join-request control + Android APK on public pages (2026-08-25)
+Three live-feedback items (PRs #52, #53):
+- **Bug fix:** the dashboard "Public tournaments" carousel showed **"Request to join"** on
+  completed/ongoing/cancelled tournaments (it ignored status). It now shows the button only
+  when the tournament is upcoming **and** still accepting requests, else a "Registrations
+  closed" badge — matching the discover detail page, which already gated on status.
+- **New `Tournament.joinRequestsOpen`** flag (default `true`, additive migration): the
+  creator/admin can **pause new join requests** while still upcoming (e.g. roster full).
+  Enforced server-side in `requestToJoin`, exposed on read models (Prisma `include` — no
+  select changes), toggled from tournament **Settings** (shown only when Public), and gates
+  the join CTA on both the dashboard carousel and the discover detail page.
+- **Android APK distribution:** the signed TWA APK is served at `public/downloads/smash.apk`
+  (`/downloads/smash.apk`), and a new `AndroidAppBanner` prompts Android **web** visitors to
+  install it on the public **player profile**, **public tournament**, and **landing** pages.
+  It hides when running standalone (opened via the installed app), off non-Android, on
+  dismiss (localStorage), and best-effort via `getInstalledRelatedApps()`. No manifest
+  `prefer_related_applications`, so the existing PWA install prompt is untouched.
+- **Follow-up fix (#53):** `/downloads/smash.apk` was hitting the auth middleware and
+  307-redirecting logged-out visitors to `/login`; added `downloads/` + the `.apk` extension
+  to the middleware matcher exclusions (like `t/`, `player/`, `explore`).
+- Verified: tsc, eslint, `next build`, `prisma migrate deploy`, full suite **124/124**
+  (`RUN_DB_TESTS=1`), and on prod the APK serves 200 as
+  `application/vnd.android.package-archive` (1,154,805 bytes).
+
 ### Status (2026-08-25) — development PAUSED / handoff point
-Everything through **Phase 38 is live on prod** (https://www.smashhero.app). Infra done:
+Everything through **Phase 39 is live on prod** (https://www.smashhero.app). Infra done:
 pooled Neon (`directUrl`; migrations use the **non-pooler** `DIRECT_DATABASE_URL`), Neon
 password rotated, Vercel functions in Singapore (`sin1`).
 
