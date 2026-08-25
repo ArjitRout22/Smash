@@ -211,6 +211,7 @@ export async function updateTournament(id: string, input: UpdateInput, actor: Au
       format: input.format ?? undefined,
       status: input.status ?? undefined,
       visibility: input.visibility ?? undefined,
+      joinRequestsOpen: input.joinRequestsOpen ?? undefined,
       organizerId: input.organizerId ?? undefined,
       pointsConfig: input.pointsConfig === undefined ? undefined : input.pointsConfig ?? undefined,
     },
@@ -381,7 +382,7 @@ export async function requestToJoin(actor: AuthUser, tournamentId: string) {
   }
   const t = await prisma.tournament.findFirst({
     where: { id: tournamentId, deletedAt: null },
-    select: { id: true, visibility: true, status: true, organizationId: true },
+    select: { id: true, visibility: true, status: true, joinRequestsOpen: true, organizationId: true },
   });
   if (!t) throw Errors.notFound("Tournament");
   if (t.organizationId === actor.organizationId) {
@@ -392,6 +393,11 @@ export async function requestToJoin(actor: AuthUser, tournamentId: string) {
   // cancelled, registration is closed.
   if (t.status !== "upcoming") {
     throw Errors.invalidState("This tournament is no longer accepting players");
+  }
+  // The organizer can pause new join requests even while upcoming (e.g. the roster
+  // is full). Enforced server-side so a stale client or direct API call can't slip in.
+  if (!t.joinRequestsOpen) {
+    throw Errors.invalidState("This tournament isn't accepting join requests right now");
   }
 
   const existing = await prisma.tournamentPlayer.findUnique({

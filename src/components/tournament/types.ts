@@ -11,6 +11,7 @@ export type TournamentDetail = {
   status: string;
   format: string;
   visibility: string;
+  joinRequestsOpen?: boolean; // organizer can pause new join requests while upcoming
   canManage?: boolean;
   canScore?: boolean; // may the viewer enter scores for this tournament
   viewerStatus?: string | null; // the current user's own join status, if any

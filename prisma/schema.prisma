@@ -268,6 +268,7 @@ model Tournament {
   createdById    String
   status         String    @default("upcoming") // upcoming|ongoing|completed|cancelled
   visibility     String    @default("private") // private|public (public = discoverable + joinable)
+  joinRequestsOpen Boolean @default(true) // creator can pause new join requests while still upcoming
   format         String    @default("singles") // singles|doubles|mixed
   pointsConfig   Json? // overrides the default points table for this tournament
   createdAt      DateTime  @default(now())

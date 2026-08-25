@@ -38,6 +38,7 @@ export function SettingsTab({ tournament, onChanged }: { tournament: TournamentD
     locationLng: tournament.locationLng ?? null,
     status: tournament.status,
     visibility: tournament.visibility,
+    joinRequestsOpen: tournament.joinRequestsOpen ?? true,
   });
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -58,6 +59,7 @@ export function SettingsTab({ tournament, onChanged }: { tournament: TournamentD
         locationLng: form.location ? form.locationLng : null,
         status: form.status,
         visibility: form.visibility,
+        joinRequestsOpen: form.joinRequestsOpen,
       });
       toast.success("Saved");
       onChanged();
@@ -100,6 +102,22 @@ export function SettingsTab({ tournament, onChanged }: { tournament: TournamentD
                 </Select>
               </Field>
             </div>
+            {form.visibility === "public" && (
+              <label className="flex items-start gap-3 rounded-xl border border-[var(--border)] bg-surface-2/40 p-4">
+                <input
+                  type="checkbox"
+                  checked={form.joinRequestsOpen}
+                  onChange={(e) => setForm({ ...form, joinRequestsOpen: e.target.checked })}
+                  className="mt-0.5 h-4 w-4"
+                />
+                <span>
+                  <span className="block text-sm font-medium text-foreground">Accept join requests</span>
+                  <span className="block text-xs text-muted">
+                    Turn off when you have enough players — hides the join button and pauses new requests.
+                  </span>
+                </span>
+              </label>
+            )}
             <Field label="Location" hint="Search for a venue, or just type an address.">
               <LocationPicker
                 value={{ name: form.location, lat: form.locationLat, lng: form.locationLng }}

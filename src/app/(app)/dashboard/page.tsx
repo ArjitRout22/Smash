@@ -211,6 +211,7 @@ type PublicTournamentLite = {
   locationLng: number | null;
   format: string;
   status: string;
+  joinRequestsOpen: boolean; // organizer can pause new join requests while upcoming
   organizer: { name: string | null } | null;
   organization: { name: string } | null;
   _count: { tournamentPlayers: number; matches: number };
@@ -298,8 +299,12 @@ function DiscoverCard() {
                 <Badge color="amber">Pending</Badge>
               ) : t.viewerStatus === "invited" ? (
                 <Badge color="blue">Invited</Badge>
-              ) : (
+              ) : t.status === "upcoming" && t.joinRequestsOpen !== false ? (
                 <Button size="sm" variant="outline" className="w-full" loading={busy === t.id} onClick={() => join(t.id)}>Request to join</Button>
+              ) : (
+                // Registration is closed once the tournament starts/finishes, or when
+                // the organizer has paused new join requests.
+                <Badge color="slate">Registrations closed</Badge>
               )}
             </div>
           </div>
