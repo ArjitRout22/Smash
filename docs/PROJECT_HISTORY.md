@@ -837,8 +837,24 @@ Three live-feedback items (PRs #52, #53):
   (`RUN_DB_TESTS=1`), and on prod the APK serves 200 as
   `application/vnd.android.package-archive` (1,154,805 bytes).
 
+### Phase 40 — Dashboard "International" strip (BWF schedule + live link-out) (2026-08-25)
+PR #56. A collapsed-by-default one-row strip near the top of the dashboard showing which
+BWF World Tour events are live/upcoming — costs ~one row until tapped.
+- Collapsed reads `International · Next: <event> · <dates>` (or `N live now` with a pulsing
+  dot when an event is on today); expanded lists the events (Super 300+ and the World Tour
+  Finals) with a level badge, host city, dates, and a link out to BWF's own **live scores**
+  (`bwfbadminton.com/live-scores`).
+- **Link-out, not a live feed:** there is no free official BWF developer API, and third-party
+  live-score providers are paid/limited with redistribution terms — so we surface *which*
+  tournaments are on and deep-link to BWF for the actual scores. Zero cost, zero licensing
+  risk, nothing called from the browser.
+- Data is a curated 2026 calendar in `src/lib/data/bwf-calendar.ts` (verify/refresh once a
+  year); `selectInternationalEvents(now)` is pure + unit-tested (drops past, live/upcoming,
+  soonest-first, inclusive end-of-day). `src/components/BwfCalendarStrip.tsx` computes on the
+  client after mount (no SSR date drift). Zero DB changes. Suite **129** (5 new).
+
 ### Status (2026-08-25) — development PAUSED / handoff point
-Everything through **Phase 39 is live on prod** (https://www.smashhero.app). Infra done:
+Everything through **Phase 40 is live on prod** (https://www.smashhero.app). Infra done:
 pooled Neon (`directUrl`; migrations use the **non-pooler** `DIRECT_DATABASE_URL`), Neon
 password rotated, Vercel functions in Singapore (`sin1`).
 
