@@ -813,11 +813,25 @@ no new message table. Migration `20260814080811`. Integration-tested.
 - Verified: tsc + eslint + build + dev serve check (assetlinks.json 200/valid JSON, splash PNGs
   200, startup-image link tags present).
 
-### Status (2026-08-24) — active development paused here
-Feature/infra work on Smash is paused (last change: Phase 38).
-Everything through Phase 38 is **live on prod** (smashhero.app). Infra is done: pooled Neon (`directUrl`), Neon
-password rotated, Vercel functions moved to Singapore (`sin1`, co-located with the DB).
-Only open item: rotate the local GitHub PAT (see `docs/OPS_ROTATE_AND_POOL.md`).
+### Status (2026-08-25) — development PAUSED / handoff point
+Everything through **Phase 38 is live on prod** (https://www.smashhero.app). Infra done:
+pooled Neon (`directUrl`; migrations use the **non-pooler** `DIRECT_DATABASE_URL`), Neon
+password rotated, Vercel functions in Singapore (`sin1`).
+
+**Mobile (free) is wired:** Android TWA via PWABuilder → `public/.well-known/assetlinks.json`
+serves `app.smashhero.www.twa` + the signing fingerprint at **www** (the TWA host must be
+`www.smashhero.app` — the apex 308-redirects and Android's asset-link check won't follow it).
+iOS = Add-to-Home-Screen PWA with branded launch splashes. See `docs/MOBILE_APP.md`.
+
+**Outstanding (user actions, not code):**
+1. Rotate + revoke the GitHub PAT that was pasted in chat (`docs/OPS_ROTATE_AND_POOL.md`).
+2. **Keep & reuse the PWABuilder signing key** for all future APK updates — a fresh key
+   changes the fingerprint (breaks updates + needs an `assetlinks.json` change).
+3. Build/install/share the **www** APK; iPhone users Add-to-Home-Screen.
+
+**To resume:** open a session in `~/Documents/BAD`; read this file + `docs/SETUP_AND_OPERATIONS.md`,
+`docs/MOBILE_APP.md`, `docs/OPS_ROTATE_AND_POOL.md`. A separate NEW app is planned (same GitHub
+account, different repo) — it gets its own context; don't mix it with Smash.
 
 **First-load performance (measured):** the landing `/` is static/ISR and edge-cached
 (Vercel Mumbai `bom1`, cache HIT) — HTML TTFB ~0.15–0.35s. The "first visit feels slow"
