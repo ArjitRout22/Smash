@@ -800,9 +800,22 @@ no new message table. Migration `20260814080811`. Integration-tested.
 - Verified in a logged-in dev smoke: the organizer's own tournament now appears with Manage
   (it was fully hidden before). tsc + eslint + build green.
 
+### Phase 38 — Free mobile apps: Android APK (TWA) prerequisites + iOS launch splash
+- **Android (free APK):** added `public/.well-known/assetlinks.json` (Digital Asset Links —
+  placeholder package/fingerprint to fill from PWABuilder) + a middleware bypass for
+  `.well-known`, so a PWABuilder-generated **TWA APK** runs full-screen (no URL bar) and can
+  be sideloaded/shared for free (no Play Store). Runbook: `docs/MOBILE_APP.md`. The APK's
+  native splash (manifest `background_color` + icon) fixes the cold-open white screen on Android.
+- **iOS (free, no Apple account):** the equivalent is "Add to Home Screen" (PWA). Generated
+  `apple-touch-startup-image` **launch splashes** for 9 common iPhone sizes
+  (`scripts/gen-ios-splash.mjs` → `public/splash/`, wired via `<link>` in `layout.tsx`), so an
+  installed iOS PWA opens on a branded splash instead of white — the iOS parallel to the TWA splash.
+- Verified: tsc + eslint + build + dev serve check (assetlinks.json 200/valid JSON, splash PNGs
+  200, startup-image link tags present).
+
 ### Status (2026-08-24) — active development paused here
-Feature/infra work on Smash is paused (last change: Phase 37).
-Everything through Phase 37 is **live on prod** (smashhero.app). Infra is done: pooled Neon (`directUrl`), Neon
+Feature/infra work on Smash is paused (last change: Phase 38).
+Everything through Phase 38 is **live on prod** (smashhero.app). Infra is done: pooled Neon (`directUrl`), Neon
 password rotated, Vercel functions moved to Singapore (`sin1`, co-located with the DB).
 Only open item: rotate the local GitHub PAT (see `docs/OPS_ROTATE_AND_POOL.md`).
 
