@@ -1,15 +1,18 @@
 /**
- * Curated 2026 BWF World Tour calendar (Super 300 and above + the World Tour
- * Finals). Powers the dashboard's compact "International" strip — a link-out to
- * BWF's own live scores, NOT an in-app live feed (there is no free official BWF
- * API). Update this list once a year when BWF publishes the next season; keep it
- * chronological. Dates are inclusive local calendar days (ISO yyyy-mm-dd).
+ * Curated 2026 BWF World Tour calendar. Curation rule: the international majors
+ * (Super 300 and above) + the World Tour Finals, PLUS every India-hosted BWF
+ * event of any tier (so the home audience sees Guwahati/Odisha Super 100s too).
+ * Powers the dashboard's compact "International" strip — a link-out to BWF's own
+ * live scores, NOT an in-app live feed (there is no free official BWF API). Update
+ * this list once a year when BWF publishes the next season; keep it chronological.
+ * Dates are inclusive local calendar days (ISO yyyy-mm-dd).
  */
 export type BwfLevel =
   | "Super 1000"
   | "Super 750"
   | "Super 500"
   | "Super 300"
+  | "Super 100"
   | "World Tour Finals";
 
 export interface BwfEvent {
@@ -40,6 +43,8 @@ export const BWF_CALENDAR: BwfEvent[] = [
   { name: "Japan Masters", city: "Kumamoto", country: "Japan", start: "2026-11-10", end: "2026-11-15", level: "Super 500" },
   { name: "Hong Kong Open", city: "Hong Kong", country: "China", start: "2026-11-17", end: "2026-11-22", level: "Super 500" },
   { name: "Syed Modi India International", city: "Lucknow", country: "India", start: "2026-11-24", end: "2026-11-29", level: "Super 300" },
+  { name: "Guwahati Masters", city: "Guwahati", country: "India", start: "2026-12-01", end: "2026-12-06", level: "Super 100" },
+  { name: "Odisha Masters", city: "Cuttack", country: "India", start: "2026-12-08", end: "2026-12-13", level: "Super 100" },
   { name: "BWF World Tour Finals", city: "Hangzhou", country: "China", start: "2026-12-09", end: "2026-12-13", level: "World Tour Finals" },
 ];
 

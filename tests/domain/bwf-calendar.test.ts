@@ -37,5 +37,6 @@ describe("selectInternationalEvents", () => {
     expect(levelColor("Super 750")).toBe("amber");
     expect(levelColor("Super 500")).toBe("blue");
     expect(levelColor("Super 300")).toBe("slate");
+    expect(levelColor("Super 100")).toBe("slate");
   });
 });
