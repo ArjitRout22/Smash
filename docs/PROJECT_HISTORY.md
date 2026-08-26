@@ -854,6 +854,10 @@ BWF World Tour events are live/upcoming — costs ~one row until tapped.
   client after mount (no SSR date drift). Zero DB changes. Suite **129** (5 new).
 - Curation rule (follow-up): international majors (Super 300+) + Finals, **plus every
   India-hosted BWF event of any tier** (Guwahati Masters & Odisha Masters Super 100s added).
+- Domestic circuit (follow-up): the strip now also carries the **Indian (BAI) circuit** —
+  All India Senior/Junior Ranking, National Championships, and India International Challenges —
+  each linking out to `badmintonindia.org` (no live feed). Relabelled "BWF & India"; data +
+  helpers generalized to `CircuitEvent`/`selectCircuitEvents` in `src/lib/data/bwf-calendar.ts`.
 - The Android TWA wraps the live site, so this (and every web change) reaches the installed
   APK automatically — no rebuild needed unless the native wrapper/icon/splash/signing changes.
 
