@@ -93,15 +93,17 @@ export default async function LandingPage() {
 
           {/* Community stats */}
           {(stats.tournaments > 0 || stats.players > 0) && (
-            <div className="mx-auto mt-12 grid max-w-lg grid-cols-3 gap-4">
+            <div className="mx-auto mt-12 grid max-w-lg grid-cols-3 gap-2.5 sm:gap-4">
               {[
                 { label: "Tournaments", value: stats.tournaments },
                 { label: "Players", value: stats.players },
                 { label: "Matches played", value: stats.matchesPlayed },
               ].map((s) => (
-                <div key={s.label} className="rounded-xl border border-[var(--border)] bg-surface p-4">
+                <div key={s.label} className="rounded-xl border border-[var(--border)] bg-surface p-3 sm:p-4">
                   <div className="text-2xl font-bold tabular-nums text-foreground">{s.value}</div>
-                  <div className="mt-0.5 text-xs uppercase tracking-wide text-muted">{s.label}</div>
+                  {/* Shrink + drop letter-spacing on mobile so the longest single-word
+                      label ("TOURNAMENTS") fits inside the card instead of spilling out. */}
+                  <div className="mt-0.5 text-[10px] uppercase leading-tight tracking-normal text-muted sm:text-xs sm:tracking-wide">{s.label}</div>
                 </div>
               ))}
             </div>
