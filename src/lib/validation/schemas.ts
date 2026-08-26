@@ -147,7 +147,7 @@ export const UpdateStageSchema = z.object({
 export const GenerateBracketSchema = z.object({
   name: z.string().trim().min(1).max(120).default("Knockout"),
   // Ordered by seed. Player ids for singles, team ids for doubles.
-  participantIds: z.array(z.string().uuid()).min(2).max(64),
+  participantIds: z.array(z.string().uuid()).min(2).max(128),
 });
 
 // Generate round-robin fixtures. mode "round_robin" = everyone plays everyone;

@@ -293,7 +293,7 @@ export async function createMatch(input: CreateInput, actor: AuthUser) {
   return serializeMatch(match);
 }
 
-const MAX_FIXTURES = 128;
+const MAX_FIXTURES = 256;
 /** Group label by index: A–Z, then numeric for group 27+. */
 function groupLabel(i: number): string {
   return i < 26 ? String.fromCharCode(65 + i) : String(i + 1);

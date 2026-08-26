@@ -883,8 +883,24 @@ The real "N groups → top-K advance → seeded knockout" flow (previously impos
 - Verified: tsc, eslint, next build, suite **138** (5 unit + 3 integration new) incl. the
   full 30-player 10×3→top-2→champion run. Zero schema migration (reuses `Stage.config`).
 
+### Phase 42 — 100-player scale, toolbar cleanup, marketing refresh (2026-08-25)
+- **Scale to ~100 players / up to 40 groups.** Raised `MAX_FIXTURES` 128→256 (group-stage
+  match cap), `GenerateBracketSchema` participant cap 64→128, and the group-count dropdown to
+  40. Gave `generateBracket` the scoring path's `{ maxWait 15s, timeout 30s }` — a 128-slot
+  bracket does 127 sequential writes and would otherwise hit the 5s default on prod. Verified
+  with a 100-player integration test: 34 groups × top 2 → 68 qualifiers → a 128-slot knockout
+  (60 byes) generates fine; 40 groups × top 1 → 40 qualifiers → 64-slot. Suite 140.
+- **Toolbar cleanup.** Removed the low-level **"Add stage"** button from the Matches tab (it
+  made an empty stage — confusing now that fixtures/bracket/advance create stages themselves).
+  Kept "Generate bracket" (pure single-elimination, no group stage). `CreateStageModal` stays
+  in the codebase, just unwired.
+- **Marketing refresh.** Landing page + metadata now lead with **"We make grassroots badminton
+  heroes"** (hero, OG/title), a scale-spanning subhead ("Sunday club game to a 100-player
+  championship"), a "Turn your club into champions" closing CTA, and a group-stage mention in
+  the features.
+
 ### Status (2026-08-25) — development PAUSED / handoff point
-Everything through **Phase 41 is live on prod** (https://www.smashhero.app). Infra done:
+Everything through **Phase 42 is live on prod** (https://www.smashhero.app). Infra done:
 pooled Neon (`directUrl`; migrations use the **non-pooler** `DIRECT_DATABASE_URL`), Neon
 password rotated, Vercel functions in Singapore (`sin1`).
 

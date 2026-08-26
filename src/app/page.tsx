@@ -10,13 +10,13 @@ const APP_URL = process.env.APP_URL ?? "https://smashhero.app";
 export const revalidate = 3600;
 
 export const metadata: Metadata = {
-  title: { absolute: "Smash — run badminton tournaments & track your game" },
+  title: { absolute: "Smash — we make grassroots badminton heroes" },
   description:
-    "Smash is the easiest way to run badminton tournaments, score matches live, and climb the rankings. Create fixtures, share public pages, and follow standings in real time — free to start.",
+    "Smash runs your whole badminton event — fixtures, live scoring, group stages, knockout brackets, and a public leaderboard. From a Sunday club game to a 100-player championship. Free to start.",
   alternates: { canonical: APP_URL },
   openGraph: {
-    title: "Smash — badminton tournaments & live scoring",
-    description: "Run tournaments, score live, and climb the rankings. Free to start.",
+    title: "Smash — we make grassroots badminton heroes",
+    description: "Run badminton tournaments, score live, and climb the rankings. Free to start.",
     url: APP_URL,
     type: "website",
   },
@@ -27,7 +27,7 @@ function titleCase(s: string) {
 }
 
 const FEATURES = [
-  { icon: Trophy, title: "Tournaments in minutes", body: "Round-robin, groups, or knockout brackets — generate fixtures and run the whole event from one screen." },
+  { icon: Trophy, title: "Any format, in minutes", body: "Round-robin, knockout brackets, or a full group stage where the top of each group auto-advances to the knockout — seeded, with byes handled for you." },
   { icon: Zap, title: "Live scoring", body: "Point-by-point scoreboards with a public “Live now” page so everyone can follow along in real time." },
   { icon: BarChart3, title: "Rankings & stats", body: "Automatic leaderboards, win/loss records, head-to-head, and a shareable SmashHero rating for every player." },
   { icon: Share2, title: "Share anything", body: "Public tournament and player pages with rich share cards — post a link to WhatsApp and it just works." },
@@ -72,13 +72,15 @@ export default async function LandingPage() {
         {/* Hero */}
         <section className="mx-auto max-w-5xl px-4 py-16 text-center sm:py-24">
           <div className="mx-auto inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-surface px-3 py-1 text-xs font-medium text-muted">
-            🏸 Built for badminton clubs & players
+            🏸 Grassroots badminton, organized
           </div>
           <h1 className="mx-auto mt-5 max-w-3xl text-4xl font-extrabold tracking-tight text-foreground sm:text-6xl">
-            Run badminton tournaments. <span className="text-primary">Score live. Climb the ranks.</span>
+            We make grassroots <span className="text-primary">badminton heroes.</span>
           </h1>
           <p className="mx-auto mt-5 max-w-2xl text-lg text-muted">
-            Smash is the easiest way to organize matches, generate fixtures, and track every result — with public pages and live standings your whole club can follow.
+            From a Sunday club game to a 100-player championship, Smash runs the whole event —
+            fixtures, live scoring, group stages, knockout brackets, and a public leaderboard —
+            so every rally counts and every player gets their moment. Free to start.
           </p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
             <Link href={primaryCta.href} className="rounded-xl bg-primary px-6 py-3 text-base font-semibold text-primary-foreground hover:opacity-90">
@@ -175,8 +177,8 @@ export default async function LandingPage() {
         {/* Final CTA */}
         <section className="border-t border-[var(--border)] bg-surface/50">
           <div className="mx-auto max-w-3xl px-4 py-16 text-center">
-            <h2 className="text-2xl font-bold text-foreground sm:text-3xl">Ready to run your next tournament?</h2>
-            <p className="mt-3 text-muted">Create your first event in a couple of minutes. No credit card, no setup.</p>
+            <h2 className="text-2xl font-bold text-foreground sm:text-3xl">Turn your club into champions</h2>
+            <p className="mt-3 text-muted">Every big player started at a local court. Set up your first tournament in a couple of minutes — no credit card, no setup — and give your players a stage. Free to start.</p>
             <div className="mt-6 flex justify-center">
               <Link href={primaryCta.href} className="rounded-xl bg-primary px-6 py-3 text-base font-semibold text-primary-foreground hover:opacity-90">
                 {primaryCta.label}
