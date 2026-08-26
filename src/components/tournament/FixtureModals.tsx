@@ -280,6 +280,9 @@ export function GenerateBracketModal({
       footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button><Button onClick={save} loading={saving} disabled={selected.length < 2}>Generate ({selected.length})</Button></>}
     >
       <div className="flex flex-col gap-3">
+        <div className="rounded-lg border border-[var(--border)] bg-surface-2/40 p-3 text-xs text-muted">
+          Use this for a <span className="font-medium text-foreground">knockout-only</span> event (straight single-elimination, no groups). Running groups first? Use <span className="font-medium text-foreground">Generate fixtures → Group stage → knockout</span> instead — it seeds the bracket for you.
+        </div>
         <Field label="Bracket name"><Input value={name} onChange={(e) => setName(e.target.value)} /></Field>
         <p className="text-xs text-muted">Select {isTeam ? "teams" : "players"} in seeding order (top seed first). Byes are added automatically for uneven counts.</p>
         <div className="max-h-72 space-y-1 overflow-y-auto">

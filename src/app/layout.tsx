@@ -21,6 +21,11 @@ export const metadata: Metadata = {
     type: "website",
   },
   twitter: { card: "summary", title: "Smash", description: DESCRIPTION },
+  // Set GOOGLE_SITE_VERIFICATION (from Google Search Console → verify via HTML tag)
+  // to prove ownership so the sitemap can be submitted and the site indexed.
+  verification: process.env.GOOGLE_SITE_VERIFICATION
+    ? { google: process.env.GOOGLE_SITE_VERIFICATION }
+    : undefined,
 };
 
 // Explicit viewport; note we do NOT set maximumScale so pinch-zoom stays on.
