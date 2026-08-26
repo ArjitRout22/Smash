@@ -179,7 +179,10 @@ export function GenerateFixturesModal({
           <div className="grid grid-cols-2 gap-4">
             <Field label="Number of groups">
               <Select value={String(groupCount)} onChange={(e) => setGroupCount(Number(e.target.value))}>
-                {(mode === "group_stage" ? [2, 3, 4, 5, 6, 7, 8, 10, 12, 16] : [2, 3, 4]).map((n) => (
+                {(mode === "group_stage"
+                  ? [2, 3, 4, 5, 6, 7, 8, 10, 12, 16, 20, 24, 28, 32, 36, 40]
+                  : [2, 3, 4]
+                ).map((n) => (
                   <option key={n} value={n}>{n} groups</option>
                 ))}
               </Select>

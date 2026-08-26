@@ -201,7 +201,9 @@ export async function generateBracket(tournamentId: string, input: GenerateInput
     );
 
     return listStages(actor, tournamentId);
-  });
+    // A large bracket (e.g. 128 slots → 127 matches) does many sequential writes;
+    // give it the same headroom as the scoring path so it can't hit the 5s default.
+  }, { maxWait: 15000, timeout: 30000 });
 }
 
 type GroupStageConfig = { kind?: string; qualifiersPerGroup?: number };

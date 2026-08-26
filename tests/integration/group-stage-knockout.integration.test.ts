@@ -75,7 +75,7 @@ d("group stage → auto knockout (integration)", () => {
     const final = await prisma.match.findFirst({ where: { tournamentId: tId, stage: { type: "final" } } });
     expect(final?.status).toBe("completed");
     expect(final?.winnerSide).toBeTruthy();
-  });
+  }, 30000); // scores a full group stage + knockout (many transactions)
 
   it("8 groups of 3, top 1 → 8 qualifiers → straight to quarterfinal (no byes)", async () => {
     const players = pool.slice(0, 24);

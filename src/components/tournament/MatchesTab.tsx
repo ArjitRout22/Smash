@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import useSWR from "swr";
-import { Plus, Pencil, Play, Ban, Lock, LockOpen, MessageSquare, CalendarRange, GitBranch, Layers, ListChecks, Trophy, Rocket } from "lucide-react";
+import { Plus, Pencil, Play, Ban, Lock, LockOpen, MessageSquare, CalendarRange, GitBranch, ListChecks, Trophy, Rocket } from "lucide-react";
 import { api, ApiClientError, swrFetcher, swrFetcherWithMeta } from "@/lib/client/api";
 import { Card, Button, Badge, statusColor, Select, Input, Field } from "@/components/ui/primitives";
 import { EmptyState, ErrorState, ListSkeleton } from "@/components/ui/states";
@@ -14,7 +14,7 @@ import { KNOCKOUT_STAGE_TYPES } from "@/lib/domain/constants";
 import { ScoreEntryModal, type ScorableMatch } from "@/components/ScoreEntryModal";
 import { MatchComments } from "@/components/MatchComments";
 import { BracketTab } from "./BracketTab";
-import { CreateStageModal, GenerateFixturesModal, GenerateBracketModal } from "./FixtureModals";
+import { GenerateFixturesModal, GenerateBracketModal } from "./FixtureModals";
 import { formatDateTime } from "@/lib/client/format";
 import type { MatchDTO, StageDTO, TournamentPlayerDTO, TeamDTO } from "./types";
 
@@ -62,7 +62,6 @@ export function MatchesTab({
   const [stageFilter, setStageFilter] = useState<string>("all"); // stage id or "all"
   const [statusPick, setStatusPick] = useState<string | null>(null); // Schedule/Live/Completed segment (null = smart default)
   const [creating, setCreating] = useState(false);
-  const [addingStage, setAddingStage] = useState(false);
   const [genFixtures, setGenFixtures] = useState(false);
   const [genBracket, setGenBracket] = useState(false);
   const [scoreMatch, setScoreMatch] = useState<ScorableMatch | null>(null);
@@ -152,7 +151,6 @@ export function MatchesTab({
               </Button>
             )}
             {canStage && <Button variant="outline" size="sm" onClick={() => setGenBracket(true)}><GitBranch className="h-4 w-4" /> Generate bracket</Button>}
-            {canStage && <Button variant="ghost" size="sm" onClick={() => setAddingStage(true)}><Layers className="h-4 w-4" /> Add stage</Button>}
             {canManage && <Button size="sm" onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> Create match</Button>}
           </div>
         )}
@@ -267,9 +265,6 @@ export function MatchesTab({
           onClose={() => setCreating(false)}
           onCreated={() => mutate()}
         />
-      )}
-      {addingStage && (
-        <CreateStageModal tournamentId={tournamentId} onClose={() => setAddingStage(false)} onCreated={() => { mutate(); mutateStages(); }} />
       )}
       {genFixtures && (
         <GenerateFixturesModal tournamentId={tournamentId} format={format} onClose={() => setGenFixtures(false)} onDone={() => { mutate(); mutateStages(); }} />
