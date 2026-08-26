@@ -294,7 +294,10 @@ export async function createMatch(input: CreateInput, actor: AuthUser) {
 }
 
 const MAX_FIXTURES = 128;
-const GROUP_LABELS = ["A", "B", "C", "D"];
+/** Group label by index: A–Z, then numeric for group 27+. */
+function groupLabel(i: number): string {
+  return i < 26 ? String.fromCharCode(65 + i) : String(i + 1);
+}
 
 function roundRobinPairs(ids: string[]): [string, string][] {
   const pairs: [string, string][] = [];
@@ -354,6 +357,24 @@ function crossGroupSchedule(groups: string[][], meetings: number): PlannedMatch[
   return planned;
 }
 
+/**
+ * Internal round-robin WITHIN each group (for a group_stage where the top N of
+ * each group advance to a knockout) — every entrant plays the others in their own
+ * group, groups don't meet. Flat shape (no round/court metadata).
+ */
+function groupStageSchedule(groups: string[][], meetings: number): PlannedMatch[] {
+  const planned: PlannedMatch[] = [];
+  for (const g of groups) {
+    for (const [a, b] of roundRobinPairs(g)) {
+      for (let r = 0; r < meetings; r++) {
+        const [x, y] = r % 2 === 0 ? [a, b] : [b, a];
+        planned.push({ a: x, b: y, round: null, court: null });
+      }
+    }
+  }
+  return planned;
+}
+
 /** Everyone-plays-everyone, repeated per meeting (side-swap on the return leg). */
 function roundRobinSchedule(ids: string[], meetings: number): PlannedMatch[] {
   const planned: PlannedMatch[] = [];
@@ -375,7 +396,8 @@ function roundRobinSchedule(ids: string[], meetings: number): PlannedMatch[] {
 export async function generateFixtures(tournamentId: string, input: GenerateFixturesInput, actor: AuthUser) {
   await loadOwnedTournament(actor, tournamentId);
 
-  const allIds = input.mode === "groups" ? (input.groups ?? []).flat() : (input.participantIds ?? []);
+  const usesGroups = input.mode === "groups" || input.mode === "group_stage";
+  const allIds = usesGroups ? (input.groups ?? []).flat() : (input.participantIds ?? []);
   if (new Set(allIds).size !== allIds.length) {
     throw Errors.validation("A participant can't appear more than once");
   }
@@ -384,7 +406,9 @@ export async function generateFixtures(tournamentId: string, input: GenerateFixt
   const planned =
     input.mode === "groups"
       ? crossGroupSchedule(input.groups!, input.rounds)
-      : roundRobinSchedule(input.participantIds!, input.rounds);
+      : input.mode === "group_stage"
+        ? groupStageSchedule(input.groups!, input.rounds)
+        : roundRobinSchedule(input.participantIds!, input.rounds);
   if (planned.length === 0) throw Errors.validation("This selection produces no matches");
   const total = planned.length;
   if (total > MAX_FIXTURES) {
@@ -454,7 +478,10 @@ export async function generateFixtures(tournamentId: string, input: GenerateFixt
   // transaction timeout and surfaced as a 500. Batching keeps it to ~6
   // round-trips regardless of draw size. Ids are pre-generated so participant
   // snapshots can reference their rows without reading them back.
-  const stageId = input.stageName ? randomUUID() : null;
+  // A group_stage always needs a stage — it stores the qualifiersPerGroup config
+  // the "Advance to knockout" step reads later.
+  const wantStage = Boolean(input.stageName) || input.mode === "group_stage";
+  const stageId = wantStage ? randomUUID() : null;
   const matchRows: Prisma.MatchCreateManyInput[] = [];
   const partRows: Prisma.MatchParticipantCreateManyInput[] = [];
   const snapRows: Prisma.MatchParticipantPlayerCreateManyInput[] = [];
@@ -491,25 +518,30 @@ export async function generateFixtures(tournamentId: string, input: GenerateFixt
 
   await prisma.$transaction(
     async (tx) => {
-      if (input.stageName) {
+      if (wantStage) {
         const maxOrder = await tx.stage.aggregate({ where: { tournamentId }, _max: { order: true } });
         await tx.stage.create({
           data: {
             id: stageId!,
             tournamentId,
-            name: input.stageName,
-            type: input.mode === "groups" ? "group" : "round_robin",
+            name: input.stageName ?? "Group Stage",
+            type: usesGroups ? "group" : "round_robin",
             order: (maxOrder._max.order ?? -1) + 1,
             status: "active",
+            // A group_stage carries the advancement config the knockout step reads.
+            config:
+              input.mode === "group_stage"
+                ? { kind: "group_stage", qualifiersPerGroup: input.qualifiersPerGroup ?? 2 }
+                : undefined,
           },
         });
       }
 
       // Record each participant's group so the leaderboard can show per-group
-      // standings (A, B, …).
-      if (input.mode === "groups") {
+      // standings (A, B, …) and the knockout step knows who's in which group.
+      if (usesGroups) {
         for (let gi = 0; gi < input.groups!.length; gi++) {
-          const label = GROUP_LABELS[gi] ?? String(gi + 1);
+          const label = groupLabel(gi);
           const ids = input.groups![gi];
           if (input.matchType === "singles") {
             await tx.tournamentPlayer.updateMany({ where: { tournamentId, playerId: { in: ids } }, data: { group: label } });

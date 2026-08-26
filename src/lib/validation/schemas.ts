@@ -151,9 +151,10 @@ export const GenerateBracketSchema = z.object({
 });
 
 // Generate round-robin fixtures. mode "round_robin" = everyone plays everyone;
-// mode "groups" = cross-group only (teams in different groups play). rounds 2 =
-// double round-robin (each pairing played twice). Ids are players (singles) or
-// teams (doubles).
+// mode "groups" = cross-group only (teams in different groups play); mode
+// "group_stage" = an internal round-robin within each group, with top
+// `qualifiersPerGroup` advancing to a knockout later. rounds 2 = double
+// round-robin. Ids are players (singles) or teams (doubles).
 export const GenerateFixturesSchema = z
   .object({
     stageName: z.string().trim().min(1).max(120).optional(),
@@ -164,9 +165,11 @@ export const GenerateFixturesSchema = z
       .refine((n) => n === 1 || n === 3, { message: "bestOf must be 1 or 3" })
       .default(3),
     rounds: z.union([z.literal(1), z.literal(2)]).default(1),
-    mode: z.enum(["round_robin", "groups"]),
+    mode: z.enum(["round_robin", "groups", "group_stage"]),
     participantIds: z.array(z.string().uuid()).optional(),
     groups: z.array(z.array(z.string().uuid())).optional(),
+    // group_stage only: how many advance from each group to the knockout.
+    qualifiersPerGroup: z.number().int().min(1).max(8).optional(),
   })
   .refine((v) => v.mode !== "round_robin" || (!!v.participantIds && v.participantIds.length >= 2), {
     message: "Round-robin needs at least 2 participants",
@@ -175,7 +178,15 @@ export const GenerateFixturesSchema = z
   .refine(
     (v) => v.mode !== "groups" || (!!v.groups && v.groups.length >= 2 && v.groups.every((g) => g.length >= 1)),
     { message: "Group play needs at least 2 groups, each with a participant", path: ["groups"] }
-  );
+  )
+  .refine(
+    (v) => v.mode !== "group_stage" || (!!v.groups && v.groups.length >= 1 && v.groups.every((g) => g.length >= 1)),
+    { message: "A group stage needs at least one group with a participant", path: ["groups"] }
+  )
+  .refine((v) => v.mode !== "group_stage" || (v.qualifiersPerGroup ?? 0) >= 1, {
+    message: "Choose how many qualify from each group",
+    path: ["qualifiersPerGroup"],
+  });
 export type GenerateFixturesInput = z.infer<typeof GenerateFixturesSchema>;
 
 // --- Matches ----------------------------------------------------------------

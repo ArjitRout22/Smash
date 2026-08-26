@@ -39,8 +39,8 @@ const SECTIONS: { title: string; items: Item[] }[] = [
         a: "Matches, Stages and Bracket are now a single Matches tab. Use the “Generate fixtures” / “Generate bracket” / “Add stage” / “Create match” buttons to build the draw, the List ↔ Bracket switch to change the view, and the stage chips to filter the list to one stage.",
       },
       {
-        q: "Generate fixtures (round-robin / groups)",
-        a: "Matches tab → Generate fixtures. Choose “All play all” (everyone plays everyone) or “Groups (cross-play)” (assign players/teams to Group A/B/… and only cross-group matches are created). Pick once or twice (double round-robin). E.g. 2 groups of 3, twice = 18 matches.",
+        q: "Generate fixtures (group stage / round-robin / groups)",
+        a: "Matches tab → Generate fixtures, then pick a format: “Group stage → knockout” (split entrants into groups that each play their own round-robin, with the top N of each advancing later — see below), “All play all” (everyone plays everyone), or “Groups (cross-play)” (groups play only across each other). Choose once or twice (double round-robin). E.g. 10 groups of 3 as a group stage = 30 matches.",
       },
       {
         q: "Generate bracket (knockout)",
@@ -60,16 +60,20 @@ const SECTIONS: { title: string; items: Item[] }[] = [
         a: "Generate fixtures → All play all. Everyone plays everyone once (or twice, home & away). The Leaderboard ranks them by points.",
       },
       {
-        q: "Group stage (cross-play)",
-        a: "Generate fixtures → Groups. Assign entrants to Group A/B/C/D; only cross-group matches are created and the Leaderboard shows a separate table per group.",
+        q: "Groups — cross-play (groups face each other)",
+        a: "Generate fixtures → Groups (cross-play). Assign entrants to Group A/B/…; only cross-group matches are created (groups play each other, not among themselves). For the usual “groups then top-N advance” format, use “Group stage → knockout” instead.",
       },
       {
         q: "Knockout bracket",
         a: "Generate bracket for straight single-elimination. Seeds decide who meets whom, byes cover odd numbers, and each winner advances automatically until the final.",
       },
       {
-        q: "Group → knockout (hybrid)",
-        a: "Play the group fixtures, read the per-group standings on Leaderboard, then Generate bracket with the qualifiers (e.g. top 2 of each group) to run semifinals/final.",
+        q: "Group stage → knockout (auto-advance)",
+        a: "Generate fixtures → “Group stage → knockout”. Split entrants into groups (any sizes — a group can have 2, 3, 4… players, and even a lone player just carries through), set how many qualify per group (top 1–4), and generate. Each group plays its own round-robin. Once every group match is scored, an “Advance to knockout” button appears — click it and the top N of each group (ranked by wins, then game/point difference) are auto-seeded into a single-elimination bracket. Group winners are seeded apart and get any byes.",
+      },
+      {
+        q: "How many qualifiers → which knockout?",
+        a: "The bracket sizes itself to the qualifier count. 8 qualifiers (e.g. 8 groups, top 1) go straight to the quarterfinals. Counts that aren’t a power of two get automatic byes for the top seeds — e.g. 10 groups × top 2 = 20 qualifiers plays Round of 32 → Round of 16 → quarters → semis → final, with the strongest 12 getting a first-round bye.",
       },
       {
         q: "Singles vs doubles / teams",

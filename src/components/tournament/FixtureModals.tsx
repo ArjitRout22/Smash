@@ -55,7 +55,10 @@ export function CreateStageModal({
   );
 }
 
-const GROUP_LABELS = ["A", "B", "C", "D"];
+/** Group label by index: A–Z, then numeric for group 27+ (matches the server). */
+function groupLabelUi(i: number): string {
+  return i < 26 ? String.fromCharCode(65 + i) : String(i + 1);
+}
 
 export function GenerateFixturesModal({
   tournamentId,
@@ -72,11 +75,12 @@ export function GenerateFixturesModal({
   const isTeam = format !== "singles";
   const matchType = isTeam ? "doubles" : "singles";
 
-  const [mode, setMode] = useState<"round_robin" | "groups">("groups");
+  const [mode, setMode] = useState<"round_robin" | "groups" | "group_stage">("group_stage");
   const [selected, setSelected] = useState<string[]>([]);
   const [groupCount, setGroupCount] = useState(2);
   const [groupOf, setGroupOf] = useState<Record<string, number>>({});
-  const [rounds, setRounds] = useState<1 | 2>(2);
+  const [qualifiersPerGroup, setQualifiersPerGroup] = useState(2);
+  const [rounds, setRounds] = useState<1 | 2>(1);
   const [bestOf, setBestOf] = useState("3");
   const [stageName, setStageName] = useState(isTeam ? "Group Stage" : "Round Robin");
   const [saving, setSaving] = useState(false);
@@ -98,32 +102,40 @@ export function GenerateFixturesModal({
     }
   }
 
+  const usesGroups = mode === "groups" || mode === "group_stage";
   const groups: string[][] = Array.from({ length: groupCount }, (_, gi) => selected.filter((id) => (groupOf[id] ?? 0) === gi));
   const nonEmptyGroups = groups.filter((g) => g.length > 0);
 
   let pairCount = 0;
   if (mode === "groups") {
+    // Cross-play: every entrant of a group plays every entrant of the others.
     for (let i = 0; i < nonEmptyGroups.length; i++)
       for (let j = i + 1; j < nonEmptyGroups.length; j++) pairCount += nonEmptyGroups[i].length * nonEmptyGroups[j].length;
+  } else if (mode === "group_stage") {
+    // Internal round-robin within each group.
+    for (const g of nonEmptyGroups) pairCount += (g.length * (g.length - 1)) / 2;
   } else {
     pairCount = (selected.length * (selected.length - 1)) / 2;
   }
   const matchCount = pairCount * rounds;
-  const canSubmit = matchCount > 0 && (mode === "groups" ? nonEmptyGroups.length >= 2 : selected.length >= 2);
+  const canSubmit =
+    matchCount > 0 &&
+    (mode === "groups" ? nonEmptyGroups.length >= 2 : mode === "group_stage" ? nonEmptyGroups.length >= 1 : selected.length >= 2);
 
   async function save() {
     if (!canSubmit) return;
     setSaving(true);
     try {
-      const body: { matchType: string; bestOf: number; rounds: 1 | 2; mode: string; stageName?: string; groups?: string[][]; participantIds?: string[] } = {
+      const body: { matchType: string; bestOf: number; rounds: 1 | 2; mode: string; stageName?: string; groups?: string[][]; participantIds?: string[]; qualifiersPerGroup?: number } = {
         matchType,
         bestOf: Number(bestOf),
         rounds,
         mode,
         stageName: stageName.trim() || undefined,
       };
-      if (mode === "groups") body.groups = nonEmptyGroups;
+      if (usesGroups) body.groups = nonEmptyGroups;
       else body.participantIds = selected;
+      if (mode === "group_stage") body.qualifiersPerGroup = qualifiersPerGroup;
       const res = await api.post<{ created: number }>(`/api/tournaments/${tournamentId}/fixtures`, body);
       toast.success(`${res.created} matches created`);
       onDone();
@@ -144,7 +156,8 @@ export function GenerateFixturesModal({
     >
       <div className="flex flex-col gap-4">
         <Field label="Format">
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" size="sm" variant={mode === "group_stage" ? "primary" : "outline"} onClick={() => setMode("group_stage")}>Group stage → knockout</Button>
             <Button type="button" size="sm" variant={mode === "round_robin" ? "primary" : "outline"} onClick={() => setMode("round_robin")}>All play all</Button>
             <Button type="button" size="sm" variant={mode === "groups" ? "primary" : "outline"} onClick={() => setMode("groups")}>Groups (cross-play)</Button>
           </div>
@@ -162,12 +175,23 @@ export function GenerateFixturesModal({
           </Field>
         </div>
         <Field label="Stage name (optional)"><Input value={stageName} onChange={(e) => setStageName(e.target.value)} placeholder="Group Stage" /></Field>
-        {mode === "groups" && (
-          <Field label="Number of groups">
-            <Select value={String(groupCount)} onChange={(e) => setGroupCount(Number(e.target.value))}>
-              {[2, 3, 4].map((n) => <option key={n} value={n}>{n} groups</option>)}
-            </Select>
-          </Field>
+        {usesGroups && (
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Number of groups">
+              <Select value={String(groupCount)} onChange={(e) => setGroupCount(Number(e.target.value))}>
+                {(mode === "group_stage" ? [2, 3, 4, 5, 6, 7, 8, 10, 12, 16] : [2, 3, 4]).map((n) => (
+                  <option key={n} value={n}>{n} groups</option>
+                ))}
+              </Select>
+            </Field>
+            {mode === "group_stage" && (
+              <Field label="Qualify per group" hint="Top N of each group advance">
+                <Select value={String(qualifiersPerGroup)} onChange={(e) => setQualifiersPerGroup(Number(e.target.value))}>
+                  {[1, 2, 3, 4].map((n) => <option key={n} value={n}>Top {n}</option>)}
+                </Select>
+              </Field>
+            )}
+          </div>
         )}
 
         <div>
@@ -180,9 +204,9 @@ export function GenerateFixturesModal({
                 <div key={o.id} className="flex items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-surface-2">
                   <input type="checkbox" checked={checked} onChange={() => toggle(o.id)} className="h-4 w-4 accent-[var(--primary)]" />
                   <span className="flex-1 text-sm font-medium">{o.label}</span>
-                  {checked && mode === "groups" && (
+                  {checked && usesGroups && (
                     <Select value={String(groupOf[o.id] ?? 0)} onChange={(e) => setGroupOf((g) => ({ ...g, [o.id]: Number(e.target.value) }))} className="w-28">
-                      {Array.from({ length: groupCount }, (_, gi) => <option key={gi} value={gi}>Group {GROUP_LABELS[gi]}</option>)}
+                      {Array.from({ length: groupCount }, (_, gi) => <option key={gi} value={gi}>Group {groupLabelUi(gi)}</option>)}
                     </Select>
                   )}
                 </div>
@@ -192,7 +216,11 @@ export function GenerateFixturesModal({
         </div>
 
         <p className="text-xs text-muted">
-          {mode === "groups" ? "Teams only play teams in other groups. " : "Everyone plays everyone. "}
+          {mode === "group_stage"
+            ? `Each group plays its own round-robin; the top ${qualifiersPerGroup} of each advance to a knockout (use "Advance to knockout" once the groups finish). `
+            : mode === "groups"
+              ? "Teams only play teams in other groups. "
+              : "Everyone plays everyone. "}
           {matchCount > 0 ? `${matchCount} matches will be created.` : "Select participants to preview."}
         </p>
       </div>

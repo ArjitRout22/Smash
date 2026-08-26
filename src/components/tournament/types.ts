@@ -89,6 +89,7 @@ export type StageDTO = {
   type: string;
   order: number;
   status: string;
+  config?: Record<string, unknown> | null;
   _count: { matches: number };
 };
 

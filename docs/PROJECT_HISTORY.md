@@ -861,8 +861,30 @@ BWF World Tour events are live/upcoming — costs ~one row until tapped.
 - The Android TWA wraps the live site, so this (and every web change) reaches the installed
   APK automatically — no rebuild needed unless the native wrapper/icon/splash/signing changes.
 
+### Phase 41 — Group stage → auto-advancing knockout (2026-08-25)
+The real "N groups → top-K advance → seeded knockout" flow (previously impossible: the
+"Groups" button is cross-play and nothing auto-advanced group standings).
+- **New `group_stage` fixtures mode** (`generateFixtures`): each group plays its own
+  internal round-robin (`groupStageSchedule`), one `Stage` type `group` with
+  `config: { kind: "group_stage", qualifiersPerGroup }`, player/team group labels set.
+  Group labels fixed to A–Z+ (was A–D). Existing `groups` (cross-play) + `round_robin`
+  modes unchanged.
+- **`advanceGroupsToKnockout`** (`stage.service.ts`) + `POST /api/tournaments/[id]/advance`:
+  once every group match is scored, ranks each group (wins → game-diff → point-diff →
+  stable id, pure `selectQualifiers` in `engines/group-advance.ts`), takes top-K (clamped
+  to group size; a 1-player group carries through), orders winners-first, and reuses
+  `generateBracket` (so byes + winner propagation are free). Guards: no group stage / not
+  finished / already advanced.
+- **UI**: FixtureModals gets a "Group stage → knockout" format with group-count (up to 16)
+  + "Qualify per group" (top 1–4); MatchesTab gets an "Advance to knockout" button (enabled
+  once the group stage completes, hidden after a knockout exists). Help section rewritten.
+- **Configurable qualifiers (1–4), uneven groups, and byes all supported.** 20 qualifiers →
+  R32→R16→QF→SF→Final (12 byes); 8 qualifiers (8 groups × top 1) → straight to quarterfinals.
+- Verified: tsc, eslint, next build, suite **138** (5 unit + 3 integration new) incl. the
+  full 30-player 10×3→top-2→champion run. Zero schema migration (reuses `Stage.config`).
+
 ### Status (2026-08-25) — development PAUSED / handoff point
-Everything through **Phase 40 is live on prod** (https://www.smashhero.app). Infra done:
+Everything through **Phase 41 is live on prod** (https://www.smashhero.app). Infra done:
 pooled Neon (`directUrl`; migrations use the **non-pooler** `DIRECT_DATABASE_URL`), Neon
 password rotated, Vercel functions in Singapore (`sin1`).
 

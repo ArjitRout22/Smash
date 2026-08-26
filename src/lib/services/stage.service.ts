@@ -7,7 +7,8 @@ import {
   generateSingleEliminationPlan,
   type PlannedMatch,
 } from "@/lib/engines/bracket";
-import type { StageType, Side } from "@/lib/domain/constants";
+import { selectQualifiers, type GroupInput, type GroupMatchResult } from "@/lib/engines/group-advance";
+import { KNOCKOUT_STAGE_TYPES, type StageType, type Side } from "@/lib/domain/constants";
 import type { AuthUser } from "@/lib/auth/authorize";
 import { assertOrgAccess } from "@/lib/auth/tenancy";
 import { loadOwnedTournament } from "@/lib/services/tournament.service";
@@ -201,6 +202,96 @@ export async function generateBracket(tournamentId: string, input: GenerateInput
 
     return listStages(actor, tournamentId);
   });
+}
+
+type GroupStageConfig = { kind?: string; qualifiersPerGroup?: number };
+
+/**
+ * Auto-advance a completed group stage into a seeded knockout: read each group's
+ * internal round-robin standings, take the top `qualifiersPerGroup` from each
+ * (clamped to group size), and build a single-elimination bracket from them
+ * (reusing generateBracket, so byes + winner propagation come for free).
+ */
+export async function advanceGroupsToKnockout(tournamentId: string, actor: AuthUser) {
+  const tournament = await loadOwnedTournament(actor, tournamentId);
+  const isTeam = tournament.format !== "singles";
+
+  const stages = await prisma.stage.findMany({ where: { tournamentId }, orderBy: { order: "asc" } });
+  const groupStage = stages.find((s) => (s.config as GroupStageConfig | null)?.kind === "group_stage");
+  if (!groupStage) {
+    throw Errors.validation("No group stage to advance from — generate a group stage first.");
+  }
+  if (stages.some((s) => KNOCKOUT_STAGE_TYPES.includes(s.type as StageType))) {
+    throw Errors.invalidState("A knockout has already been generated for this tournament.");
+  }
+  const qualifiersPerGroup = Number((groupStage.config as GroupStageConfig).qualifiersPerGroup ?? 2);
+
+  const matches = await prisma.match.findMany({
+    where: { stageId: groupStage.id, deletedAt: null },
+    include: { participants: true, games: true },
+  });
+  if (matches.length === 0) throw Errors.validation("The group stage has no matches.");
+  const remaining = matches.filter((m) => m.status !== "completed" && m.status !== "cancelled").length;
+  if (remaining > 0) {
+    throw Errors.invalidState(`Finish all group matches first — ${remaining} still to play.`);
+  }
+
+  // Map each entrant (player or team id) to its group label.
+  const groupOf = new Map<string, string>();
+  if (isTeam) {
+    const teams = await prisma.team.findMany({ where: { tournamentId, group: { not: null } }, select: { id: true, group: true } });
+    for (const t of teams) groupOf.set(t.id, t.group!);
+  } else {
+    const tps = await prisma.tournamentPlayer.findMany({ where: { tournamentId, group: { not: null } }, select: { playerId: true, group: true } });
+    for (const tp of tps) groupOf.set(tp.playerId, tp.group!);
+  }
+  const refOf = (p: { playerId: string | null; teamId: string | null }) => (isTeam ? p.teamId : p.playerId);
+
+  const groupsMap = new Map<string, string[]>();
+  for (const [id, label] of groupOf) {
+    const arr = groupsMap.get(label) ?? [];
+    arr.push(id);
+    groupsMap.set(label, arr);
+  }
+  const groups: GroupInput[] = [...groupsMap.entries()]
+    .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
+    .map(([label, entrantIds]) => ({ label, entrantIds }));
+
+  const results: GroupMatchResult[] = [];
+  for (const m of matches) {
+    if (m.status !== "completed") continue;
+    const a = m.participants.find((p) => p.side === "A");
+    const b = m.participants.find((p) => p.side === "B");
+    if (!a || !b) continue;
+    const aId = refOf(a);
+    const bId = refOf(b);
+    if (!aId || !bId) continue;
+    results.push({
+      aId,
+      bId,
+      aGames: a.gamesWon,
+      bGames: b.gamesWon,
+      aPoints: m.games.reduce((s, g) => s + g.scoreA, 0),
+      bPoints: m.games.reduce((s, g) => s + g.scoreB, 0),
+    });
+  }
+
+  const plan = selectQualifiers(groups, results, qualifiersPerGroup);
+  if (plan.ordered.length < 2) {
+    throw Errors.validation("Not enough qualifiers to form a knockout (need at least 2).");
+  }
+
+  await generateBracket(tournamentId, { name: "Knockout", participantIds: plan.ordered }, actor);
+  await prisma.stage.update({ where: { id: groupStage.id }, data: { status: "completed" } });
+
+  await audit({
+    actorUserId: actor.id,
+    action: "stage.groups.advanced",
+    entityType: "Tournament",
+    entityId: tournamentId,
+    newValue: { qualifiersPerGroup, qualifiers: plan.ordered.length, groups: groups.length },
+  });
+  return { qualifiers: plan.ordered.length, groups: plan.groups };
 }
 
 async function advanceByes(

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import useSWR from "swr";
-import { Plus, Pencil, Play, Ban, Lock, LockOpen, MessageSquare, CalendarRange, GitBranch, Layers, ListChecks, Trophy } from "lucide-react";
+import { Plus, Pencil, Play, Ban, Lock, LockOpen, MessageSquare, CalendarRange, GitBranch, Layers, ListChecks, Trophy, Rocket } from "lucide-react";
 import { api, ApiClientError, swrFetcher, swrFetcherWithMeta } from "@/lib/client/api";
 import { Card, Button, Badge, statusColor, Select, Input, Field } from "@/components/ui/primitives";
 import { EmptyState, ErrorState, ListSkeleton } from "@/components/ui/states";
@@ -10,6 +10,7 @@ import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { useAuth } from "@/components/AuthProvider";
 import { PERMS } from "@/lib/client/perms";
+import { KNOCKOUT_STAGE_TYPES } from "@/lib/domain/constants";
 import { ScoreEntryModal, type ScorableMatch } from "@/components/ScoreEntryModal";
 import { MatchComments } from "@/components/MatchComments";
 import { BracketTab } from "./BracketTab";
@@ -66,6 +67,19 @@ export function MatchesTab({
   const [genBracket, setGenBracket] = useState(false);
   const [scoreMatch, setScoreMatch] = useState<ScorableMatch | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [advancing, setAdvancing] = useState(false);
+
+  // Full stage rows (type/status/config) — drives the "Advance to knockout" button
+  // for a group_stage. Only the organizer needs it.
+  const { data: fullStages, mutate: mutateStages } = useSWR<StageDTO[]>(
+    canStage ? `/api/tournaments/${tournamentId}/stages` : null,
+    swrFetcher
+  );
+  const groupStage = (fullStages ?? []).find(
+    (s) => (s.config as { kind?: string } | null | undefined)?.kind === "group_stage"
+  );
+  const hasKnockout = (fullStages ?? []).some((s) => (KNOCKOUT_STAGE_TYPES as readonly string[]).includes(s.type));
+  const groupDone = groupStage?.status === "completed";
 
   const { data, error, isLoading, mutate } = useSWR<{ data: MatchDTO[] }>(
     `/api/matches?tournamentId=${tournamentId}&pageSize=100`,
@@ -85,6 +99,21 @@ export function MatchesTab({
   }, [matches]);
 
   const visibleMatches = stageFilter === "all" ? matches : matches.filter((m) => m.stage?.id === stageFilter);
+
+  async function advanceToKnockout() {
+    setAdvancing(true);
+    try {
+      const res = await api.post<{ qualifiers: number }>(`/api/tournaments/${tournamentId}/advance`, {});
+      toast.success(`Knockout generated — ${res.qualifiers} qualifiers`);
+      mutate();
+      mutateStages();
+      setView("bracket");
+    } catch (err) {
+      toast.error(err instanceof ApiClientError ? err.message : "Could not advance to knockout");
+    } finally {
+      setAdvancing(false);
+    }
+  }
 
   async function patchMatch(m: MatchDTO, body: Record<string, unknown>, successMsg: string) {
     setBusyId(m.id);
@@ -110,6 +139,18 @@ export function MatchesTab({
         {(canManage || canStage) && (
           <div className="flex flex-wrap gap-2">
             {canStage && <Button variant="outline" size="sm" onClick={() => setGenFixtures(true)}><CalendarRange className="h-4 w-4" /> Generate fixtures</Button>}
+            {canStage && groupStage && !hasKnockout && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={advanceToKnockout}
+                loading={advancing}
+                disabled={!groupDone}
+                title={groupDone ? "Advance the top of each group to a knockout" : "Finish all group matches first"}
+              >
+                <Rocket className="h-4 w-4" /> Advance to knockout
+              </Button>
+            )}
             {canStage && <Button variant="outline" size="sm" onClick={() => setGenBracket(true)}><GitBranch className="h-4 w-4" /> Generate bracket</Button>}
             {canStage && <Button variant="ghost" size="sm" onClick={() => setAddingStage(true)}><Layers className="h-4 w-4" /> Add stage</Button>}
             {canManage && <Button size="sm" onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> Create match</Button>}
@@ -228,16 +269,16 @@ export function MatchesTab({
         />
       )}
       {addingStage && (
-        <CreateStageModal tournamentId={tournamentId} onClose={() => setAddingStage(false)} onCreated={() => mutate()} />
+        <CreateStageModal tournamentId={tournamentId} onClose={() => setAddingStage(false)} onCreated={() => { mutate(); mutateStages(); }} />
       )}
       {genFixtures && (
-        <GenerateFixturesModal tournamentId={tournamentId} format={format} onClose={() => setGenFixtures(false)} onDone={() => mutate()} />
+        <GenerateFixturesModal tournamentId={tournamentId} format={format} onClose={() => setGenFixtures(false)} onDone={() => { mutate(); mutateStages(); }} />
       )}
       {genBracket && (
-        <GenerateBracketModal tournamentId={tournamentId} format={format} onClose={() => setGenBracket(false)} onDone={() => mutate()} />
+        <GenerateBracketModal tournamentId={tournamentId} format={format} onClose={() => setGenBracket(false)} onDone={() => { mutate(); mutateStages(); }} />
       )}
 
-      <ScoreEntryModal open={Boolean(scoreMatch)} match={scoreMatch} onClose={() => setScoreMatch(null)} onSaved={() => mutate()} />
+      <ScoreEntryModal open={Boolean(scoreMatch)} match={scoreMatch} onClose={() => setScoreMatch(null)} onSaved={() => { mutate(); mutateStages(); }} />
     </div>
   );
 }
