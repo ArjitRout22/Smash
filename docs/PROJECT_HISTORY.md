@@ -899,21 +899,41 @@ The real "N groups → top-K advance → seeded knockout" flow (previously impos
   championship"), a "Turn your club into champions" closing CTA, and a group-stage mention in
   the features.
 
-### Status (2026-08-25) — development PAUSED / handoff point
-Everything through **Phase 42 is live on prod** (https://www.smashhero.app). Infra done:
-pooled Neon (`directUrl`; migrations use the **non-pooler** `DIRECT_DATABASE_URL`), Neon
-password rotated, Vercel functions in Singapore (`sin1`).
+### Phase 43 — SEO hardening, bracket hint, marketing kit (2026-08-25)
+- **SEO.** The site was already technically indexable (robots.ts allows public surfaces +
+  disallows auth; sitemap.ts; metadataBase + OG). Gaps closed: the **marketing home `/` is now
+  in the sitemap** (priority 1.0), and a **Google Search Console verification hook** was added
+  (`verification.google` from `GOOGLE_SITE_VERIFICATION` env). The remaining step is the
+  user's: verify the domain in Google Search Console and submit `smashhero.app/sitemap.xml`
+  (being indexable ≠ being indexed).
+- **"Generate bracket" clarity.** The modal now leads with a hint: use it for a knockout-only
+  event; for groups-then-advance use "Generate fixtures → Group stage → knockout".
+- **Marketing kit.** 15 on-brand social graphics (LinkedIn/email 1200×630 + WhatsApp/IG
+  1080×1080) produced as an exportable design canvas (not in-repo) — hero/tagline, feature,
+  stat, CTA and announcement cards in the Smash palette.
+
+### Status (2026-08-25) — Smash paused; moving to a NEW app
+Everything through **Phase 43 is live on prod** (https://www.smashhero.app). Development on
+Smash is paused here — the user is starting a separate new app (own repo, own context; same
+GitHub account `ArjitRout22`, same branch→PR→squash-merge→poll-deploy loop). Do NOT mix the two.
+
+**Outstanding — user actions (not code):**
+1. **SEO:** verify `smashhero.app` in Google Search Console (HTML-tag method → set
+   `GOOGLE_SITE_VERIFICATION` env in Vercel → redeploy), then submit the sitemap and request
+   indexing of `/`. Optionally Bing Webmaster Tools. New sites take days–weeks to appear.
+2. Rotate/revoke the GitHub PAT pasted in chat earlier; keep reusing the PWABuilder signing
+   key for future APK updates (a new key breaks TWA updates + needs an assetlinks.json change).
+3. Marketing kit: open the design canvas, export each artboard as PNG, post to LinkedIn/WhatsApp/email.
+
+**Infra (done):** pooled Neon (`directUrl`; migrations use the **non-pooler** `DIRECT_DATABASE_URL`),
+Neon password rotated, Vercel functions in Singapore (`sin1`).
 
 **Mobile (free) is wired:** Android TWA via PWABuilder → `public/.well-known/assetlinks.json`
 serves `app.smashhero.www.twa` + the signing fingerprint at **www** (the TWA host must be
 `www.smashhero.app` — the apex 308-redirects and Android's asset-link check won't follow it).
 iOS = Add-to-Home-Screen PWA with branded launch splashes. See `docs/MOBILE_APP.md`.
-
-**Outstanding (user actions, not code):**
-1. Rotate + revoke the GitHub PAT that was pasted in chat (`docs/OPS_ROTATE_AND_POOL.md`).
-2. **Keep & reuse the PWABuilder signing key** for all future APK updates — a fresh key
-   changes the fingerprint (breaks updates + needs an `assetlinks.json` change).
-3. Build/install/share the **www** APK; iPhone users Add-to-Home-Screen.
+(APK is a TWA wrapping the live site — every web change reaches the installed app automatically;
+rebuild only for native wrapper/icon/splash/signing changes.)
 
 **To resume:** open a session in `~/Documents/BAD`; read this file + `docs/SETUP_AND_OPERATIONS.md`,
 `docs/MOBILE_APP.md`, `docs/OPS_ROTATE_AND_POOL.md`. A separate NEW app is planned (same GitHub
