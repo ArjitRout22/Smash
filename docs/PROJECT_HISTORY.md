@@ -938,6 +938,29 @@ played several matches in a row while others waited. Fixed with the round-robin
 - `src/lib/services/match.service.ts` now imports the engine (removed the old flat
   pair-by-pair helpers).
 
+### Phase 46 — Phone + OTP sign-in (SMSLocal, provider-abstracted) (2026-08-28)
+Phone number + OTP as a **full alternative** to email+password (built; SMSLocal go-live pending
+the user's DLT setup + env keys — runs on the console provider meanwhile).
+- **Provider abstraction** `src/lib/otp/provider.ts` (mirrors `EmailProvider`): `OtpProvider`
+  interface + `ConsoleOtpProvider` (logs the code, zero-setup dev/test) + `SmsLocalProvider`
+  (`POST https://api.smslocal.in/v1/messages`, Bearer key, DLT `sender`/`template_id`/`variables`);
+  `getOtpProvider()` auto-selects smslocal when `SMSLOCAL_API_KEY` is set. **Swapping providers is
+  this one file** — nothing else in auth/DB/UI is provider-specific.
+- **OTP service** `src/lib/auth/otp.ts`: `startOtp` (rate-limited per phone + per IP, 6-digit code,
+  stored only as sha256, 5-min expiry, retires prior codes) and `verifyOtp` (attempts/lockout,
+  constant-time compare, consume on use). Reuses `normalizePhone`/`maskPhone` + `rateLimiter`.
+- **Auth flows** in `src/lib/auth/service.ts`: `authByPhone` (verified phone → log into the owning
+  account, else create one exactly like an email signup — own Organization + ORGANIZER + Player,
+  `email` optional; missing name/Terms → `{ needsProfile: true }`) and `addVerifiedPhone` (email
+  users link a phone). Endpoints `POST /api/auth/otp/{start,verify}` + `/api/auth/phone/add`.
+- **DB**: resurrected `OtpVerification` table + `User.phoneVerifiedAt` (migration
+  `20260828130000_phone_otp_auth`). `User.phone` was already unique/nullable.
+- **UI**: a **Phone** tab on `/login` — enter phone → send code → 6-digit code (+ name/Terms only
+  when the server says it's a new phone) → in. Env vars added (`OTP_PROVIDER`, `OTP_TTL_SECONDS`,
+  `SMSLOCAL_*`). Suite **151** (+5 phone-OTP integration tests: register, login, needsProfile,
+  wrong/expired/lockout, link-to-email). Account model = full alternative (confirmed); security =
+  hashed codes, generic errors (no enumeration), per-phone + per-IP rate limits.
+
 ### Status (2026-08-28) — Smash ACTIVE again; separate apps planned
 Everything through **Phase 44 is live on prod** (https://www.smashhero.app). Smash development is
 active again (see roadmap below). Two SEPARATE apps are planned in their own repos under the same
@@ -974,13 +997,13 @@ loop) — do NOT mix them with Smash.
 2. Rotate/revoke the GitHub PAT pasted in chat earlier; keep reusing the PWABuilder signing
    key for future APK updates (a new key breaks TWA updates + needs an assetlinks.json change).
 3. Marketing kit: open the design canvas, export each artboard as PNG, post to LinkedIn/WhatsApp/email.
-4. **Phone-OTP:** Twilio account created (trial). Decision made: **ADD phone alongside
-   email+password** (keep both). Next: create a **Verify Service** (Console → Verify → Services →
-   get the `VA…` Service SID), grab **Account SID** (`AC…`) + **Auth Token** (Console home, NOT the
-   API-keys page), set all three as Vercel env vars (`TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`,
-   `TWILIO_VERIFY_SERVICE_SID`) — never in chat. On trial, SMS only reaches Twilio-verified numbers
-   until the account is upgraded. Then I build the OtpProvider(twilio) + phone register/login +
-   OTP send/verify + rate-limit + UI.
+4. **Phone-OTP:** BUILT (Phase 46) on **SMSLocal** (user switched from Twilio). To go live in India:
+   finish **DLT** in SMSLocal (Principal Entity reg via PAN/GST ~24–72h, a 6-char Sender ID, an
+   approved OTP template with a code variable → 19-digit template id), then set Vercel env
+   `SMSLOCAL_API_KEY`, `SMSLOCAL_SENDER_ID`, `SMSLOCAL_TEMPLATE_ID`, `SMSLOCAL_OTP_VAR` (the
+   template's variable name) — never in chat. Until then it runs on `OTP_PROVIDER=console` (codes in
+   the server log). Verify the exact SMSLocal request field names against the dashboard before
+   go-live. (Twilio account from earlier is now unused.)
 
 **Infra (done):** pooled Neon (`directUrl`; migrations use the **non-pooler** `DIRECT_DATABASE_URL`),
 Neon password rotated, Vercel functions in Singapore (`sin1`).

@@ -83,7 +83,8 @@ model User {
   email           String?   @unique // login identity
   emailVerifiedAt DateTime? // set once the address is confirmed
   passwordHash    String? // scrypt: "salt:hash"
-  phone           String?   @unique // optional contact number (E.164)
+  phone           String?   @unique // login identity / contact number (E.164)
+  phoneVerifiedAt DateTime? // set once a phone is confirmed via OTP
   name            String?
   roleId          String
   organizationId String?
@@ -128,6 +129,24 @@ model Session {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([expiresAt])
+}
+
+// Short-lived one-time codes for phone sign-in / linking. The code itself is
+// never stored — only its sha256 hash. Not tied to a User: a code is issued to a
+// phone number and consumed to log in OR to create an account.
+model OtpVerification {
+  id          String    @id @default(uuid())
+  phone       String // E.164
+  codeHash    String // sha256 of the 6-digit code
+  purpose     String    @default("login") // login | register | add_phone (informational)
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(5)
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([phone, createdAt])
   @@index([expiresAt])
 }
 

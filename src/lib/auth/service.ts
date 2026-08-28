@@ -6,6 +6,7 @@ import { normalizePhone } from "@/lib/auth/phone";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { createSession } from "@/lib/auth/session";
 import { sendVerificationEmail } from "@/lib/auth/email-verification";
+import { verifyOtp } from "@/lib/auth/otp";
 
 function slugify(name: string): string {
   const base = name
@@ -92,6 +93,101 @@ export async function register(
 
   const { token, expiresAt } = await createSession({ id: user.id, role: user.role.name }, ctx);
   return { token, expiresAt, user: { id: user.id, email: user.email, name: user.name, role: user.role.name } };
+}
+
+/**
+ * Phone + OTP sign-in — a full alternative to email+password. Verifies the code,
+ * then EITHER logs into the account already owning that phone, OR (new phone)
+ * creates one exactly like an email signup (own Organization + ORGANIZER). A new
+ * phone needs a name + Terms; when they're missing we return `needsProfile` so the
+ * UI can collect them instead of failing.
+ */
+export async function authByPhone(
+  input: { phone: string; code: string; name?: string; email?: string; acceptedTerms?: boolean },
+  ctx?: { userAgent?: string | null; ip?: string | null }
+): Promise<AuthResult | { needsProfile: true }> {
+  const phone = await verifyOtp(input.phone, input.code, ctx);
+
+  const existing = await prisma.user.findUnique({ where: { phone }, include: { role: true } });
+  if (existing) {
+    if (existing.deletedAt || !existing.isActive) throw Errors.forbidden("This account is disabled.");
+    await prisma.user.update({
+      where: { id: existing.id },
+      data: { lastLoginAt: new Date(), phoneVerifiedAt: existing.phoneVerifiedAt ?? new Date() },
+    });
+    const { token, expiresAt } = await createSession({ id: existing.id, role: existing.role.name }, ctx);
+    return { token, expiresAt, user: { id: existing.id, email: existing.email, name: existing.name, role: existing.role.name } };
+  }
+
+  // New phone → create the account (mirrors register()). Requires name + Terms.
+  const name = input.name?.trim();
+  if (!name || name.length < 2 || input.acceptedTerms !== true) return { needsProfile: true };
+
+  const email = input.email ? normalizeEmail(input.email) : undefined;
+  if (email && (await prisma.user.findUnique({ where: { email } }))) {
+    throw Errors.conflict("An account with this email already exists");
+  }
+
+  const user = await prisma.$transaction(async (tx) => {
+    const organizerRole = await tx.role.upsert({
+      where: { name: "ORGANIZER" },
+      update: {},
+      create: { name: "ORGANIZER", description: "Owns and runs a workspace" },
+    });
+    const org = await tx.organization.create({
+      data: { name: `${name.split(" ")[0] || name}'s Club`, slug: slugify(name) },
+    });
+    const pending = email
+      ? await tx.player.findFirst({ where: { invitedEmail: email, deletedAt: null, user: { is: null } } })
+      : null;
+    const player = pending
+      ? await tx.player.update({
+          where: { id: pending.id },
+          data: { invitedEmail: null, organizationId: org.id, phone },
+        })
+      : await tx.player.create({
+          data: { fullName: name, displayName: name.split(" ")[0] || name, phone, organizationId: org.id },
+        });
+    return tx.user.create({
+      data: {
+        email,
+        phone,
+        phoneVerifiedAt: new Date(),
+        name,
+        roleId: organizerRole.id,
+        organizationId: org.id,
+        playerId: player.id,
+        lastLoginAt: new Date(),
+        termsAcceptedAt: new Date(),
+      },
+      include: { role: true },
+    });
+  });
+
+  if (email) await sendVerificationEmail(user.id, email).catch(() => undefined);
+  const { token, expiresAt } = await createSession({ id: user.id, role: user.role.name }, ctx);
+  return { token, expiresAt, user: { id: user.id, email: user.email, name: user.name, role: user.role.name } };
+}
+
+/** Link a verified phone to an existing (e.g. email) account so they can also log in by phone. */
+export async function addVerifiedPhone(
+  userId: string,
+  phoneRaw: string,
+  code: string,
+  ctx?: { userAgent?: string | null; ip?: string | null }
+): Promise<{ phone: string }> {
+  const phone = await verifyOtp(phoneRaw, code, ctx);
+  const taken = await prisma.user.findFirst({ where: { phone, NOT: { id: userId } } });
+  if (taken) throw Errors.conflict("That phone number is already linked to another account");
+  const user = await prisma.user.update({
+    where: { id: userId },
+    data: { phone, phoneVerifiedAt: new Date() },
+    select: { playerId: true },
+  });
+  if (user.playerId) {
+    await prisma.player.update({ where: { id: user.playerId }, data: { phone } }).catch(() => undefined);
+  }
+  return { phone };
 }
 
 /** Verify email + password and start a session. Rate-limited to deter brute force. */
