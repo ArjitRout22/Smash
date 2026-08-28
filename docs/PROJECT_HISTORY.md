@@ -969,7 +969,10 @@ the user's DLT setup + env keys — runs on the console provider meanwhile).
   login).
 
 ### Phase 47 — Mandatory password, new-signup bug fix, phone auth hidden behind a flag (2026-08-28)
-On branch `feat/phone-otp-auth` (held — not merged/deployed). Three changes:
+Merged to `main` + deployed to prod (squash-merge of PR #67). Phone auth ships **dark** — it stays
+hidden behind `NEXT_PUBLIC_PHONE_AUTH_ENABLED` (unset in prod), so nothing phone-related is user-visible;
+what actually goes live is the password eye-toggle, the unified (email) login field, the `/profile`
+Password card, and the additive `OtpVerification`/`phoneVerifiedAt` migration. Three changes:
 - **Password is now mandatory after signup.** Email signup already required one; the phone flow's
   set-password step used to have a **"Skip for now"** escape. Removed it — the step is now a required
   form (`Save password & continue`, no skip), so every account ends up with a password. Aligns with
