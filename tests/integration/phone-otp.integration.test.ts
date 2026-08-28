@@ -72,6 +72,27 @@ d("phone + OTP auth (integration)", () => {
     expect(await prisma.user.findUnique({ where: { phone } })).toBeNull();
   });
 
+  it("the needsProfile probe does NOT consume the code — the same code finishes signup (UI two-call flow)", async () => {
+    const phone = nextPhone();
+    await issue(phone, "343434");
+
+    // Call 1 (the UI's first verify): code only → asks for a profile, code stays valid.
+    const probe = await authByPhone({ phone, code: "343434" });
+    expect(probe).toEqual({ needsProfile: true });
+    const row = await prisma.otpVerification.findFirst({ where: { phone } });
+    expect(row!.consumedAt).toBeNull(); // still usable
+
+    // Call 2 (the UI's second verify): SAME code + name + Terms → account created.
+    const created = await authByPhone({ phone, code: "343434", name: "Two Call", acceptedTerms: true });
+    expect("user" in created && created.user).toBeTruthy();
+    expect((created as { hasPassword: boolean }).hasPassword).toBe(false);
+    expect(await prisma.user.findUnique({ where: { phone } })).toBeTruthy();
+
+    // The code is now consumed — reusing it (even as a returning login) is rejected.
+    expect((await prisma.otpVerification.findFirst({ where: { phone } }))!.consumedAt).not.toBeNull();
+    await expect(authByPhone({ phone, code: "343434" })).rejects.toThrow(/invalid or has expired/i);
+  });
+
   it("rejects a wrong code, an expired code, and locks out after too many attempts", async () => {
     const phone = nextPhone();
     await issue(phone, "444444");

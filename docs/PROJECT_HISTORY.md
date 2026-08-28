@@ -968,6 +968,41 @@ the user's DLT setup + env keys — runs on the console provider meanwhile).
   **153** (+7 phone-OTP integration tests incl. set-password, phone+password login, unified email
   login).
 
+### Phase 47 — Mandatory password, new-signup bug fix, phone auth hidden behind a flag (2026-08-28)
+On branch `feat/phone-otp-auth` (held — not merged/deployed). Three changes:
+- **Password is now mandatory after signup.** Email signup already required one; the phone flow's
+  set-password step used to have a **"Skip for now"** escape. Removed it — the step is now a required
+  form (`Save password & continue`, no skip), so every account ends up with a password. Aligns with
+  the cost design (OTP is a one-time signup cost; free password logins thereafter).
+- **Fixed a critical new-user signup bug** that would have shipped: the phone UI verifies the OTP
+  **twice** for a new user (call 1 = code only → detect `needsProfile`; call 2 = code + name + Terms →
+  create), but `authByPhone` **consumed the code on call 1**, so call 2 always returned 400 — a
+  brand-new phone user could never finish signup. Fix: `verifyOtp(phone, code, ctx, { consume })` —
+  the `needsProfile` probe now verifies **without** consuming (still requires a valid code, so no
+  registration-status leak; single-use preserved for real logins). `authByPhone` reordered: normalize
+  phone → look up existing → if new-and-no-profile verify-without-consume and return `needsProfile`,
+  else verify-and-consume then log in / create. Added an integration test reproducing the two-call
+  flow (probe leaves the code usable; reuse after create is rejected). The 7 prior tests passed the
+  name on call 1 so never hit this. Suite **154**.
+- **Phone + OTP sign-in is now HIDDEN behind a feature flag.** Reason: delivering OTP SMS in India
+  requires a **DLT-registered sender**, which requires a **registered company** — SmashHero isn't one
+  yet, and every Indian SMS route (SMSLocal included) enforces DLT, so we're deadlocked on go-live.
+  Rather than ship a visible-but-broken tab, the whole path is dark by default and fully preserved for
+  when we register an entity or adopt a provider that doesn't require DLT. New `src/lib/config/features.ts`
+  → `phoneAuthEnabled()` reads `NEXT_PUBLIC_PHONE_AUTH_ENABLED` (isomorphic; **not** `env.ts`, which is
+  server-secret-only). When off: the **Phone** tab is not rendered, the Log in field reverts to **Email**
+  (label/type/placeholder; the unified email-or-phone `identifier` is only shown when enabled), and
+  `POST /api/auth/otp/{start,verify}` + `/api/auth/phone/add` return **404**. The `/profile` Password
+  card stays (email users change their password there) with phone-referencing copy neutralized. **To
+  re-enable with zero code changes: set `NEXT_PUBLIC_PHONE_AUTH_ENABLED=true` at build time.** The
+  service layer (`authByPhone`/`verifyOtp`) is untouched by the flag, so the 8 phone-OTP integration
+  tests still run. Verified locally: login SSR has no Phone tab, endpoints 404, `tsc`/`eslint`/suite (154)
+  green. **SMSLocal DLT go-live inputs** (for whenever we register): 6-char letter Sender ID
+  (e.g. `SMHERO`), an OTP template with one `{#var#}` = code and "valid for 5 minutes" wording
+  (`OTP_TTL_SECONDS=300`) → 19-digit `template_id`; then set `OTP_PROVIDER=smslocal`, `SMSLOCAL_API_KEY`,
+  `SMSLOCAL_SENDER_ID`, `SMSLOCAL_TEMPLATE_ID`, `SMSLOCAL_OTP_VAR` (default `otp` — must match SMSLocal's
+  variable key; verify vs their dashboard) in Vercel.
+
 ### Status (2026-08-28) — Smash ACTIVE again; separate apps planned
 Everything through **Phase 44 is live on prod** (https://www.smashhero.app). Smash development is
 active again (see roadmap below). Two SEPARATE apps are planned in their own repos under the same

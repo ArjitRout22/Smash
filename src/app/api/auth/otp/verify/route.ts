@@ -3,6 +3,8 @@ import { route, readJson, clientContext } from "@/lib/api/handler";
 import { ok } from "@/lib/api/response";
 import { authByPhone } from "@/lib/auth/service";
 import { attachSessionCookie } from "@/lib/auth/session";
+import { phoneAuthEnabled } from "@/lib/config/features";
+import { Errors } from "@/lib/errors";
 
 const Body = z.object({
   phone: z.string().trim().min(4).max(20),
@@ -15,6 +17,7 @@ const Body = z.object({
 
 // Verify a phone code → log in (known phone) or create an account (new phone).
 export const POST = route(async (req) => {
+  if (!phoneAuthEnabled()) throw Errors.notFound("Not found");
   const input = Body.parse(await readJson(req));
   const result = await authByPhone(input, clientContext(req));
   if ("needsProfile" in result) return ok({ needsProfile: true });

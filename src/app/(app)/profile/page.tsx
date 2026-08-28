@@ -413,7 +413,7 @@ function DiscoverableCard({ discoverable, onSaved }: { discoverable: boolean; on
   );
 }
 
-/** Set or change the account password (so phone-signup users can log in without a code). */
+/** Set or change the account password. */
 function PasswordCard() {
   const toast = useToast();
   const [current, setCurrent] = useState("");
@@ -436,7 +436,7 @@ function PasswordCard() {
 
   return (
     <Card className="overflow-hidden">
-      <CardHeader title="Password" subtitle="Set a password to log in with your email or phone — no code needed." />
+      <CardHeader title="Password" subtitle="Set or change the password you use to log in." />
       <div className="grid grid-cols-1 gap-4 px-5 py-4 sm:grid-cols-2">
         <Field label="Current password" hint="Leave blank if you haven't set one yet.">
           <PasswordInput value={current} onChange={(e) => setCurrent(e.target.value)} placeholder="••••••••" autoComplete="current-password" />

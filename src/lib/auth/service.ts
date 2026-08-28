@@ -106,9 +106,23 @@ export async function authByPhone(
   input: { phone: string; code: string; name?: string; email?: string; acceptedTerms?: boolean },
   ctx?: { userAgent?: string | null; ip?: string | null }
 ): Promise<(AuthResult & { hasPassword: boolean }) | { needsProfile: true }> {
-  const phone = await verifyOtp(input.phone, input.code, ctx);
-
+  const phone = normalizePhone(input.phone);
   const existing = await prisma.user.findUnique({ where: { phone }, include: { role: true } });
+
+  const name = input.name?.trim();
+  const hasProfile = !!name && name.length >= 2 && input.acceptedTerms === true;
+
+  // Brand-new phone that hasn't supplied profile details yet: verify the code to
+  // prove ownership but DON'T consume it, so the follow-up call (with name + Terms)
+  // can reuse the same code to finish signup. The UI verifies twice for new users.
+  if (!existing && !hasProfile) {
+    await verifyOtp(input.phone, input.code, ctx, { consume: false });
+    return { needsProfile: true };
+  }
+
+  // Completing sign-in or sign-up — verify AND consume the one-time code now.
+  await verifyOtp(input.phone, input.code, ctx);
+
   if (existing) {
     if (existing.deletedAt || !existing.isActive) throw Errors.forbidden("This account is disabled.");
     await prisma.user.update({
@@ -124,10 +138,9 @@ export async function authByPhone(
     };
   }
 
-  // New phone → create the account (mirrors register()). Requires name + Terms.
-  const name = input.name?.trim();
-  if (!name || name.length < 2 || input.acceptedTerms !== true) return { needsProfile: true };
-
+  // New phone → create the account (mirrors register()). name + Terms already
+  // validated above (hasProfile), and the code has now been consumed.
+  if (!name) throw Errors.validation("Your name is required.");
   const email = input.email ? normalizeEmail(input.email) : undefined;
   if (email && (await prisma.user.findUnique({ where: { email } }))) {
     throw Errors.conflict("An account with this email already exists");

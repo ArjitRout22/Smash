@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api, ApiClientError } from "@/lib/client/api";
 import { Button, Field, Input, PasswordInput } from "@/components/ui/primitives";
+import { phoneAuthEnabled } from "@/lib/config/features";
 
 export default function LoginPage() {
   return (
@@ -20,6 +21,10 @@ type Phase = "phone" | "code" | "password"; // phone-flow steps
 function LoginInner() {
   const router = useRouter();
   const search = useSearchParams();
+
+  // Phone + OTP sign-in is hidden until an SMS provider is in place (see
+  // features.ts). When off, only the email tabs render and the OTP path is dead.
+  const phoneEnabled = phoneAuthEnabled();
 
   const [mode, setMode] = useState<Mode>(search.get("mode") === "register" ? "register" : "login");
   const [form, setForm] = useState({
@@ -113,8 +118,8 @@ function LoginInner() {
         setNeedsProfile(true);
         return;
       }
-      // Signed in. Offer to set a password (so next time is a free password login,
-      // no code) unless they already have one.
+      // Signed in. A password is mandatory: unless they already have one, send them
+      // to the (non-skippable) set-password step so future logins are free (no code).
       if (res.hasPassword) afterAuth();
       else setPhase("password");
     } catch (err) {
@@ -153,11 +158,11 @@ function LoginInner() {
 
         <div className="rounded-2xl border border-[var(--border)] bg-surface p-6 shadow-sm">
           <div className="mb-5 flex rounded-lg bg-surface-2 p-1 text-sm font-medium">
-            {([
+            {(([
               ["login", "Log in"],
               ["register", "Sign up"],
-              ["phone", "Phone"],
-            ] as [Mode, string][]).map(([m, label]) => (
+              ...(phoneEnabled ? [["phone", "Phone"]] : []),
+            ] as [Mode, string][])).map(([m, label]) => (
               <button
                 key={m}
                 type="button"
@@ -171,21 +176,19 @@ function LoginInner() {
 
           {mode === "phone" ? (
             phase === "password" ? (
-              <div className="flex flex-col gap-4">
+              <form onSubmit={(e) => { e.preventDefault(); savePassword(); }} className="flex flex-col gap-4">
                 <p className="text-sm text-muted">
-                  You&apos;re in! Set a password so you can log in with your number next time — no code needed.
+                  Almost done! Create a password to finish setting up your account — you&apos;ll use it to log
+                  in with your number next time, no code needed.
                 </p>
-                <Field label="Create a password" htmlFor="newpw" hint="At least 8 characters. Tap the eye to check it.">
-                  <PasswordInput id="newpw" value={form.newPassword} onChange={set("newPassword")} placeholder="••••••••" autoComplete="new-password" minLength={8} autoFocus />
+                <Field label="Create a password" htmlFor="newpw" required hint="At least 8 characters. Tap the eye to check it.">
+                  <PasswordInput id="newpw" value={form.newPassword} onChange={set("newPassword")} placeholder="••••••••" autoComplete="new-password" minLength={8} required autoFocus />
                 </Field>
                 {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
-                <Button onClick={savePassword} loading={loading} disabled={form.newPassword.length < 8} className="w-full">
-                  Save password
+                <Button type="submit" loading={loading} disabled={form.newPassword.length < 8} className="w-full">
+                  Save password &amp; continue
                 </Button>
-                <button type="button" onClick={afterAuth} className="text-center text-xs text-muted hover:text-foreground">
-                  Skip for now
-                </button>
-              </div>
+              </form>
             ) : (
               <form onSubmit={verifyCode} className="flex flex-col gap-4">
                 <Field label="Phone number" htmlFor="phone" required hint="Include your country code, e.g. +91 98765 43210">
@@ -248,8 +251,8 @@ function LoginInner() {
                   <Input id="email" type="email" value={form.email} onChange={set("email")} placeholder="you@example.com" autoComplete="email" required />
                 </Field>
               ) : (
-                <Field label="Email or phone number" htmlFor="identifier" required>
-                  <Input id="identifier" value={form.identifier} onChange={set("identifier")} placeholder="you@example.com or +91…" autoComplete="username" autoFocus required />
+                <Field label={phoneEnabled ? "Email or phone number" : "Email"} htmlFor="identifier" required>
+                  <Input id="identifier" type={phoneEnabled ? "text" : "email"} value={form.identifier} onChange={set("identifier")} placeholder={phoneEnabled ? "you@example.com or +91…" : "you@example.com"} autoComplete="username" autoFocus required />
                 </Field>
               )}
               <Field label="Password" htmlFor="password" required hint={mode === "register" ? "At least 8 characters. Tap the eye to check it." : undefined}>

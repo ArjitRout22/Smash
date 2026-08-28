@@ -49,10 +49,22 @@ export async function startOtp(phoneRaw: string, ctx?: Ctx): Promise<{ phone: st
 }
 
 /**
- * Verify a code for `phoneRaw`. On success the code is consumed and the E.164
- * phone is returned; otherwise a generic error is thrown. Rate-limited per phone.
+ * Verify a code for `phoneRaw`. On success the E.164 phone is returned; otherwise
+ * a generic error is thrown. Rate-limited per phone.
+ *
+ * By default a valid code is consumed (single-use). Pass `{ consume: false }` to
+ * check validity WITHOUT consuming — used to probe a brand-new signup (decide
+ * `needsProfile`) so the same code stays valid for the follow-up call that
+ * actually creates the account. A wrong/expired code always throws either way,
+ * so this never reveals whether an account exists.
  */
-export async function verifyOtp(phoneRaw: string, code: string, ctx?: Ctx): Promise<string> {
+export async function verifyOtp(
+  phoneRaw: string,
+  code: string,
+  ctx?: Ctx,
+  opts: { consume?: boolean } = {}
+): Promise<string> {
+  const consume = opts.consume ?? true;
   const phone = normalizePhone(phoneRaw);
 
   const guard = await rateLimiter.hit(`otp:verify:${phone}:${ctx?.ip ?? "?"}`, 10, 900);
@@ -75,6 +87,9 @@ export async function verifyOtp(phoneRaw: string, code: string, ctx?: Ctx): Prom
     throw Errors.validation("That code is invalid or has expired. Request a new one.");
   }
 
-  await prisma.otpVerification.update({ where: { id: row.id }, data: { consumedAt: new Date(), attempts } });
+  await prisma.otpVerification.update({
+    where: { id: row.id },
+    data: { attempts, ...(consume ? { consumedAt: new Date() } : {}) },
+  });
   return phone;
 }

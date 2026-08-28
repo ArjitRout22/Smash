@@ -4,6 +4,8 @@ import { ok } from "@/lib/api/response";
 import { requireUser } from "@/lib/auth/authorize";
 import { addVerifiedPhone } from "@/lib/auth/service";
 import { maskPhone } from "@/lib/auth/phone";
+import { phoneAuthEnabled } from "@/lib/config/features";
+import { Errors } from "@/lib/errors";
 
 const Body = z.object({
   phone: z.string().trim().min(4).max(20),
@@ -13,6 +15,7 @@ const Body = z.object({
 // Logged-in user links a verified phone to their account (send the code via
 // /api/auth/otp/start first, then confirm it here).
 export const POST = route(async (req) => {
+  if (!phoneAuthEnabled()) throw Errors.notFound("Not found");
   const user = await requireUser();
   const input = Body.parse(await readJson(req));
   const { phone } = await addVerifiedPhone(user.id, input.phone, input.code, clientContext(req));
