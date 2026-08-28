@@ -23,6 +23,15 @@ const EnvSchema = z.object({
   RESEND_API_KEY: z.string().optional(),
   EMAIL_FROM: z.string().default("Smash <onboarding@resend.dev>"),
   PASSWORD_RESET_TTL_SECONDS: z.coerce.number().int().positive().default(3600),
+
+  // Phone OTP. `auto` uses SMSLocal when SMSLOCAL_API_KEY is set, else console
+  // (logs the code — works with zero setup for dev / before DLT is live).
+  OTP_PROVIDER: z.enum(["auto", "console", "smslocal"]).default("auto"),
+  OTP_TTL_SECONDS: z.coerce.number().int().positive().default(300),
+  SMSLOCAL_API_KEY: z.string().optional(),
+  SMSLOCAL_SENDER_ID: z.string().optional(), // DLT-approved 6-char header
+  SMSLOCAL_TEMPLATE_ID: z.string().optional(), // DLT-approved OTP template id
+  SMSLOCAL_OTP_VAR: z.string().default("otp"), // template variable name for the code
 });
 
 export type Env = z.infer<typeof EnvSchema>;

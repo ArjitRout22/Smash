@@ -938,6 +938,74 @@ played several matches in a row while others waited. Fixed with the round-robin
 - `src/lib/services/match.service.ts` now imports the engine (removed the old flat
   pair-by-pair helpers).
 
+### Phase 46 — Phone + OTP sign-in (SMSLocal, provider-abstracted) (2026-08-28)
+Phone number + OTP as a **full alternative** to email+password (built; SMSLocal go-live pending
+the user's DLT setup + env keys — runs on the console provider meanwhile).
+- **Provider abstraction** `src/lib/otp/provider.ts` (mirrors `EmailProvider`): `OtpProvider`
+  interface + `ConsoleOtpProvider` (logs the code, zero-setup dev/test) + `SmsLocalProvider`
+  (`POST https://api.smslocal.in/v1/messages`, Bearer key, DLT `sender`/`template_id`/`variables`);
+  `getOtpProvider()` auto-selects smslocal when `SMSLOCAL_API_KEY` is set. **Swapping providers is
+  this one file** — nothing else in auth/DB/UI is provider-specific.
+- **OTP service** `src/lib/auth/otp.ts`: `startOtp` (rate-limited per phone + per IP, 6-digit code,
+  stored only as sha256, 5-min expiry, retires prior codes) and `verifyOtp` (attempts/lockout,
+  constant-time compare, consume on use). Reuses `normalizePhone`/`maskPhone` + `rateLimiter`.
+- **Auth flows** in `src/lib/auth/service.ts`: `authByPhone` (verified phone → log into the owning
+  account, else create one exactly like an email signup — own Organization + ORGANIZER + Player,
+  `email` optional; missing name/Terms → `{ needsProfile: true }`) and `addVerifiedPhone` (email
+  users link a phone). Endpoints `POST /api/auth/otp/{start,verify}` + `/api/auth/phone/add`.
+- **DB**: resurrected `OtpVerification` table + `User.phoneVerifiedAt` (migration
+  `20260828130000_phone_otp_auth`). `User.phone` was already unique/nullable.
+- **UI**: a **Phone** tab on `/login` — enter phone → send code → 6-digit code (+ name/Terms only
+  when the server says it's a new phone) → in. Env vars added (`OTP_PROVIDER`, `OTP_TTL_SECONDS`,
+  `SMSLOCAL_*`). Account model = full alternative (confirmed); security = hashed codes, generic
+  errors (no enumeration), per-phone + per-IP rate limits.
+- **Password path (cost-saving — OTP is a one-time signup cost, then free password logins):**
+  after a phone signup the UI offers to **set a password** (`POST /api/auth/password/set`,
+  `setPassword()` — no current needed the first time, current required to change); the **Log in tab
+  accepts email OR phone** + password (`login()` now takes a unified `identifier`); a reusable
+  `PasswordInput` adds a **show/hide (eye) toggle** on every password field so users can see/remember
+  what they set; and a **Password card in `/profile`** lets those who skipped set one later. Suite
+  **153** (+7 phone-OTP integration tests incl. set-password, phone+password login, unified email
+  login).
+
+### Phase 47 — Mandatory password, new-signup bug fix, phone auth hidden behind a flag (2026-08-28)
+Merged to `main` + deployed to prod (squash-merge of PR #67). Phone auth ships **dark** — it stays
+hidden behind `NEXT_PUBLIC_PHONE_AUTH_ENABLED` (unset in prod), so nothing phone-related is user-visible;
+what actually goes live is the password eye-toggle, the unified (email) login field, the `/profile`
+Password card, and the additive `OtpVerification`/`phoneVerifiedAt` migration. Three changes:
+- **Password is now mandatory after signup.** Email signup already required one; the phone flow's
+  set-password step used to have a **"Skip for now"** escape. Removed it — the step is now a required
+  form (`Save password & continue`, no skip), so every account ends up with a password. Aligns with
+  the cost design (OTP is a one-time signup cost; free password logins thereafter).
+- **Fixed a critical new-user signup bug** that would have shipped: the phone UI verifies the OTP
+  **twice** for a new user (call 1 = code only → detect `needsProfile`; call 2 = code + name + Terms →
+  create), but `authByPhone` **consumed the code on call 1**, so call 2 always returned 400 — a
+  brand-new phone user could never finish signup. Fix: `verifyOtp(phone, code, ctx, { consume })` —
+  the `needsProfile` probe now verifies **without** consuming (still requires a valid code, so no
+  registration-status leak; single-use preserved for real logins). `authByPhone` reordered: normalize
+  phone → look up existing → if new-and-no-profile verify-without-consume and return `needsProfile`,
+  else verify-and-consume then log in / create. Added an integration test reproducing the two-call
+  flow (probe leaves the code usable; reuse after create is rejected). The 7 prior tests passed the
+  name on call 1 so never hit this. Suite **154**.
+- **Phone + OTP sign-in is now HIDDEN behind a feature flag.** Reason: delivering OTP SMS in India
+  requires a **DLT-registered sender**, which requires a **registered company** — SmashHero isn't one
+  yet, and every Indian SMS route (SMSLocal included) enforces DLT, so we're deadlocked on go-live.
+  Rather than ship a visible-but-broken tab, the whole path is dark by default and fully preserved for
+  when we register an entity or adopt a provider that doesn't require DLT. New `src/lib/config/features.ts`
+  → `phoneAuthEnabled()` reads `NEXT_PUBLIC_PHONE_AUTH_ENABLED` (isomorphic; **not** `env.ts`, which is
+  server-secret-only). When off: the **Phone** tab is not rendered, the Log in field reverts to **Email**
+  (label/type/placeholder; the unified email-or-phone `identifier` is only shown when enabled), and
+  `POST /api/auth/otp/{start,verify}` + `/api/auth/phone/add` return **404**. The `/profile` Password
+  card stays (email users change their password there) with phone-referencing copy neutralized. **To
+  re-enable with zero code changes: set `NEXT_PUBLIC_PHONE_AUTH_ENABLED=true` at build time.** The
+  service layer (`authByPhone`/`verifyOtp`) is untouched by the flag, so the 8 phone-OTP integration
+  tests still run. Verified locally: login SSR has no Phone tab, endpoints 404, `tsc`/`eslint`/suite (154)
+  green. **SMSLocal DLT go-live inputs** (for whenever we register): 6-char letter Sender ID
+  (e.g. `SMHERO`), an OTP template with one `{#var#}` = code and "valid for 5 minutes" wording
+  (`OTP_TTL_SECONDS=300`) → 19-digit `template_id`; then set `OTP_PROVIDER=smslocal`, `SMSLOCAL_API_KEY`,
+  `SMSLOCAL_SENDER_ID`, `SMSLOCAL_TEMPLATE_ID`, `SMSLOCAL_OTP_VAR` (default `otp` — must match SMSLocal's
+  variable key; verify vs their dashboard) in Vercel.
+
 ### Status (2026-08-28) — Smash ACTIVE again; separate apps planned
 Everything through **Phase 44 is live on prod** (https://www.smashhero.app). Smash development is
 active again (see roadmap below). Two SEPARATE apps are planned in their own repos under the same
@@ -974,13 +1042,13 @@ loop) — do NOT mix them with Smash.
 2. Rotate/revoke the GitHub PAT pasted in chat earlier; keep reusing the PWABuilder signing
    key for future APK updates (a new key breaks TWA updates + needs an assetlinks.json change).
 3. Marketing kit: open the design canvas, export each artboard as PNG, post to LinkedIn/WhatsApp/email.
-4. **Phone-OTP:** Twilio account created (trial). Decision made: **ADD phone alongside
-   email+password** (keep both). Next: create a **Verify Service** (Console → Verify → Services →
-   get the `VA…` Service SID), grab **Account SID** (`AC…`) + **Auth Token** (Console home, NOT the
-   API-keys page), set all three as Vercel env vars (`TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`,
-   `TWILIO_VERIFY_SERVICE_SID`) — never in chat. On trial, SMS only reaches Twilio-verified numbers
-   until the account is upgraded. Then I build the OtpProvider(twilio) + phone register/login +
-   OTP send/verify + rate-limit + UI.
+4. **Phone-OTP:** BUILT (Phase 46) on **SMSLocal** (user switched from Twilio). To go live in India:
+   finish **DLT** in SMSLocal (Principal Entity reg via PAN/GST ~24–72h, a 6-char Sender ID, an
+   approved OTP template with a code variable → 19-digit template id), then set Vercel env
+   `SMSLOCAL_API_KEY`, `SMSLOCAL_SENDER_ID`, `SMSLOCAL_TEMPLATE_ID`, `SMSLOCAL_OTP_VAR` (the
+   template's variable name) — never in chat. Until then it runs on `OTP_PROVIDER=console` (codes in
+   the server log). Verify the exact SMSLocal request field names against the dashboard before
+   go-live. (Twilio account from earlier is now unused.)
 
 **Infra (done):** pooled Neon (`directUrl`; migrations use the **non-pooler** `DIRECT_DATABASE_URL`),
 Neon password rotated, Vercel functions in Singapore (`sin1`).
