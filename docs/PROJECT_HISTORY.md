@@ -912,10 +912,41 @@ The real "N groups → top-K advance → seeded knockout" flow (previously impos
   1080×1080) produced as an exportable design canvas (not in-repo) — hero/tagline, feature,
   stat, CTA and announcement cards in the Smash palette.
 
-### Status (2026-08-25) — Smash paused; moving to a NEW app
-Everything through **Phase 43 is live on prod** (https://www.smashhero.app). Development on
-Smash is paused here — the user is starting a separate new app (own repo, own context; same
-GitHub account `ArjitRout22`, same branch→PR→squash-merge→poll-deploy loop). Do NOT mix the two.
+### Phase 44 — Landing stat-card label overflow on mobile (2026-08-26)
+PR #64. The landing "community stats" cards used `p-4` + `text-xs uppercase tracking-wide`; on
+narrow phones the long single-word label **TOURNAMENTS** was wider than the card box and spilled
+past the border. Trimmed mobile padding/gap (`p-3 sm:p-4`, `gap-2.5 sm:gap-4`) and shrank the
+label on mobile (`text-[10px] tracking-normal`, desktop keeps `sm:text-xs sm:tracking-wide`).
+Verified via headless renders at 320 / 360 / 375 px. `src/app/page.tsx` only.
+
+### Status (2026-08-26) — Smash ACTIVE again; separate apps planned
+Everything through **Phase 44 is live on prod** (https://www.smashhero.app). Smash development is
+active again (see roadmap below). Two SEPARATE apps are planned in their own repos under the same
+GitHub account `ArjitRout22` (own folder + own context each; same branch→PR→squash-merge→poll-deploy
+loop) — do NOT mix them with Smash.
+
+**Roadmap / decisions under discussion (2026-08-26):**
+- **Phone-number signup + OTP login (any country)** — considering re-adding phone auth (the app
+  originally had a phone+OTP flow with an `OtpProvider` abstraction, removed in Phase 2 for
+  email+password). Provider options weighed: **Twilio Verify** (cleanest server-side fit for the
+  custom session model — they already had a Twilio OtpProvider stub — ~$0.05/verification, global,
+  built-in abuse/retry); **Firebase Phone Auth** (generous free tier, global, client SDK + verify
+  ID token server-side); **MSG91** (cheapest if India-heavy). Recommendation: Twilio Verify, and
+  ADD phone as an alternative sign-in (keep email+password) rather than replace. NOT built yet —
+  needs the user's provider account + env keys (set in Vercel, never in chat) + the add-vs-replace
+  decision. Then reintroduce OtpProvider (twilio impl), phone register/login endpoints, OTP
+  send/verify + rate-limit, session minting, and UI.
+- **Separate app: social auto-poster (IG/FB/X)** — LEGITIMATE for the user's OWN accounts via
+  official APIs: Meta Graph API (IG Content Publishing + FB Pages; needs a Meta app + app review +
+  a Page-linked IG Business account) and X API v2 (posting requires a PAID tier now — Basic ~$100/mo;
+  free tier is very limited). Buildable in a new repo; off-the-shelf (Buffer/Publer) may be cheaper.
+- **Separate app: "collect emails/details from Instagram/Twitter → bulk DM/email for marketing"** —
+  DECLINED as scoped. Official APIs do NOT expose other users' emails; harvesting them (scraping)
+  violates IG/X/Meta ToS and privacy law (GDPR / India DPDP / CFAA), and unsolicited bulk DMs/emails
+  to non-opted-in people is spam that violates platform ToS (mass-DM → account ban) and anti-spam
+  law (CAN-SPAM / GDPR / CASL). Legit alternative advised: grow an OPT-IN list on smashhero.app
+  (you already capture emails at signup), email consented users via Resend/Brevo, and use native
+  Meta/X audiences + ads for targeting rather than harvested cold outreach.
 
 **Outstanding — user actions (not code):**
 1. **SEO:** verify `smashhero.app` in Google Search Console (HTML-tag method → set
@@ -924,6 +955,8 @@ GitHub account `ArjitRout22`, same branch→PR→squash-merge→poll-deploy loop
 2. Rotate/revoke the GitHub PAT pasted in chat earlier; keep reusing the PWABuilder signing
    key for future APK updates (a new key breaks TWA updates + needs an assetlinks.json change).
 3. Marketing kit: open the design canvas, export each artboard as PNG, post to LinkedIn/WhatsApp/email.
+4. **Phone-OTP (if proceeding):** create the provider account (Twilio recommended), set its keys as
+   Vercel env vars, and tell me add-vs-replace — then I wire it up.
 
 **Infra (done):** pooled Neon (`directUrl`; migrations use the **non-pooler** `DIRECT_DATABASE_URL`),
 Neon password rotated, Vercel functions in Singapore (`sin1`).
