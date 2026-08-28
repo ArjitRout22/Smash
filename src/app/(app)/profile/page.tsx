@@ -6,7 +6,7 @@ import useSWR from "swr";
 import { User } from "lucide-react";
 import { api, ApiClientError, swrFetcher } from "@/lib/client/api";
 import { PageHeader, EmptyState, CardGridSkeleton, BrandedLoader } from "@/components/ui/states";
-import { Button, Card, CardHeader, Badge, Select, Input, Field, Avatar } from "@/components/ui/primitives";
+import { Button, Card, CardHeader, Badge, Select, Input, PasswordInput, Field, Avatar } from "@/components/ui/primitives";
 import { ShareButton } from "@/components/ShareButton";
 import { InstallCard } from "@/components/InstallCard";
 import { LocationPicker, ViewOnMapButton, type PlaceValue } from "@/components/LocationPicker";
@@ -129,6 +129,10 @@ export default function ProfilePage() {
           <Row label="Role" value={<Badge color="blue">{titleCase(user.role)}</Badge>} />
         </dl>
       </Card>
+
+      <div className="mt-6">
+        <PasswordCard />
+      </div>
 
       <div className="mt-6">
         <InstallCard />
@@ -404,6 +408,45 @@ function DiscoverableCard({ discoverable, onSaved }: { discoverable: boolean; on
         >
           <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${on ? "translate-x-5" : "translate-x-0.5"}`} />
         </button>
+      </div>
+    </Card>
+  );
+}
+
+/** Set or change the account password (so phone-signup users can log in without a code). */
+function PasswordCard() {
+  const toast = useToast();
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    setSaving(true);
+    try {
+      await api.post("/api/auth/password/set", { password: next, currentPassword: current || undefined });
+      toast.success("Password updated");
+      setCurrent("");
+      setNext("");
+    } catch (err) {
+      toast.error(err instanceof ApiClientError ? err.message : "Could not update password");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card className="overflow-hidden">
+      <CardHeader title="Password" subtitle="Set a password to log in with your email or phone — no code needed." />
+      <div className="grid grid-cols-1 gap-4 px-5 py-4 sm:grid-cols-2">
+        <Field label="Current password" hint="Leave blank if you haven't set one yet.">
+          <PasswordInput value={current} onChange={(e) => setCurrent(e.target.value)} placeholder="••••••••" autoComplete="current-password" />
+        </Field>
+        <Field label="New password" hint="At least 8 characters.">
+          <PasswordInput value={next} onChange={(e) => setNext(e.target.value)} placeholder="••••••••" autoComplete="new-password" minLength={8} />
+        </Field>
+      </div>
+      <div className="flex justify-end border-t border-[var(--border)] px-5 py-3">
+        <Button size="sm" onClick={save} loading={saving} disabled={next.length < 8}>Save password</Button>
       </div>
     </Card>
   );

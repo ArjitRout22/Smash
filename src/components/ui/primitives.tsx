@@ -2,7 +2,7 @@
 
 import { clsx } from "clsx";
 import { forwardRef, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, Eye, EyeOff } from "lucide-react";
 
 // --- Button -----------------------------------------------------------------
 type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -51,6 +51,28 @@ export const Input = forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTML
     return <input ref={ref} className={clsx(fieldBase, className)} {...props} />;
   }
 );
+
+/** Password input with a show/hide (eye) toggle — lets users reveal what they type. */
+export const PasswordInput = forwardRef<
+  HTMLInputElement,
+  Omit<React.InputHTMLAttributes<HTMLInputElement>, "type">
+>(function PasswordInput({ className, ...props }, ref) {
+  const [show, setShow] = useState(false);
+  return (
+    <div className="relative">
+      <input ref={ref} type={show ? "text" : "password"} className={clsx(fieldBase, "pr-10", className)} {...props} />
+      <button
+        type="button"
+        tabIndex={-1}
+        onClick={() => setShow((s) => !s)}
+        aria-label={show ? "Hide password" : "Show password"}
+        className="absolute inset-y-0 right-0 flex items-center px-3 text-muted hover:text-foreground"
+      >
+        {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+      </button>
+    </div>
+  );
+});
 
 export const Textarea = forwardRef<
   HTMLTextAreaElement,

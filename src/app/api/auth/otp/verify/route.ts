@@ -18,7 +18,8 @@ export const POST = route(async (req) => {
   const input = Body.parse(await readJson(req));
   const result = await authByPhone(input, clientContext(req));
   if ("needsProfile" in result) return ok({ needsProfile: true });
-  const res = ok({ user: result.user });
+  // hasPassword tells the UI whether to offer "set a password for faster login".
+  const res = ok({ user: result.user, hasPassword: result.hasPassword });
   attachSessionCookie(res, result.token, result.expiresAt);
   return res;
 });

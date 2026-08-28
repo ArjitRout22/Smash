@@ -5,7 +5,7 @@ import { login } from "@/lib/auth/service";
 import { attachSessionCookie } from "@/lib/auth/session";
 
 const Body = z.object({
-  email: z.string().trim().email().max(200),
+  identifier: z.string().trim().min(3).max(200), // email or phone number
   password: z.string().min(1).max(200),
 });
 

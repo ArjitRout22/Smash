@@ -105,7 +105,7 @@ export async function register(
 export async function authByPhone(
   input: { phone: string; code: string; name?: string; email?: string; acceptedTerms?: boolean },
   ctx?: { userAgent?: string | null; ip?: string | null }
-): Promise<AuthResult | { needsProfile: true }> {
+): Promise<(AuthResult & { hasPassword: boolean }) | { needsProfile: true }> {
   const phone = await verifyOtp(input.phone, input.code, ctx);
 
   const existing = await prisma.user.findUnique({ where: { phone }, include: { role: true } });
@@ -116,7 +116,12 @@ export async function authByPhone(
       data: { lastLoginAt: new Date(), phoneVerifiedAt: existing.phoneVerifiedAt ?? new Date() },
     });
     const { token, expiresAt } = await createSession({ id: existing.id, role: existing.role.name }, ctx);
-    return { token, expiresAt, user: { id: existing.id, email: existing.email, name: existing.name, role: existing.role.name } };
+    return {
+      token,
+      expiresAt,
+      user: { id: existing.id, email: existing.email, name: existing.name, role: existing.role.name },
+      hasPassword: existing.passwordHash != null,
+    };
   }
 
   // New phone → create the account (mirrors register()). Requires name + Terms.
@@ -166,7 +171,12 @@ export async function authByPhone(
 
   if (email) await sendVerificationEmail(user.id, email).catch(() => undefined);
   const { token, expiresAt } = await createSession({ id: user.id, role: user.role.name }, ctx);
-  return { token, expiresAt, user: { id: user.id, email: user.email, name: user.name, role: user.role.name } };
+  return {
+    token,
+    expiresAt,
+    user: { id: user.id, email: user.email, name: user.name, role: user.role.name },
+    hasPassword: false, // just created — offer to set one
+  };
 }
 
 /** Link a verified phone to an existing (e.g. email) account so they can also log in by phone. */
@@ -190,33 +200,68 @@ export async function addVerifiedPhone(
   return { phone };
 }
 
-/** Verify email + password and start a session. Rate-limited to deter brute force. */
+/**
+ * Verify email OR phone + password and start a session. Rate-limited to deter
+ * brute force. Phone-signup users who set a password log in here too.
+ */
 export async function login(
-  input: { email: string; password: string },
+  input: { identifier: string; password: string },
   ctx?: { userAgent?: string | null; ip?: string | null }
 ): Promise<AuthResult> {
-  const email = normalizeEmail(input.email);
+  const raw = input.identifier.trim();
 
-  // Throttle attempts per email + IP.
-  const guard = await rateLimiter.hit(`login:${email}:${ctx?.ip ?? "?"}`, 10, 300);
+  // An "@" means email; otherwise treat it as a phone number.
+  let where: { email: string } | { phone: string } | null = null;
+  let rlId = raw.toLowerCase();
+  if (raw.includes("@")) {
+    where = { email: normalizeEmail(raw) };
+    rlId = where.email;
+  } else {
+    try {
+      const phone = normalizePhone(raw);
+      where = { phone };
+      rlId = phone;
+    } catch {
+      where = null; // invalid phone → no user; still do constant-ish work below
+    }
+  }
+
+  const rlKey = `login:${rlId}:${ctx?.ip ?? "?"}`;
+  const guard = await rateLimiter.hit(rlKey, 10, 300);
   if (!guard.allowed) {
     throw Errors.rateLimited("Too many attempts. Please wait a moment and try again.");
   }
 
-  const user = await prisma.user.findUnique({ where: { email }, include: { role: true } });
+  const user = where ? await prisma.user.findUnique({ where, include: { role: true } }) : null;
 
   // Constant-ish work whether or not the user exists; always generic error.
   const ok = user ? verifyPassword(input.password, user.passwordHash) : verifyPassword(input.password, null);
   if (!user || !ok) {
-    throw new AppError("UNAUTHORIZED", "Invalid email or password");
+    throw new AppError("UNAUTHORIZED", "Invalid login details");
   }
   if (user.deletedAt || !user.isActive) {
     throw Errors.forbidden("This account is disabled.");
   }
 
   await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
-  await rateLimiter.reset(`login:${email}:${ctx?.ip ?? "?"}`);
+  await rateLimiter.reset(rlKey);
 
   const { token, expiresAt } = await createSession({ id: user.id, role: user.role.name }, ctx);
   return { token, expiresAt, user: { id: user.id, email: user.email, name: user.name, role: user.role.name } };
+}
+
+/**
+ * Set (or change) the account password. A phone-signup user with no password can
+ * set one to log in without a code; changing an existing password requires the
+ * current one.
+ */
+export async function setPassword(userId: string, newPassword: string, currentPassword?: string): Promise<void> {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { passwordHash: true } });
+  if (!user) throw Errors.notFound("Account");
+  if (user.passwordHash) {
+    if (!currentPassword || !verifyPassword(currentPassword, user.passwordHash)) {
+      throw Errors.validation("Your current password is incorrect");
+    }
+  }
+  await prisma.user.update({ where: { id: userId }, data: { passwordHash: hashPassword(newPassword) } });
 }

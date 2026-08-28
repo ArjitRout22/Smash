@@ -957,9 +957,16 @@ the user's DLT setup + env keys — runs on the console provider meanwhile).
   `20260828130000_phone_otp_auth`). `User.phone` was already unique/nullable.
 - **UI**: a **Phone** tab on `/login` — enter phone → send code → 6-digit code (+ name/Terms only
   when the server says it's a new phone) → in. Env vars added (`OTP_PROVIDER`, `OTP_TTL_SECONDS`,
-  `SMSLOCAL_*`). Suite **151** (+5 phone-OTP integration tests: register, login, needsProfile,
-  wrong/expired/lockout, link-to-email). Account model = full alternative (confirmed); security =
-  hashed codes, generic errors (no enumeration), per-phone + per-IP rate limits.
+  `SMSLOCAL_*`). Account model = full alternative (confirmed); security = hashed codes, generic
+  errors (no enumeration), per-phone + per-IP rate limits.
+- **Password path (cost-saving — OTP is a one-time signup cost, then free password logins):**
+  after a phone signup the UI offers to **set a password** (`POST /api/auth/password/set`,
+  `setPassword()` — no current needed the first time, current required to change); the **Log in tab
+  accepts email OR phone** + password (`login()` now takes a unified `identifier`); a reusable
+  `PasswordInput` adds a **show/hide (eye) toggle** on every password field so users can see/remember
+  what they set; and a **Password card in `/profile`** lets those who skipped set one later. Suite
+  **153** (+7 phone-OTP integration tests incl. set-password, phone+password login, unified email
+  login).
 
 ### Status (2026-08-28) — Smash ACTIVE again; separate apps planned
 Everything through **Phase 44 is live on prod** (https://www.smashhero.app). Smash development is

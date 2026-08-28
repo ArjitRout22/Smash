@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, vi } from "vitest";
 import { createHash } from "node:crypto";
 import { prisma } from "@/lib/db/prisma";
-import { authByPhone, addVerifiedPhone, register } from "@/lib/auth/service";
+import { authByPhone, addVerifiedPhone, register, login, setPassword } from "@/lib/auth/service";
 import { startOtp, verifyOtp } from "@/lib/auth/otp";
 import { getOtpProvider } from "@/lib/otp/provider";
 
@@ -86,6 +86,32 @@ d("phone + OTP auth (integration)", () => {
     await expect(verifyOtp(phone, "000000")).rejects.toThrow(/too many/i);
     // and the row is now consumed, so even the RIGHT code fails
     await expect(verifyOtp(phone, "666666")).rejects.toThrow(/invalid or has expired/i);
+  });
+
+  it("phone signup → set a password → log in with phone + password (no OTP)", async () => {
+    const phone = nextPhone();
+    await issue(phone, "121212");
+    const signup = await authByPhone({ phone, code: "121212", name: "PW Player", acceptedTerms: true });
+    expect("hasPassword" in signup && signup.hasPassword).toBe(false); // offered to set one
+    const userId = (signup as { user: { id: string } }).user.id;
+
+    await setPassword(userId, "s3cretpass");
+    const loggedIn = await login({ identifier: phone, password: "s3cretpass" });
+    expect(loggedIn.user.id).toBe(userId);
+    await expect(login({ identifier: phone, password: "wrong-one" })).rejects.toThrow(/invalid login/i);
+
+    // Changing an existing password needs the current one.
+    await expect(setPassword(userId, "newpass12", "nope")).rejects.toThrow(/current password/i);
+    await setPassword(userId, "newpass12", "s3cretpass");
+    expect((await login({ identifier: phone, password: "newpass12" })).user.id).toBe(userId);
+  });
+
+  it("email login still works via the unified identifier", async () => {
+    const email = `id-${Date.now()}@smash.test`;
+    const reg = await register({ name: "Id User", email, password: "password123" });
+    const byEmail = await login({ identifier: email, password: "password123" });
+    expect(byEmail.user.id).toBe(reg.user.id);
+    await expect(login({ identifier: email, password: "nope" })).rejects.toThrow(/invalid login/i);
   });
 
   it("links a verified phone to an existing email account, which can then log in by phone", async () => {
