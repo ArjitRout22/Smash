@@ -919,7 +919,26 @@ past the border. Trimmed mobile padding/gap (`p-3 sm:p-4`, `gap-2.5 sm:gap-4`) a
 label on mobile (`text-[10px] tracking-normal`, desktop keeps `sm:text-xs sm:tracking-wide`).
 Verified via headless renders at 320 / 360 / 375 px. `src/app/page.tsx` only.
 
-### Status (2026-08-26) — Smash ACTIVE again; separate apps planned
+### Phase 45 — Proper round-robin scheduling (circle method) (2026-08-28)
+Bug: group-stage / round-robin fixtures generated pair-by-pair with both legs of a
+double round-robin **back-to-back** (`1v2`, then `2v1`, then `1v3`, …), so a team
+played several matches in a row while others waited. Fixed with the round-robin
+**circle method**, extracted to a pure, unit-tested engine `src/lib/engines/schedule.ts`
+(`circleMethodRounds` / `roundRobinSchedule` / `groupStageSchedule` / `crossGroupSchedule`):
+- Within a round every entrant plays at most once; rounds are emitted in order, and
+  a double round-robin plays its **second leg as a whole second cycle** (rematches land
+  in the second half, never immediately after the first meeting).
+- Multiple groups are **interleaved** (round 1 of every group, then round 2, …) so
+  courts fill and no single group's teams monopolize the schedule. Each match now
+  carries a real `round` + `court`.
+- `listMatches` orderBy now `scheduledAt → round → slot → createdAt` so the list reads
+  round-by-round. Match counts/coverage unchanged (all pairings × meetings), so the
+  group→knockout advancement + integration tests are unaffected. Suite 146 (6 new
+  schedule-engine tests: no immediate rematch, ≤2-in-a-row, full coverage, interleave).
+- `src/lib/services/match.service.ts` now imports the engine (removed the old flat
+  pair-by-pair helpers).
+
+### Status (2026-08-28) — Smash ACTIVE again; separate apps planned
 Everything through **Phase 44 is live on prod** (https://www.smashhero.app). Smash development is
 active again (see roadmap below). Two SEPARATE apps are planned in their own repos under the same
 GitHub account `ArjitRout22` (own folder + own context each; same branch→PR→squash-merge→poll-deploy
@@ -955,8 +974,13 @@ loop) — do NOT mix them with Smash.
 2. Rotate/revoke the GitHub PAT pasted in chat earlier; keep reusing the PWABuilder signing
    key for future APK updates (a new key breaks TWA updates + needs an assetlinks.json change).
 3. Marketing kit: open the design canvas, export each artboard as PNG, post to LinkedIn/WhatsApp/email.
-4. **Phone-OTP (if proceeding):** create the provider account (Twilio recommended), set its keys as
-   Vercel env vars, and tell me add-vs-replace — then I wire it up.
+4. **Phone-OTP:** Twilio account created (trial). Decision made: **ADD phone alongside
+   email+password** (keep both). Next: create a **Verify Service** (Console → Verify → Services →
+   get the `VA…` Service SID), grab **Account SID** (`AC…`) + **Auth Token** (Console home, NOT the
+   API-keys page), set all three as Vercel env vars (`TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`,
+   `TWILIO_VERIFY_SERVICE_SID`) — never in chat. On trial, SMS only reaches Twilio-verified numbers
+   until the account is upgraded. Then I build the OtpProvider(twilio) + phone register/login +
+   OTP send/verify + rate-limit + UI.
 
 **Infra (done):** pooled Neon (`directUrl`; migrations use the **non-pooler** `DIRECT_DATABASE_URL`),
 Neon password rotated, Vercel functions in Singapore (`sin1`).
