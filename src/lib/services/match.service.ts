@@ -7,6 +7,7 @@ import { audit } from "@/lib/audit";
 import { skipTake, type Pagination } from "@/lib/api/pagination";
 import { MATCH_TRANSITIONS, type MatchStatus, type Side } from "@/lib/domain/constants";
 import { buildBracket, type BracketMatchInput } from "@/lib/engines/bracket";
+import { crossGroupSchedule, groupStageSchedule, roundRobinSchedule } from "@/lib/engines/schedule";
 import type { AuthUser } from "@/lib/auth/authorize";
 import { assertOrgAccess, isPlatformAdmin } from "@/lib/auth/tenancy";
 import { loadOwnedTournament, loadViewableTournament, assertCanScoreTournament } from "@/lib/services/tournament.service";
@@ -180,7 +181,10 @@ export async function listMatches(
     prisma.match.findMany({
       where,
       ...skipTake(p),
-      orderBy: [{ scheduledAt: p.sortDir }, { createdAt: "desc" }],
+      // Explicitly-timed matches first (by their time), then by the generated
+      // schedule order (round, then court/slot) so a round-robin/group stage reads
+      // round-by-round instead of pair-by-pair; createdAt is the final tiebreak.
+      orderBy: [{ scheduledAt: p.sortDir }, { round: "asc" }, { slot: "asc" }, { createdAt: "asc" }],
       include: matchInclude,
     }),
     prisma.match.count({ where }),
@@ -297,94 +301,6 @@ const MAX_FIXTURES = 256;
 /** Group label by index: A–Z, then numeric for group 27+. */
 function groupLabel(i: number): string {
   return i < 26 ? String.fromCharCode(65 + i) : String(i + 1);
-}
-
-function roundRobinPairs(ids: string[]): [string, string][] {
-  const pairs: [string, string][] = [];
-  for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) pairs.push([ids[i], ids[j]]);
-  return pairs;
-}
-function crossGroupPairs(groups: string[][]): [string, string][] {
-  const pairs: [string, string][] = [];
-  for (let i = 0; i < groups.length; i++)
-    for (let j = i + 1; j < groups.length; j++)
-      for (const a of groups[i]) for (const b of groups[j]) pairs.push([a, b]);
-  return pairs;
-}
-
-// A scheduled fixture: side-A id, side-B id, and (when the schedule is
-// round-structured) its 1-based round and 0-based court. round/court are null
-// for the flat fallback shapes.
-type PlannedMatch = { a: string; b: string; round: number | null; court: number | null };
-
-/**
- * Deterministic cross-group schedule. For exactly two EQUAL-size groups this uses
- * the circle method: `meetings` full cycles of n rounds each (n = group size),
- * n matches per round, every A-team meets every B-team once per cycle, every team
- * plays exactly once per round, and courts rotate so a team isn't always on the
- * same court. Any other shape (unequal groups, >2 groups) falls back to the flat
- * cross-group pairing (no round/court metadata) so existing behaviour is kept.
- */
-function crossGroupSchedule(groups: string[][], meetings: number): PlannedMatch[] {
-  const planned: PlannedMatch[] = [];
-  const twoEqual = groups.length === 2 && groups[0].length === groups[1].length && groups[0].length > 0;
-  if (twoEqual) {
-    const [A, B] = groups;
-    const n = A.length;
-    let round = 0;
-    for (let meeting = 0; meeting < meetings; meeting++) {
-      for (let k = 0; k < n; k++) {
-        // Rotate the starting offset per meeting so the second cycle doesn't
-        // reproduce the first cycle's round order / court slots verbatim.
-        const offset = (k + meeting) % n;
-        round += 1;
-        for (let i = 0; i < n; i++) {
-          const court = (i + (round - 1)) % n; // rotate courts across rounds
-          planned.push({ a: A[i], b: B[(i + offset) % n], round, court });
-        }
-      }
-    }
-    return planned;
-  }
-  // Fallback: flat cross-group pairs, repeated per meeting (side-swap on the
-  // return leg), with no round/court structure.
-  for (const [a, b] of crossGroupPairs(groups)) {
-    for (let r = 0; r < meetings; r++) {
-      const [x, y] = r % 2 === 0 ? [a, b] : [b, a];
-      planned.push({ a: x, b: y, round: null, court: null });
-    }
-  }
-  return planned;
-}
-
-/**
- * Internal round-robin WITHIN each group (for a group_stage where the top N of
- * each group advance to a knockout) — every entrant plays the others in their own
- * group, groups don't meet. Flat shape (no round/court metadata).
- */
-function groupStageSchedule(groups: string[][], meetings: number): PlannedMatch[] {
-  const planned: PlannedMatch[] = [];
-  for (const g of groups) {
-    for (const [a, b] of roundRobinPairs(g)) {
-      for (let r = 0; r < meetings; r++) {
-        const [x, y] = r % 2 === 0 ? [a, b] : [b, a];
-        planned.push({ a: x, b: y, round: null, court: null });
-      }
-    }
-  }
-  return planned;
-}
-
-/** Everyone-plays-everyone, repeated per meeting (side-swap on the return leg). */
-function roundRobinSchedule(ids: string[], meetings: number): PlannedMatch[] {
-  const planned: PlannedMatch[] = [];
-  for (const [a, b] of roundRobinPairs(ids)) {
-    for (let r = 0; r < meetings; r++) {
-      const [x, y] = r % 2 === 0 ? [a, b] : [b, a];
-      planned.push({ a: x, b: y, round: null, court: null });
-    }
-  }
-  return planned;
 }
 
 /**
