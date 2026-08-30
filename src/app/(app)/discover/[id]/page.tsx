@@ -95,7 +95,7 @@ export default function PublicTournamentPage() {
       {tab === "Overview" && <OverviewTab tournament={data} />}
       {tab === "Players" && <RosterTab tournamentId={id} />}
       {tab === "Teams" && <TeamsTab tournamentId={id} format={data.format} canManage={Boolean(data.canManage)} />}
-      {tab === "Matches" && <MatchesTab tournamentId={id} format={data.format} canManage={Boolean(data.canManage)} canScore={Boolean(data.canScore)} />}
+      {tab === "Matches" && <MatchesTab tournamentId={id} format={data.format} canManage={Boolean(data.canManage)} canScore={Boolean(data.canScore)} canCancel={Boolean(data.canCancelMatch)} />}
       {tab === "Leaderboard" && <LeaderboardTab tournamentId={id} pointsConfig={data.pointsConfig} />}
 
       {!user?.playerId && !isOwner && (

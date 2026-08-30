@@ -42,6 +42,7 @@ export function MatchesTab({
   format,
   canManage: canManageTournament = false,
   canScore = false,
+  canCancel = false,
 }: {
   tournamentId: string;
   format: string;
@@ -52,6 +53,9 @@ export function MatchesTab({
    *  platform admin, or a nominated scorer). Server-computed and per-tournament,
    *  so a nominated player can score and a non-owning organizer cannot. */
   canScore?: boolean;
+  /** Whether the VIEWER may CANCEL a match — owners only (platform admin,
+   *  organizer, or creator). Narrower than canManage; server-computed. */
+  canCancel?: boolean;
 }) {
   const { can } = useAuth();
   const toast = useToast();
@@ -241,6 +245,7 @@ export function MatchesTab({
                               m={m}
                               canManage={canManage}
                               canScore={canScore}
+                              canCancel={canCancel}
                               busy={busyId === m.id}
                               onScore={() => setScoreMatch(m)}
                               onPatch={patchMatch}
@@ -312,6 +317,7 @@ function MatchRow({
   m,
   canManage,
   canScore,
+  canCancel,
   busy,
   onScore,
   onPatch,
@@ -320,6 +326,7 @@ function MatchRow({
   m: MatchDTO;
   canManage: boolean;
   canScore: boolean;
+  canCancel: boolean;
   busy: boolean;
   onScore: () => void;
   onPatch: (m: MatchDTO, body: Record<string, unknown>, successMsg: string) => void;
@@ -372,10 +379,10 @@ function MatchRow({
               <Play className="h-3.5 w-3.5" /> Start
             </Button>
           )}
-          {/* Cancel is only offered before a match starts — once it's in
-              progress or completed the CTA drops away (a started match runs to a
-              result). */}
-          {canManage && m.status === "scheduled" && (
+          {/* Cancel is owner-only (admin / organizer / creator, via canCancel) and
+              only offered before a match starts — once it's in progress or
+              completed the CTA drops away (a started match runs to a result). */}
+          {canCancel && m.status === "scheduled" && (
             <Button size="sm" variant="ghost" loading={busy} onClick={() => onPatch(m, { status: "cancelled" }, "Match cancelled")}>
               <Ban className="h-3.5 w-3.5" /> Cancel
             </Button>

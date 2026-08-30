@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
-import { globalRankingPoints } from "@/lib/engines/points";
+import { ELO_START } from "@/lib/engines/elo";
 
 /**
  * Read-only, no-login "viral" player profile. Aggregate numbers come from the
@@ -15,7 +15,7 @@ export async function getPublicPlayerProfile(id: string) {
       displayName: true,
       fullName: true,
       city: true,
-      ranking: { select: { wins: true, losses: true, matchesPlayed: true, tournamentsPlayed: true, titles: true } },
+      ranking: { select: { wins: true, losses: true, eloRating: true, matchesPlayed: true, tournamentsPlayed: true, titles: true } },
     },
   });
   if (!player) return null;
@@ -97,19 +97,18 @@ export async function getPublicPlayerProfile(id: string) {
   }
   const tournamentHistory = [...tourMap.values()];
 
-  // Global rank (on-read) by International scoring — how many players have more.
-  const myPoints = globalRankingPoints(wins, losses);
-  const all = await prisma.playerRanking.findMany({ select: { wins: true, losses: true } });
-  const rank = matchesPlayed > 0 ? 1 + all.filter((x) => globalRankingPoints(x.wins, x.losses) > myPoints).length : null;
+  // Global rank (on-read) by Elo rating — how many players are rated higher.
+  const myRating = r?.eloRating ?? ELO_START;
+  const all = await prisma.playerRanking.findMany({ select: { eloRating: true } });
+  const rank = matchesPlayed > 0 ? 1 + all.filter((x) => x.eloRating > myRating).length : null;
 
   return {
     id: player.id,
     displayName: player.displayName,
     fullName: player.fullName,
     city: player.city,
-    // SmashHero Rating = the player's global leaderboard points (International
-    // scoring: win 10 / loss 2), so the shared card matches the leaderboard.
-    rating: globalRankingPoints(wins, losses),
+    // SmashHero Rating = the player's Elo rating, matching the global leaderboard.
+    rating: myRating,
     wins,
     losses,
     matchesPlayed,
@@ -277,9 +276,9 @@ export async function getLandingData() {
     prisma.match.count({ where: { deletedAt: null, status: "completed" } }),
     prisma.playerRanking.findMany({
       where: { player: { deletedAt: null, user: { is: { role: { is: { name: { not: "ADMIN" } } } } } } },
-      orderBy: [{ wins: "desc" }, { winPercentage: "desc" }],
+      orderBy: [{ eloRating: "desc" }, { winPercentage: "desc" }],
       take: 5,
-      select: { playerId: true, wins: true, losses: true, player: { select: { displayName: true } } },
+      select: { playerId: true, wins: true, losses: true, eloRating: true, player: { select: { displayName: true } } },
     }),
     listPublicTournaments(6),
   ]);
@@ -287,7 +286,7 @@ export async function getLandingData() {
   const topPlayers = topRaw.map((r) => ({
     id: r.playerId,
     name: r.player.displayName,
-    points: globalRankingPoints(r.wins, r.losses),
+    points: r.eloRating,
     wins: r.wins,
     losses: r.losses,
   }));

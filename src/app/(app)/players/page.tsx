@@ -15,6 +15,7 @@ import { PERMS } from "@/lib/client/perms";
 
 type Ranking = {
   totalPoints: number;
+  eloRating: number;
   matchesPlayed: number;
   wins: number;
   losses: number;
@@ -124,6 +125,7 @@ export default function PlayersPage() {
       )}
 
       {!isLoading && !error && players.length > 0 && (
+       <>
         <Card className="overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -132,7 +134,7 @@ export default function PlayersPage() {
                   <th className="px-4 py-3 font-medium">Player</th>
                   <th className="px-4 py-3 font-medium">City</th>
                   <th className="px-4 py-3 font-medium">Record</th>
-                  <th className="px-4 py-3 text-right font-medium">Points</th>
+                  <th className="px-4 py-3 text-right font-medium" title="Elo rating — everyone starts at 1000">Rating</th>
                 </tr>
               </thead>
               <tbody>
@@ -152,7 +154,7 @@ export default function PlayersPage() {
                       {p.ranking ? `${p.ranking.wins}W · ${p.ranking.losses}L` : "—"}
                     </td>
                     <td className="px-4 py-3 text-right font-semibold text-foreground">
-                      {p.ranking ? p.ranking.totalPoints : "—"}
+                      {p.ranking ? p.ranking.eloRating : "—"}
                     </td>
                   </tr>
                 ))}
@@ -160,6 +162,11 @@ export default function PlayersPage() {
             </table>
           </div>
         </Card>
+        <p className="mt-2 text-xs text-muted">
+          Rating is an Elo score — everyone starts at 1000; beating a higher-rated player earns more.
+          It matches the global Leaderboard.
+        </p>
+       </>
       )}
 
       {meta && meta.totalPages > 1 && (

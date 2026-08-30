@@ -104,6 +104,10 @@ export async function getTournament(actor: AuthUser, id: string) {
         })) != null
       : false;
   const canScore = isPlatformAdmin(actor) || actor.id === t.organizerId || actor.id === t.createdById || isScorer;
+  // Cancelling a match is restricted to the tournament OWNERS — a platform admin,
+  // the organizer, or the creator. Narrower than canManage (org-wide) and than
+  // canScore (which also includes nominated scorers).
+  const canCancelMatch = isPlatformAdmin(actor) || actor.id === t.organizerId || actor.id === t.createdById;
   // The viewer's own participation status, so the UI shows Pending/Joined
   // instead of a stale "Request to join" (works for non-owners too).
   let viewerStatus: string | null = null;
@@ -114,7 +118,7 @@ export async function getTournament(actor: AuthUser, id: string) {
     });
     viewerStatus = part?.status ?? null;
   }
-  return { ...t, canManage, canScore, viewerStatus };
+  return { ...t, canManage, canScore, canCancelMatch, viewerStatus };
 }
 
 /** True if the caller may VIEW this tournament (owner, public, or participant). */

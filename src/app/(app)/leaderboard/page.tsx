@@ -35,7 +35,7 @@ type Meta = {
 };
 
 const SORT_OPTIONS = [
-  { value: "points", label: "Points" },
+  { value: "points", label: "Rating" },
   { value: "wins", label: "Wins" },
   { value: "winPercentage", label: "Win %" },
   { value: "tournaments", label: "Tournaments" },
@@ -59,7 +59,7 @@ export default function LeaderboardPage() {
 
   return (
     <div>
-      <PageHeader title="Player Leaderboard" subtitle="Global ranking — International scoring (10 per win, 2 per loss), across every workspace." />
+      <PageHeader title="Player Leaderboard" subtitle="Global ranking by Elo rating — everyone starts at 1000; beating a higher-rated player earns more. Across every workspace." />
 
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="relative max-w-xs flex-1">
@@ -111,7 +111,7 @@ export default function LeaderboardPage() {
                   <th className="px-4 py-3 font-medium">Wins</th>
                   <th className="px-4 py-3 font-medium">Losses</th>
                   <th className="px-4 py-3 font-medium">Win %</th>
-                  <th className="px-4 py-3 font-medium">Points</th>
+                  <th className="px-4 py-3 font-medium" title="Elo rating — everyone starts at 1000">Rating</th>
                   <th className="px-4 py-3 font-medium">Tournaments</th>
                   <th className="px-4 py-3 font-medium">Titles</th>
                 </tr>

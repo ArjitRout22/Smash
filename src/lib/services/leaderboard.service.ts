@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
 import { assignRanks, type RankableStat } from "@/lib/engines/leaderboard";
-import { globalRankingPoints } from "@/lib/engines/points";
 import type { Pagination } from "@/lib/api/pagination";
 import type { AuthUser } from "@/lib/auth/authorize";
 
@@ -8,11 +7,10 @@ type SortKey = "points" | "wins" | "winPercentage" | "tournaments" | "recent";
 
 /**
  * GLOBAL player leaderboard — every player across all workspaces (the player
- * directory is global; so is the ranking). Points use the International scoring
- * (win 10 / loss 2, no stage bonuses) via `globalRankingPoints`, computed from
- * each player's maintained win/loss totals so the board is always correct
- * without a points recompute. Ranks come from the shared engine (points → wins →
- * win% → …) for deterministic ordering.
+ * directory is global; so is the ranking). The headline number is each player's
+ * **Elo rating** (`PlayerRanking.eloRating`, everyone starts at 1000), a
+ * materialized value recomputed by replaying completed matches. Ranks come from
+ * the shared engine (rating → wins → win% → …) for deterministic ordering.
  */
 export async function getPlayerLeaderboard(
   actor: AuthUser,
@@ -36,13 +34,11 @@ export async function getPlayerLeaderboard(
     include: { player: { select: { id: true, displayName: true, fullName: true, city: true, photoUrl: true } } },
   });
 
-  const pointsFor = (wins: number, losses: number) => globalRankingPoints(wins, losses);
-
-  // Canonical ranks (points → wins → win% → …) via the engine.
+  // Canonical ranks (rating → wins → win% → …) via the engine.
   const ranked = assignRanks(
     rows.map<RankableStat>((r) => ({
       id: r.playerId,
-      points: pointsFor(r.wins, r.losses),
+      points: r.eloRating,
       wins: r.wins,
       losses: r.losses,
       matchesPlayed: r.matchesPlayed,
@@ -62,7 +58,7 @@ export async function getPlayerLeaderboard(
     wins: r.wins,
     losses: r.losses,
     winPercentage: r.winPercentage,
-    points: pointsFor(r.wins, r.losses),
+    points: r.eloRating,
     tournaments: r.tournamentsPlayed,
     titles: r.titles,
     updatedAt: r.updatedAt,

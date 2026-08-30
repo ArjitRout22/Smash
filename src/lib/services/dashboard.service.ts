@@ -1,7 +1,6 @@
 import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
 import { serializeMatch } from "@/lib/services/match.service";
-import { globalRankingPoints } from "@/lib/engines/points";
 import type { AuthUser } from "@/lib/auth/authorize";
 import { isPlatformAdmin } from "@/lib/auth/tenancy";
 
@@ -62,7 +61,7 @@ const getCommunityDashboard = unstable_cache(
         include: matchInclude,
       }),
       prisma.playerRanking.findMany({
-        orderBy: [{ wins: "desc" }, { winPercentage: "desc" }],
+        orderBy: [{ eloRating: "desc" }, { winPercentage: "desc" }],
         take: 5,
         include: { player: { select: { id: true, displayName: true, photoUrl: true } } },
       }),
@@ -72,13 +71,13 @@ const getCommunityDashboard = unstable_cache(
       stats: { totalTournaments, activeTournaments, completedTournaments, totalPlayers, totalTeams },
       recentMatches: recentMatchesRaw.map(serializeMatch),
       upcomingMatches: upcomingMatchesRaw.map(serializeMatch),
-      // Competition ranking: players tied on global points share a rank (e.g.
-      // 1,1,1,1,5) instead of arbitrary 1,2,3,4 — matches the leaderboard engine.
+      // Competition ranking: players tied on rating share a rank (e.g. 1,1,1,1,5)
+      // instead of arbitrary 1,2,3,4 — matches the leaderboard engine.
       topPlayers: (() => {
         let lastPts: number | null = null;
         let lastRank = 0;
         return topPlayersRaw.map((r, i) => {
-          const points = globalRankingPoints(r.wins, r.losses);
+          const points = r.eloRating;
           const rank = points === lastPts ? lastRank : i + 1;
           lastPts = points;
           lastRank = rank;
