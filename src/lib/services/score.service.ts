@@ -4,7 +4,7 @@ import { Errors } from "@/lib/errors";
 import { audit } from "@/lib/audit";
 import { resolveMatch } from "@/lib/engines/scoring";
 import { resolvePointsConfig, pointsForMatch } from "@/lib/engines/points";
-import { recomputeAfterMatch, involvedPlayerIds } from "@/lib/services/recompute";
+import { recomputeAfterMatch, involvedPlayerIds, recomputeGlobalElo, applyMatchElo } from "@/lib/services/recompute";
 import { attachMatchSnapshots } from "@/lib/services/match.service";
 import type { Side, StageType } from "@/lib/domain/constants";
 import type { SubmitScoreInput } from "@/lib/validation/schemas";
@@ -119,6 +119,8 @@ export type SubmitScoreResult = {
   status: string;
   winnerSide: Side | null;
   version: number;
+  /** True when this was a re-score of an already-completed match (vs a first score). */
+  corrected: boolean;
 };
 
 /**
@@ -132,7 +134,7 @@ export async function submitScore(
   actor: AuthUser
 ): Promise<SubmitScoreResult> {
   const actorUserId = actor.id;
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const match = await tx.match.findFirst({
       where: { id: matchId, deletedAt: null },
       include: {
@@ -295,12 +297,21 @@ export async function submitScore(
       status: result.complete ? "completed" : "in_progress",
       winnerSide: result.winnerSide,
       version: newVersion,
+      corrected: previous.status === "completed",
     };
     // Raise the interactive-transaction limits well above Prisma's 5s default:
     // scoring rewrites games/ledger and recomputes tournament + global standings
     // in one atomic unit, which on a remote (Neon) DB can exceed 5s and abort
     // with P2028 — surfacing to users as a generic 500 on "Save score".
   }, { maxWait: 15000, timeout: 30000 });
+  // Elo, outside the per-match transaction: a brand-new completion is the latest
+  // result, so apply it incrementally (O(1)); a correction to an already-scored
+  // match changes history and needs a full replay. In-progress saves don't count.
+  if (result.status === "completed") {
+    if (result.corrected) await recomputeGlobalElo();
+    else await applyMatchElo(result.matchId);
+  }
+  return result;
 }
 
 /**
@@ -314,7 +325,7 @@ export async function submitScore(
  * that downstream slot is vacated too, keeping the bracket consistent.
  */
 export async function resetMatchResult(actor: AuthUser, matchId: string) {
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const match = await tx.match.findFirst({
       where: { id: matchId, deletedAt: null },
       include: {
@@ -370,4 +381,7 @@ export async function resetMatchResult(actor: AuthUser, matchId: string) {
     }
     return { matchId: match.id, status: "scheduled" as const, wasScored };
   }, { maxWait: 15000, timeout: 30000 });
+  // Refresh global Elo after the reversal (outside the per-match transaction).
+  await recomputeGlobalElo();
+  return result;
 }

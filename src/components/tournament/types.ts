@@ -14,6 +14,7 @@ export type TournamentDetail = {
   joinRequestsOpen?: boolean; // organizer can pause new join requests while upcoming
   canManage?: boolean;
   canScore?: boolean; // may the viewer enter scores for this tournament
+  canCancelMatch?: boolean; // may the viewer cancel a match (owners only)
   viewerStatus?: string | null; // the current user's own join status, if any
   pointsConfig?: unknown; // stored scoring system (null = legacy Standard)
   organizer: { id: string; name: string | null; phone: string } | null;

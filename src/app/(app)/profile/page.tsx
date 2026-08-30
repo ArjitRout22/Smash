@@ -177,7 +177,7 @@ export default function ProfilePage() {
               <Stat label="Wins" value={stats.wins} />
               <Stat label="Losses" value={stats.losses} />
               <Stat label="Win %" value={pct(stats.winPercentage)} />
-              <Stat label="Points" value={stats.totalPoints} />
+              <Stat label="Rating" value={stats.totalPoints} />
               <Stat label="Tournaments" value={stats.tournamentsPlayed} />
               <Stat label="Current rank" value={stats.currentRank ?? "—"} />
               <Stat label="Best rank" value={stats.bestRank ?? "—"} />

@@ -488,10 +488,19 @@ export async function generateFixtures(tournamentId: string, input: GenerateFixt
 export async function updateMatch(id: string, input: UpdateInput, actor: AuthUser) {
   const existing = await prisma.match.findFirst({
     where: { id, deletedAt: null },
-    include: { participants: true, tournament: { select: { organizationId: true } } },
+    include: { participants: true, tournament: { select: { organizationId: true, organizerId: true, createdById: true } } },
   });
   if (!existing) throw Errors.notFound("Match");
   assertOrgAccess(actor, existing.tournament.organizationId);
+
+  // Cancelling a match is restricted to a platform admin or the tournament's
+  // CREATOR only — mirrors getTournament().canCancelMatch. Other lifecycle edits
+  // stay at org-level access.
+  if (input.status === "cancelled") {
+    const t = existing.tournament;
+    const canCancel = isPlatformAdmin(actor) || actor.id === t.createdById;
+    if (!canCancel) throw Errors.forbidden("Only the tournament's creator can cancel a match.");
+  }
 
   // Lock handling: a closed (finalized) match rejects every edit except the
   // reopen action itself. Closing requires a completed result.

@@ -1006,6 +1006,39 @@ Password card, and the additive `OtpVerification`/`phoneVerifiedAt` migration. T
   `SMSLOCAL_SENDER_ID`, `SMSLOCAL_TEMPLATE_ID`, `SMSLOCAL_OTP_VAR` (default `otp` — must match SMSLocal's
   variable key; verify vs their dashboard) in Vercel.
 
+### Phase 48 — Elo rating (real, opponent-relative), points consistency, owner-only match cancel (2026-08-30)
+Three fixes, one shipped change to how the global rating works.
+- **The global rating is now a real Elo rating.** It used to be `wins×10 + losses×2`
+  (a flat tally mislabelled as a rating), and — worse — the **Players list** showed a
+  *different* number (`PlayerRanking.totalPoints`, the sum of each tournament's own
+  League/International/bonus scoring) than the **Leaderboard** (`globalRankingPoints`).
+  Now both, plus every profile/dashboard/public surface, read a single materialised
+  `PlayerRanking.eloRating` (start **1000**, K-factor **32**, opponent-relative; doubles
+  use the side's average rating and apply the delta to each player). New pure engine
+  `src/lib/engines/elo.ts` (`eloExpected`, `replayElo`). `recompute.ts` gained
+  `recomputeGlobalElo()` — a chronological **full replay** of all completed
+  (non-deleted) tournament matches, written in one batched `UPDATE … FROM (VALUES …)` —
+  and `applyMatchElo()` — an **incremental** O(1) update for a freshly-completed match
+  (the latest result's pre-ratings *are* the players' current ratings, so it's exact).
+  `submitScore` uses the incremental path for a first score and the full replay for a
+  correction; `resetMatchResult`/`softDeleteMatch`/tournament-recompute use the full
+  replay. Migration `20260830140000_player_elo_rating` adds the column (default 1000) +
+  an index. Per-tournament standings (`LeaderboardEntry.points`) are UNCHANGED — those
+  are still League/International tournament points, a separate concept from the global
+  Elo rating. Display labels changed Points→**Rating** on the Players list, Leaderboard,
+  and profile stat, with a one-line "everyone starts at 1000" explainer. **NOTE:** the
+  migration seeds every existing row to 1000; a one-time global recompute (or the first
+  correction/reset/tournament-recompute) backfills real ratings from history.
+- **Cancel a match is now restricted to a platform admin or the tournament CREATOR.**
+  It was gated on `canManage` (any org member with MATCH_MANAGE); now it's
+  `canCancelMatch` = platform admin OR `createdById` (organizer deliberately excluded;
+  server-computed in `getTournament`, enforced in `updateMatch` for the
+  `status:"cancelled"` transition, threaded to `MatchesTab`/`MatchRow`). Still
+  scheduled-only (a started match runs to a result).
+- Tests: +8 Elo engine unit tests, +2 Elo integration tests (fresh win = ±16 mirror;
+  correction via reopen→re-score flips via full replay). Suite **164**. `smashHeroRating`
+  remains dead code; `globalRankingPoints` is now referenced only in comments.
+
 ### Status (2026-08-28) — Smash ACTIVE again; separate apps planned
 Everything through **Phase 44 is live on prod** (https://www.smashhero.app). Smash development is
 active again (see roadmap below). Two SEPARATE apps are planned in their own repos under the same

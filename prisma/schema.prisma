@@ -252,6 +252,7 @@ model PlayerRanking {
   id                String   @id @default(uuid())
   playerId          String   @unique
   totalPoints       Int      @default(0)
+  eloRating         Int      @default(1000) // opponent-relative rating (start 1000)
   matchesPlayed     Int      @default(0)
   wins              Int      @default(0)
   losses            Int      @default(0)
@@ -265,6 +266,7 @@ model PlayerRanking {
   player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
 
   @@index([totalPoints])
+  @@index([eloRating])
   @@index([rank])
 }
 
