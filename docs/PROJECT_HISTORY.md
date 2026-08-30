@@ -1028,7 +1028,11 @@ Three fixes, one shipped change to how the global rating works.
   Elo rating. Display labels changed Points→**Rating** on the Players list, Leaderboard,
   and profile stat, with a one-line "everyone starts at 1000" explainer. **NOTE:** the
   migration seeds every existing row to 1000; a one-time global recompute (or the first
-  correction/reset/tournament-recompute) backfills real ratings from history.
+  correction/reset/tournament-recompute) backfills real ratings from history. **Follow-up:**
+  UNRATED players (0 matches, still at the default 1000) are now EXCLUDED from every ranking
+  surface — the global Leaderboard, dashboard/landing Top Players, and on-read `currentRank`
+  all filter `matchesPlayed > 0`, and the Players directory shows "—" for them — so an unplayed
+  1000 can't outrank a player who actually competed (e.g. a 1-4 record below 1000).
 - **Cancel a match is now restricted to a platform admin or the tournament CREATOR.**
   It was gated on `canManage` (any org member with MATCH_MANAGE); now it's
   `canCancelMatch` = platform admin OR `createdById` (organizer deliberately excluded;

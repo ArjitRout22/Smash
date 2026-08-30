@@ -177,7 +177,8 @@ export async function getPlayerStatistics(actor: AuthUser, id: string) {
   // score): rank = 1 + how many players have a higher Elo rating. Cheap at scale.
   let currentRank: number | null = null;
   if (hasPlayed) {
-    const all = await prisma.playerRanking.findMany({ select: { eloRating: true } });
+    // Rank only among RATED players (matchesPlayed > 0); unplayed 1000s don't count.
+    const all = await prisma.playerRanking.findMany({ where: { matchesPlayed: { gt: 0 } }, select: { eloRating: true } });
     currentRank = 1 + all.filter((x) => x.eloRating > myRating).length;
   }
   return {
