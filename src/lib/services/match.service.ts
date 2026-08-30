@@ -12,6 +12,7 @@ import type { AuthUser } from "@/lib/auth/authorize";
 import { assertOrgAccess, isPlatformAdmin } from "@/lib/auth/tenancy";
 import { loadOwnedTournament, loadViewableTournament, assertCanScoreTournament } from "@/lib/services/tournament.service";
 import { recomputeTournamentAndPlayers } from "@/lib/services/recompute";
+import { rebuildAllRatings } from "@/lib/services/rating.service";
 import type { CreateMatchSchema, UpdateMatchSchema, GenerateFixturesInput } from "@/lib/validation/schemas";
 
 type CreateInput = z.infer<typeof CreateMatchSchema>;
@@ -581,7 +582,11 @@ export async function softDeleteMatch(id: string, actor: AuthUser) {
   const wasScored = existing.status === "completed";
   await prisma.match.update({ where: { id }, data: { deletedAt: new Date() } });
   // Roll the deleted result out of standings + player stats (short transactions).
-  if (wasScored) await recomputeTournamentAndPlayers(existing.tournamentId);
+  if (wasScored) {
+    await recomputeTournamentAndPlayers(existing.tournamentId);
+    // A removed completed match changes history → rebuild Elo (order-dependent).
+    await rebuildAllRatings();
+  }
   await audit({ actorUserId: actor.id, action: "match.deleted", entityType: "Match", entityId: id, previousValue: { status: existing.status } });
 }
 

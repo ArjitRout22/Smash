@@ -226,6 +226,8 @@ model Player {
   playRequestsSent     PlayRequest[] @relation("PlayRequestFrom")
   playRequestsReceived PlayRequest[] @relation("PlayRequestTo")
   workouts             Workout[]
+  categoryRatings      PlayerCategoryRating[]
+  ratingHistory        RatingHistory[]
 
   @@index([organizationId])
   @@index([deletedAt])
@@ -305,6 +307,51 @@ model PlayerRanking {
   @@index([totalPoints])
   @@index([eloRating])
   @@index([rank])
+}
+
+/// Per-CATEGORY Elo rating (singles vs doubles are never mixed). Materialized —
+/// rebuildable by replaying that category's match history chronologically.
+model PlayerCategoryRating {
+  id         String   @id @default(uuid())
+  playerId   String
+  category   String // "singles" | "doubles"
+  rating     Int      @default(1000)
+  matches    Int      @default(0)
+  wins       Int      @default(0)
+  losses     Int      @default(0)
+  lastChange Int? // rating delta from the most recent match (for the ▲▼ trend)
+  updatedAt  DateTime @updatedAt
+
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([playerId, category])
+  @@index([category, rating])
+}
+
+/// One immutable audit row per player per rated match (point 9). The unique key
+/// also enforces idempotency: a match can never update a player's rating twice.
+model RatingHistory {
+  id                   String   @id @default(uuid())
+  matchId              String
+  playerId             String
+  category             String // "singles" | "doubles"
+  ratingBefore         Int
+  teamRatingBefore     Int
+  opponentRatingBefore Int
+  expectedScore        Float
+  actualScore          Float // 1 = win, 0 = loss
+  k                    Int
+  ratingChange         Int
+  ratingAfter          Int
+  matchesBefore        Int
+  playedAt             DateTime
+  createdAt            DateTime @default(now())
+
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, playerId, category])
+  @@index([playerId, category, playedAt])
+  @@index([matchId])
 }
 
 // ---------------------------------------------------------------------------

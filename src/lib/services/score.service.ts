@@ -4,7 +4,8 @@ import { Errors } from "@/lib/errors";
 import { audit } from "@/lib/audit";
 import { resolveMatch } from "@/lib/engines/scoring";
 import { resolvePointsConfig, pointsForMatch } from "@/lib/engines/points";
-import { recomputeAfterMatch, involvedPlayerIds, recomputeGlobalElo, applyMatchElo } from "@/lib/services/recompute";
+import { recomputeAfterMatch, involvedPlayerIds } from "@/lib/services/recompute";
+import { applyMatchRating, rebuildAllRatings } from "@/lib/services/rating.service";
 import { attachMatchSnapshots } from "@/lib/services/match.service";
 import type { Side, StageType } from "@/lib/domain/constants";
 import type { SubmitScoreInput } from "@/lib/validation/schemas";
@@ -308,8 +309,8 @@ export async function submitScore(
   // result, so apply it incrementally (O(1)); a correction to an already-scored
   // match changes history and needs a full replay. In-progress saves don't count.
   if (result.status === "completed") {
-    if (result.corrected) await recomputeGlobalElo();
-    else await applyMatchElo(result.matchId);
+    if (result.corrected) await rebuildAllRatings();
+    else await applyMatchRating(result.matchId);
   }
   return result;
 }
@@ -381,7 +382,7 @@ export async function resetMatchResult(actor: AuthUser, matchId: string) {
     }
     return { matchId: match.id, status: "scheduled" as const, wasScored };
   }, { maxWait: 15000, timeout: 30000 });
-  // Refresh global Elo after the reversal (outside the per-match transaction).
-  await recomputeGlobalElo();
+  // A reversal changes history → full rating rebuild (outside the per-match tx).
+  await rebuildAllRatings();
   return result;
 }

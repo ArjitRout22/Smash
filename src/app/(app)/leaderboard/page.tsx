@@ -21,9 +21,12 @@ type Row = {
   losses: number;
   winPercentage: number;
   points: number;
+  ratingChange: number | null;
   tournaments: number;
   titles: number;
 };
+
+type Category = "singles" | "doubles";
 
 type Meta = {
   total: number;
@@ -48,9 +51,10 @@ export default function LeaderboardPage() {
   const [sortBy, setSortBy] = useState("points");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [category, setCategory] = useState<Category>("doubles");
 
   const { data, error, isLoading, mutate } = useSWR<{ data: Row[]; meta?: Meta }>(
-    `/api/leaderboard/players?page=${page}&pageSize=20&search=${encodeURIComponent(search)}&sortBy=${sortBy}`,
+    `/api/leaderboard/players?page=${page}&pageSize=20&search=${encodeURIComponent(search)}&sortBy=${sortBy}&category=${category}`,
     swrFetcherWithMeta
   );
 
@@ -59,7 +63,19 @@ export default function LeaderboardPage() {
 
   return (
     <div>
-      <PageHeader title="Player Leaderboard" subtitle="Global ranking by Elo rating — everyone starts at 1000; beating a higher-rated player earns more. Players with no matches yet are unrated and not listed. Across every workspace." />
+      <PageHeader title="Player Leaderboard" subtitle="Global ranking by Elo rating — everyone starts at 1000; beating a higher-rated player earns more. Singles and doubles are ranked separately; players with no matches yet are unrated and not listed." />
+
+      <div className="mb-4 inline-flex rounded-lg bg-surface-2 p-1 text-sm font-medium">
+        {(["doubles", "singles"] as Category[]).map((c) => (
+          <button
+            key={c}
+            onClick={() => { setCategory(c); setPage(1); }}
+            className={`rounded-md px-3 py-1.5 capitalize transition ${category === c ? "bg-surface text-foreground shadow-sm" : "text-muted"}`}
+          >
+            {c}
+          </button>
+        ))}
+      </div>
 
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="relative max-w-xs flex-1">
@@ -141,7 +157,16 @@ export default function LeaderboardPage() {
                       <td className="px-4 py-3 text-muted">{r.wins}</td>
                       <td className="px-4 py-3 text-muted">{r.losses}</td>
                       <td className="px-4 py-3 text-muted">{pct(r.winPercentage)}</td>
-                      <td className="px-4 py-3 font-semibold text-foreground">{r.points}</td>
+                      <td className="px-4 py-3 font-semibold text-foreground">
+                        <span className="inline-flex items-center gap-1.5">
+                          {r.points}
+                          {r.ratingChange != null && r.ratingChange !== 0 && (
+                            <span className={`text-xs font-medium ${r.ratingChange > 0 ? "text-emerald-500" : "text-[var(--danger)]"}`}>
+                              {r.ratingChange > 0 ? "▲" : "▼"} {r.ratingChange > 0 ? "+" : ""}{r.ratingChange}
+                            </span>
+                          )}
+                        </span>
+                      </td>
                       <td className="px-4 py-3 text-muted">{r.tournaments}</td>
                       <td className="px-4 py-3 text-muted">{r.titles}</td>
                     </tr>
