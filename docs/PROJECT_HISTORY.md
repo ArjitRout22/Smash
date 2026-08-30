@@ -1043,6 +1043,31 @@ Three fixes, one shipped change to how the global rating works.
   correction via reopen→re-score flips via full replay). Suite **164**. `smashHeroRating`
   remains dead code; `globalRankingPoints` is now referenced only in comments.
 
+### Phase 49 — Gym tab (fitness logging + consistency leaderboard) (2026-08-30)
+A whole new subsystem, additive and separate from all badminton rating. Ships with
+no feature flag.
+- **Log a workout** (treadmill / strength / freeform) for TODAY only — no editing and
+  no backdating by design; the owner can delete an entry and re-log to fix a mistake.
+  Treadmill captures duration/distance/speed/incline; strength captures exercise/sets/
+  reps/weight; freeform is name + duration. Metric units (km, kg).
+- **Consistency-first, not volume** — the global leaderboard ranks by a consistency
+  score (`currentStreak*10 + sessions in the last 30 days`), so showing up regularly
+  beats big one-off sessions and it's encouraging for all fitness levels. **Global +
+  opt-in:** users choose to appear (`User.gymOptIn`); everyone can log + see their own
+  stats regardless.
+- **My Gym view:** current/longest streak, this-week vs an optional weekly goal
+  (`User.gymWeeklyGoal`), total sessions + distance, a 12-week GitHub-style calendar
+  heatmap of active days, earned badges (first workout, 7/30-day streaks, 30/100 days,
+  hill climber, 50/100 km), and a recent-workouts list with delete.
+- **Architecture:** pure engine `src/lib/engines/gym.ts` (`computeGymStats` streaks/
+  windows, `computeBadges`, `compareConsistency`) → `gym.service.ts` → routes under
+  `/api/gym/*` (workouts GET/POST, workouts/[id] DELETE, summary, leaderboard, settings
+  PUT) → `/gym` page + a "Gym" nav entry. New `Workout` table + `WorkoutKind` enum +
+  `User.gymOptIn`/`gymWeeklyGoal` (migration `20260830160000_gym_workouts`). Streaks are
+  day-based (UTC), so multiple workouts in a day count once for consistency.
+- Tests: +9 gym engine unit, +4 gym integration. Suite 177. Verified end-to-end in the
+  browser (log → streak/badges/heatmap update → opt-in → rank #1, score 11).
+
 ### Status (2026-08-28) — Smash ACTIVE again; separate apps planned
 Everything through **Phase 44 is live on prod** (https://www.smashhero.app). Smash development is
 active again (see roadmap below). Two SEPARATE apps are planned in their own repos under the same
