@@ -99,7 +99,8 @@ export async function getPublicPlayerProfile(id: string) {
 
   // Global rank (on-read) by Elo rating — how many players are rated higher.
   const myRating = r?.eloRating ?? ELO_START;
-  const all = await prisma.playerRanking.findMany({ select: { eloRating: true } });
+  // Rank only among rated players (matchesPlayed > 0).
+  const all = await prisma.playerRanking.findMany({ where: { matchesPlayed: { gt: 0 } }, select: { eloRating: true } });
   const rank = matchesPlayed > 0 ? 1 + all.filter((x) => x.eloRating > myRating).length : null;
 
   return {
@@ -275,7 +276,7 @@ export async function getLandingData() {
     prisma.player.count({ where: { deletedAt: null } }),
     prisma.match.count({ where: { deletedAt: null, status: "completed" } }),
     prisma.playerRanking.findMany({
-      where: { player: { deletedAt: null, user: { is: { role: { is: { name: { not: "ADMIN" } } } } } } },
+      where: { matchesPlayed: { gt: 0 }, player: { deletedAt: null, user: { is: { role: { is: { name: { not: "ADMIN" } } } } } } },
       orderBy: [{ eloRating: "desc" }, { winPercentage: "desc" }],
       take: 5,
       select: { playerId: true, wins: true, losses: true, eloRating: true, player: { select: { displayName: true } } },

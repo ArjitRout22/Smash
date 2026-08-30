@@ -59,7 +59,7 @@ export default function LeaderboardPage() {
 
   return (
     <div>
-      <PageHeader title="Player Leaderboard" subtitle="Global ranking by Elo rating — everyone starts at 1000; beating a higher-rated player earns more. Across every workspace." />
+      <PageHeader title="Player Leaderboard" subtitle="Global ranking by Elo rating — everyone starts at 1000; beating a higher-rated player earns more. Players with no matches yet are unrated and not listed. Across every workspace." />
 
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="relative max-w-xs flex-1">

@@ -19,6 +19,10 @@ export async function getPlayerLeaderboard(
 ) {
   const rows = await prisma.playerRanking.findMany({
     where: {
+      // Only RATED players appear — you aren't ranked until you've played a match
+      // (an unplayed entry sitting at the default 1000 must not outrank real
+      // results, e.g. a player who's 1-4).
+      matchesPlayed: { gt: 0 },
       player: {
         deletedAt: null,
         ...(p.search

@@ -61,6 +61,7 @@ const getCommunityDashboard = unstable_cache(
         include: matchInclude,
       }),
       prisma.playerRanking.findMany({
+        where: { matchesPlayed: { gt: 0 } }, // only rated players (see leaderboard.service)
         orderBy: [{ eloRating: "desc" }, { winPercentage: "desc" }],
         take: 5,
         include: { player: { select: { id: true, displayName: true, photoUrl: true } } },

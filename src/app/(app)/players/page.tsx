@@ -154,7 +154,7 @@ export default function PlayersPage() {
                       {p.ranking ? `${p.ranking.wins}W · ${p.ranking.losses}L` : "—"}
                     </td>
                     <td className="px-4 py-3 text-right font-semibold text-foreground">
-                      {p.ranking ? p.ranking.eloRating : "—"}
+                      {p.ranking && p.ranking.matchesPlayed > 0 ? p.ranking.eloRating : "—"}
                     </td>
                   </tr>
                 ))}
@@ -164,7 +164,7 @@ export default function PlayersPage() {
         </Card>
         <p className="mt-2 text-xs text-muted">
           Rating is an Elo score — everyone starts at 1000; beating a higher-rated player earns more.
-          It matches the global Leaderboard.
+          It matches the global Leaderboard. Players with no matches yet are unrated (shown as “—”).
         </p>
        </>
       )}
