@@ -312,3 +312,25 @@ export type RandomTeamsInput = z.infer<typeof RandomTeamsSchema>;
 export type ChangeTeamPairInput = z.infer<typeof ChangeTeamPairSchema>;
 export type CreateMatchInput = z.infer<typeof CreateMatchSchema>;
 export type SubmitScoreInput = z.infer<typeof SubmitScoreSchema>;
+
+// --- Gym / fitness logging ---------------------------------------------------
+export const LogWorkoutSchema = z.object({
+  kind: z.enum(["treadmill", "strength", "freeform"]),
+  durationMin: z.number().int().positive().max(1440).optional(),
+  distanceKm: z.number().positive().max(500).optional(),
+  speedKmh: z.number().positive().max(60).optional(),
+  inclineLevel: z.number().min(0).max(30).optional(),
+  exercise: z.string().trim().min(1).max(80).optional(),
+  sets: z.number().int().positive().max(100).optional(),
+  reps: z.number().int().positive().max(1000).optional(),
+  weightKg: z.number().positive().max(1000).optional(),
+  notes: z.string().trim().max(300).optional(),
+});
+
+export const GymSettingsSchema = z.object({
+  optIn: z.boolean().optional(),
+  weeklyGoal: z.number().int().min(1).max(14).nullable().optional(),
+});
+
+export type LogWorkoutInput = z.infer<typeof LogWorkoutSchema>;
+export type GymSettingsInput = z.infer<typeof GymSettingsSchema>;

@@ -92,6 +92,8 @@ model User {
   isActive       Boolean  @default(true)
   lastLoginAt    DateTime?
   termsAcceptedAt DateTime? // when the user accepted the Terms (incl. name/results marketing use) at signup
+  gymOptIn       Boolean  @default(false) // opt-in to appear on the global Gym leaderboard
+  gymWeeklyGoal  Int? // optional target workouts/week (for the progress ring)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   deletedAt      DateTime?
@@ -111,9 +113,11 @@ model User {
   casualOpponents      CasualMatch[] @relation("CasualOpponent")
   tournamentScorer     TournamentScorer[]
   matchComments        MatchComment[]
+  workouts             Workout[]
 
   @@index([roleId])
   @@index([organizationId])
+  @@index([gymOptIn])
 }
 
 model Session {
@@ -221,11 +225,44 @@ model Player {
   casualAsOpponentPartner   CasualMatch[] @relation("CasualOpponentPartner")
   playRequestsSent     PlayRequest[] @relation("PlayRequestFrom")
   playRequestsReceived PlayRequest[] @relation("PlayRequestTo")
+  workouts             Workout[]
 
   @@index([organizationId])
   @@index([deletedAt])
   @@index([fullName])
   @@index([discoverable])
+}
+
+/// A logged gym/fitness session. Immutable once created (no edit, no backdating);
+/// the owner can delete their own entry. Separate from all badminton rating.
+enum WorkoutKind {
+  treadmill
+  strength
+  freeform
+}
+
+model Workout {
+  id           String      @id @default(uuid())
+  userId       String
+  playerId     String? // for leaderboard display; SetNull if the player is removed
+  kind         WorkoutKind
+  day          DateTime    @db.Date // the calendar day (always "today" at creation)
+  durationMin  Int? // treadmill / freeform
+  distanceKm   Float? // treadmill
+  speedKmh     Float? // treadmill
+  inclineLevel Float? // treadmill (null = flat / no incline)
+  exercise     String? // strength / freeform: what it was
+  sets         Int? // strength
+  reps         Int? // strength
+  weightKg     Float? // strength
+  notes        String?
+  createdAt    DateTime    @default(now())
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  player Player? @relation(fields: [playerId], references: [id], onDelete: SetNull)
+
+  @@index([userId, day])
+  @@index([day])
 }
 
 // A "let's play" request between two account-holding players (nearby discovery).

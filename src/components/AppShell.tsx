@@ -12,6 +12,7 @@ import {
   Swords,
   Zap,
   BarChart3,
+  Dumbbell,
   UserCircle,
   ShieldAlert,
   HelpCircle,
@@ -35,6 +36,7 @@ const NAV = [
   { href: "/matches", label: "Matches", icon: Swords },
   { href: "/challenges", label: "Challenges", icon: Zap },
   { href: "/leaderboard", label: "Leaderboard", icon: BarChart3 },
+  { href: "/gym", label: "Gym", icon: Dumbbell },
   { href: "/profile", label: "Profile", icon: UserCircle },
   { href: "/help", label: "Help", icon: HelpCircle },
 ];
