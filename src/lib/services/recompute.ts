@@ -2,7 +2,6 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { resolvePointsConfig, pointsForMatch, sumAwards } from "@/lib/engines/points";
 import { assignRanks, winPercentage, type RankableStat } from "@/lib/engines/leaderboard";
-import { replayElo, ELO_START, type EloMatch } from "@/lib/engines/elo";
 import type { StageType } from "@/lib/domain/constants";
 
 type Tx = Prisma.TransactionClient;
@@ -260,127 +259,6 @@ export async function recomputePlayerAggregates(tx: Tx, playerId: string) {
   });
 }
 
-/**
- * Recompute every player's global Elo rating by replaying ALL completed matches
- * (from non-deleted tournaments) in chronological order. Elo is opponent-relative
- * and order-dependent, so it can't be derived on-read from win/loss totals like
- * `globalRankingPoints` was — it's a materialized value on `PlayerRanking`.
- *
- * Runs OUTSIDE the per-match transaction (call it after a result changes): one
- * read of all completed matches, an in-memory replay, and one batched UPDATE, so
- * it stays a couple of round-trips regardless of draw size — no long-held tx.
- */
-export async function recomputeGlobalElo() {
-  const matches = await prisma.match.findMany({
-    where: { status: "completed", deletedAt: null, tournament: { deletedAt: null } },
-    select: {
-      id: true,
-      closedAt: true,
-      createdAt: true,
-      participants: {
-        select: {
-          side: true,
-          isWinner: true,
-          playerId: true,
-          snapshotPlayers: { select: { playerId: true } },
-        },
-      },
-    },
-    // Chronological: when a match closed (falls back to creation), stable by id.
-    orderBy: [{ closedAt: "asc" }, { createdAt: "asc" }, { id: "asc" }],
-  });
-
-  const eloMatches: EloMatch[] = [];
-  for (const m of matches) {
-    const sideA: string[] = [];
-    const sideB: string[] = [];
-    let winner: "A" | "B" | null = null;
-    for (const p of m.participants) {
-      // Doubles → the immutable player snapshot (who actually played); singles →
-      // the participant's playerId. Mirrors involvedPlayerIds / recompute.
-      const ids = p.snapshotPlayers.length
-        ? p.snapshotPlayers.map((s) => s.playerId)
-        : p.playerId
-          ? [p.playerId]
-          : [];
-      if (p.side === "A") sideA.push(...ids);
-      else if (p.side === "B") sideB.push(...ids);
-      if (p.isWinner) winner = p.side as "A" | "B";
-    }
-    if (sideA.length && sideB.length && winner) eloMatches.push({ sideA, sideB, winner });
-  }
-
-  const ratings = replayElo(eloMatches);
-
-  // Write every ranking row's rating (unplayed players → start).
-  const rows = await prisma.playerRanking.findMany({ select: { playerId: true } });
-  await writeEloRatings(rows.map((r) => [r.playerId, ratings.get(r.playerId) ?? ELO_START]));
-}
-
-/** Set eloRating for the given players in ONE batched UPDATE (keeps the score
- *  path's added round-trips to a single write regardless of how many players). */
-async function writeEloRatings(entries: [string, number][]) {
-  if (!entries.length) return;
-  const values = Prisma.join(entries.map(([id, elo]) => Prisma.sql`(${id}::text, ${elo}::int)`));
-  await prisma.$executeRaw`
-    UPDATE "PlayerRanking" AS pr
-    SET "eloRating" = v.elo
-    FROM (VALUES ${values}) AS v(player_id, elo)
-    WHERE pr."playerId" = v.player_id`;
-}
-
-/** Read a match's two sides as Elo player-id lists + the winning side. */
-async function matchAsEloSides(
-  matchId: string
-): Promise<{ sideA: string[]; sideB: string[]; winner: "A" | "B" } | null> {
-  const m = await prisma.match.findFirst({
-    where: { id: matchId, status: "completed", deletedAt: null, tournament: { deletedAt: null } },
-    select: {
-      participants: {
-        select: { side: true, isWinner: true, playerId: true, snapshotPlayers: { select: { playerId: true } } },
-      },
-    },
-  });
-  if (!m) return null;
-  const sideA: string[] = [];
-  const sideB: string[] = [];
-  let winner: "A" | "B" | null = null;
-  for (const p of m.participants) {
-    const ids = p.snapshotPlayers.length
-      ? p.snapshotPlayers.map((s) => s.playerId)
-      : p.playerId
-        ? [p.playerId]
-        : [];
-    if (p.side === "A") sideA.push(...ids);
-    else if (p.side === "B") sideB.push(...ids);
-    if (p.isWinner) winner = p.side as "A" | "B";
-  }
-  if (!sideA.length || !sideB.length || !winner) return null;
-  return { sideA, sideB, winner };
-}
-
-/**
- * Apply ONE freshly-completed match to global Elo incrementally. When a match is
- * scored for the first time it is (by definition) the latest result, so the
- * involved players' CURRENT ratings are exactly their pre-match ratings — making
- * an incremental update identical to a full replay, but O(1) instead of O(all
- * matches). Corrections to an already-scored match, and reversals/deletes, must
- * use `recomputeGlobalElo` (a full replay) instead, since they change history.
- */
-export async function applyMatchElo(matchId: string) {
-  const sides = await matchAsEloSides(matchId);
-  if (!sides) return;
-  const ids = [...new Set([...sides.sideA, ...sides.sideB])];
-  const current = await prisma.playerRanking.findMany({
-    where: { playerId: { in: ids } },
-    select: { playerId: true, eloRating: true },
-  });
-  const initial = new Map(current.map((r) => [r.playerId, r.eloRating]));
-  const updated = replayElo([sides], { initial });
-  // One batched write so the score path adds a single round-trip, not one per player.
-  await writeEloRatings(ids.map((id) => [id, updated.get(id) ?? ELO_START]));
-}
-
 /** Reassign ranks (and update bestRank) WITHIN each organization. */
 export async function recomputeGlobalRanks(tx: Tx) {
   const rows = await tx.playerRanking.findMany({
@@ -460,8 +338,7 @@ export async function recomputeTournamentAndPlayers(tournamentId: string) {
   for (const pid of ids) {
     await prisma.$transaction((tx) => recomputePlayerAggregates(tx, pid), { timeout: 20000 });
   }
-
-  // Global Elo depends on ALL players' match history, not just this tournament's,
-  // so refresh it after the per-player aggregates are settled.
-  await recomputeGlobalElo();
+  // NOTE: Elo is intentionally NOT rebuilt here — it depends on match RESULTS, not
+  // on tournament points/status. Callers that change a result (score correction,
+  // reset, completed-match deletion) trigger `rebuildAllRatings` themselves.
 }

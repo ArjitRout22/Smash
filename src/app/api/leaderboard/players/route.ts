@@ -11,6 +11,7 @@ export const GET = route(async (req) => {
   const p = parsePagination(url.searchParams);
   const { items, total } = await getPlayerLeaderboard(actor, p, {
     sortBy: url.searchParams.get("sortBy") ?? undefined,
+    category: url.searchParams.get("category") ?? undefined,
   });
   return ok(items, { meta: paginationMeta(total, p.page, p.pageSize) });
 });

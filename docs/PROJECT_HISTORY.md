@@ -1068,6 +1068,44 @@ no feature flag.
 - Tests: +9 gym engine unit, +4 gym integration. Suite 177. Verified end-to-end in the
   browser (log → streak/badges/heatmap update → opt-in → rank #1, score 11).
 
+### Phase 50 — Proper Elo rating system: provisional K, per-category, history, rebuild (2026-08-30)
+A full rebuild of the rating system against a detailed spec. The Phase-48 Elo was
+genuine sequential Elo but simplified (flat K=32, one combined pool, no history).
+- **Reusable Elo service.** All formulas live in `src/lib/engines/elo.ts` (config
+  `ELO_CONFIG` = STARTING_RATING 1000 / PROVISIONAL_MATCHES 5 / PROVISIONAL_K 32 /
+  ESTABLISHED_K 24 / ELO_SCALE 400; `eloExpected`, `eloDelta`, `replayElo` producing
+  ratings + counts + full history). `src/lib/services/rating.service.ts` is the single
+  backend source of truth — never compute Elo in the frontend.
+- **Shared-K, always zero-sum** (design decision, since strict zero-sum and per-player
+  K conflict): one K per match — PROVISIONAL_K if ANY participant is provisional (< 5
+  rated matches in that category), else ESTABLISHED_K. Winner +X / loser −X exactly,
+  works for singles and doubles.
+- **Sequential replay from history:** each match reads ratings BEFORE it, carries them
+  forward; ordered by date then matchId. Eligible = completed, non-deleted, from a
+  non-deleted tournament (excludes cancelled/pending/deleted/duplicate/casual).
+- **Separate singles vs doubles ratings** (never mixed) on new `PlayerCategoryRating`
+  (rating/matches/wins/losses/lastChange per category). Full audit trail on new
+  `RatingHistory` (before/after, team + opponent rating before, expected, K, change,
+  date) — its unique `(matchId, playerId, category)` also enforces **idempotency**
+  (a match never updates a rating twice). Migration `20260830180000_category_ratings_and_history`.
+- **Leaderboard** now per-category with a **Singles | Doubles toggle** (default Doubles),
+  competition ranking (ties share a rank) by rating → more matches → higher win% → more
+  wins, win% to 2 dp (zero-safe), and a **▲▼ rating-change** column. Unrated (0-match)
+  players excluded. Tournaments/titles shown but never affect Elo (point 14).
+- **Rebuild:** `rebuildAllRatings()` resets + replays chronologically; a dedicated admin
+  endpoint `POST /api/admin/rebuild-ratings` (platform-admin only). Elo is rebuilt ONLY
+  when a result changes (score correction, reset, completed-match delete) — NOT on
+  tournament scoring/status changes (Elo is independent of the points config). The common
+  score-save path stays fast via the idempotent incremental `applyMatchRating`.
+  `PlayerRanking.eloRating` now mirrors each player's PRIMARY-category rating (most
+  matches; doubles wins ties) so profile/dashboard/players-list keep working un-mixed.
+- Tests: 10 engine unit (incl. the 4 spec tests, provisional-K transition, zero-sum,
+  doubles) + 5 integration (category separation, history, zero-sum, idempotency,
+  leaderboard ties/win%, rebuild determinism). Suite 182.
+- **AUDIT (points 17/20):** the Phase-48 doubles ratings will change once provisional/
+  established K applies — recalculated from history via the admin rebuild after deploy;
+  before/after summary produced then.
+
 ### Status (2026-08-28) — Smash ACTIVE again; separate apps planned
 Everything through **Phase 44 is live on prod** (https://www.smashhero.app). Smash development is
 active again (see roadmap below). Two SEPARATE apps are planned in their own repos under the same
