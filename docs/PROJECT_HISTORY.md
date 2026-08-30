@@ -1029,9 +1029,10 @@ Three fixes, one shipped change to how the global rating works.
   and profile stat, with a one-line "everyone starts at 1000" explainer. **NOTE:** the
   migration seeds every existing row to 1000; a one-time global recompute (or the first
   correction/reset/tournament-recompute) backfills real ratings from history.
-- **Cancel a match is now owner-only.** It was gated on `canManage` (any org member with
-  MATCH_MANAGE); now it's `canCancelMatch` = platform admin OR organizer OR creator
-  (server-computed in `getTournament`, enforced in `updateMatch` for the
+- **Cancel a match is now restricted to a platform admin or the tournament CREATOR.**
+  It was gated on `canManage` (any org member with MATCH_MANAGE); now it's
+  `canCancelMatch` = platform admin OR `createdById` (organizer deliberately excluded;
+  server-computed in `getTournament`, enforced in `updateMatch` for the
   `status:"cancelled"` transition, threaded to `MatchesTab`/`MatchRow`). Still
   scheduled-only (a started match runs to a result).
 - Tests: +8 Elo engine unit tests, +2 Elo integration tests (fresh win = ±16 mirror;

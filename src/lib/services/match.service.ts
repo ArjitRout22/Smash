@@ -493,13 +493,13 @@ export async function updateMatch(id: string, input: UpdateInput, actor: AuthUse
   if (!existing) throw Errors.notFound("Match");
   assertOrgAccess(actor, existing.tournament.organizationId);
 
-  // Cancelling a match is restricted to the tournament OWNERS (platform admin,
-  // organizer, or creator) — mirrors getTournament().canCancelMatch. Other
-  // lifecycle edits stay at org-level access.
+  // Cancelling a match is restricted to a platform admin or the tournament's
+  // CREATOR only — mirrors getTournament().canCancelMatch. Other lifecycle edits
+  // stay at org-level access.
   if (input.status === "cancelled") {
     const t = existing.tournament;
-    const isOwner = isPlatformAdmin(actor) || actor.id === t.organizerId || actor.id === t.createdById;
-    if (!isOwner) throw Errors.forbidden("Only the tournament's organizer or creator can cancel a match.");
+    const canCancel = isPlatformAdmin(actor) || actor.id === t.createdById;
+    if (!canCancel) throw Errors.forbidden("Only the tournament's creator can cancel a match.");
   }
 
   // Lock handling: a closed (finalized) match rejects every edit except the

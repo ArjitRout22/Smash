@@ -53,8 +53,8 @@ export function MatchesTab({
    *  platform admin, or a nominated scorer). Server-computed and per-tournament,
    *  so a nominated player can score and a non-owning organizer cannot. */
   canScore?: boolean;
-  /** Whether the VIEWER may CANCEL a match — owners only (platform admin,
-   *  organizer, or creator). Narrower than canManage; server-computed. */
+  /** Whether the VIEWER may CANCEL a match — a platform admin or the tournament's
+   *  creator only. Narrower than canManage; server-computed. */
   canCancel?: boolean;
 }) {
   const { can } = useAuth();
@@ -379,9 +379,9 @@ function MatchRow({
               <Play className="h-3.5 w-3.5" /> Start
             </Button>
           )}
-          {/* Cancel is owner-only (admin / organizer / creator, via canCancel) and
-              only offered before a match starts — once it's in progress or
-              completed the CTA drops away (a started match runs to a result). */}
+          {/* Cancel is restricted to a platform admin or the tournament creator
+              (via canCancel) and only offered before a match starts — once it's in
+              progress or completed the CTA drops away (a started match runs to a result). */}
           {canCancel && m.status === "scheduled" && (
             <Button size="sm" variant="ghost" loading={busy} onClick={() => onPatch(m, { status: "cancelled" }, "Match cancelled")}>
               <Ban className="h-3.5 w-3.5" /> Cancel

@@ -312,12 +312,16 @@ export async function recomputeGlobalElo() {
 
   const ratings = replayElo(eloMatches);
 
-  // Write every ranking row's rating in ONE statement (unplayed players → start).
+  // Write every ranking row's rating (unplayed players → start).
   const rows = await prisma.playerRanking.findMany({ select: { playerId: true } });
-  if (!rows.length) return;
-  const values = Prisma.join(
-    rows.map((r) => Prisma.sql`(${r.playerId}::text, ${ratings.get(r.playerId) ?? ELO_START}::int)`)
-  );
+  await writeEloRatings(rows.map((r) => [r.playerId, ratings.get(r.playerId) ?? ELO_START]));
+}
+
+/** Set eloRating for the given players in ONE batched UPDATE (keeps the score
+ *  path's added round-trips to a single write regardless of how many players). */
+async function writeEloRatings(entries: [string, number][]) {
+  if (!entries.length) return;
+  const values = Prisma.join(entries.map(([id, elo]) => Prisma.sql`(${id}::text, ${elo}::int)`));
   await prisma.$executeRaw`
     UPDATE "PlayerRanking" AS pr
     SET "eloRating" = v.elo
@@ -373,12 +377,8 @@ export async function applyMatchElo(matchId: string) {
   });
   const initial = new Map(current.map((r) => [r.playerId, r.eloRating]));
   const updated = replayElo([sides], { initial });
-  for (const id of ids) {
-    await prisma.playerRanking.update({
-      where: { playerId: id },
-      data: { eloRating: updated.get(id) ?? ELO_START },
-    });
-  }
+  // One batched write so the score path adds a single round-trip, not one per player.
+  await writeEloRatings(ids.map((id) => [id, updated.get(id) ?? ELO_START]));
 }
 
 /** Reassign ranks (and update bestRank) WITHIN each organization. */
