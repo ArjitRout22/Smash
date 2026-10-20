@@ -164,7 +164,7 @@ export const GenerateFixturesSchema = z
       .int()
       .refine((n) => n === 1 || n === 3, { message: "bestOf must be 1 or 3" })
       .default(3),
-    rounds: z.union([z.literal(1), z.literal(2)]).default(1),
+    rounds: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]).default(1),
     mode: z.enum(["round_robin", "groups", "group_stage"]),
     participantIds: z.array(z.string().uuid()).optional(),
     groups: z.array(z.array(z.string().uuid())).optional(),

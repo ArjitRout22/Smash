@@ -488,7 +488,7 @@ function MatchRow({ m }: { m: MatchDTO }) {
 
   return (
     <Link
-      href={`/t/${m.tournament.id}`}
+      href={`/tournaments/${m.tournament.id}`}
       aria-label={`${a?.label ?? "TBD"} vs ${b?.label ?? "TBD"}${done ? `, ${a?.gamesWon}–${b?.gamesWon}, ${a?.isWinner ? a?.label : b?.label} won` : ""} — ${m.tournament.name}`}
       className="flex items-center justify-between gap-3 px-5 py-3 transition hover:bg-surface-2 focus:bg-surface-2 focus:outline-none"
     >
