@@ -1106,6 +1106,47 @@ genuine sequential Elo but simplified (flat K=32, one combined pool, no history)
   established K applies — recalculated from history via the admin rebuild after deploy;
   before/after summary produced then.
 
+### Phase 51 — Organizer feedback: in-app match link, editable dates, N× fixtures, team rename everywhere, optional acceptance (2026-10-20) (PRs #72, #73)
+Two PRs addressing an organizer's feedback list. Both live on prod (Vercel deploy green,
+`requireAcceptance` migration applied to prod Neon).
+
+**PR #72 — polish (low-risk):**
+- **Dashboard match link stays in-app.** A "Recent results" row linked to the public
+  no-login page `/t/[id]`; a signed-in user now goes to `/tournaments/[id]` (owners manage;
+  non-owners are redirected to `/discover/[id]`). The header's dedicated **Public page**
+  button (`/t/[slug]`) is unchanged.
+- **Editable tournament dates in Settings.** Start date / End date `<input type="date">`
+  fields (end ≥ start guard), saved through the existing `updateTournament` path.
+- **Fixtures: each pairing up to 4×.** "Each pairing" now offers Once / Twice / 3× / 4×
+  (was max 2), with the resulting match count shown inline per option. `GenerateFixturesSchema.rounds`
+  widened to `1|2|3|4`; the schedule engine already loops over the meeting count, so no
+  engine change.
+
+**PR #73 — team rename + optional acceptance (model changes):**
+- **Item 3 — rename a team, everywhere.** The tournament's **organizer** can now rename a
+  team (was platform-admin-only); org access still blocks a player from another workspace.
+  A rename relabels the team on **every match — scheduled and completed** (reverses the
+  Phase-32 "completed keep the old name" rule, per the user's "take effect wherever
+  required"). Safe because a rename keeps the team's identity and its per-match **player**
+  snapshots (`MatchParticipantPlayer` records who played); only the label changes. `TeamsTab`
+  rename CTA ungated.
+- **Item 5 — optional "no acceptance required".** New `Tournament.requireAcceptance` boolean
+  (**default true**; additive migration `20261020000000_tournament_require_acceptance` — every
+  existing tournament keeps today's behaviour). Settable at creation and in Settings. When
+  **off**, the organizer can add players and build matches without waiting for acceptances:
+  a still-pending (`invited`) player is eligible, but a **declined**/removed player never is
+  (rejecting an invite always keeps that player out). Players still receive their invite.
+  Eligibility runs through `generateFixtures`, `createMatch` and `updateMatch` via a shared
+  `eligibleTournamentPlayerStatuses()` helper (tournament loaded by `loadOwnedTournament`). A
+  declined team invite already deletes the membership row, so declined doubles players drop
+  out naturally.
+- **Item 6 — clear stale invites.** Committing a still-pending player to a match (only
+  possible when acceptance isn't required) promotes their invite to a confirmed participant
+  (`invited`→`registered` for singles, `invited`→`active` for doubles), so the "pending
+  invite" notification clears.
+- Tests: new `require-acceptance.integration.test.ts` (4 cases) + updated `team-rename` and
+  `team-and-score-permissions` suites for the new rename behaviour. Full suite **187** green.
+
 ### Status (2026-08-28) — Smash ACTIVE again; separate apps planned
 Everything through **Phase 44 is live on prod** (https://www.smashhero.app). Smash development is
 active again (see roadmap below). Two SEPARATE apps are planned in their own repos under the same
