@@ -11,6 +11,7 @@ import { useToast } from "@/components/ui/Toast";
 import { useAuth } from "@/components/AuthProvider";
 import { PERMS } from "@/lib/client/perms";
 import { formatDateTime } from "@/lib/client/format";
+import { eligibleTournamentPlayerStatuses, type TournamentPlayerStatus } from "@/lib/domain/constants";
 import { GenerateFixturesModal } from "./FixtureModals";
 import type { TeamDTO, TournamentPlayerDTO, PairingChangeDTO } from "./types";
 
@@ -20,12 +21,15 @@ export function TeamsTab({
   tournamentId,
   format,
   canManage: canManageTournament = false,
+  requireAcceptance = true,
 }: {
   tournamentId: string;
   format: string;
   /** Whether the VIEWER manages THIS tournament. Team-building actions require
    *  it, so the tab reads like the others for non-owners. */
   canManage?: boolean;
+  /** When false, still-pending (invited) players are available for team building. */
+  requireAcceptance?: boolean;
 }) {
   const { can } = useAuth();
   const toast = useToast();
@@ -51,12 +55,14 @@ export function TeamsTab({
 
   const teams = useMemo(() => data ?? [], [data]);
 
-  // Registered players not already on a team → available for random pairing.
+  // Eligible players not already on a team → available for pairing. Pending
+  // ("invited") players count only when the tournament doesn't require acceptance.
   const unassigned = useMemo(() => {
-    const registered = (players ?? []).filter((tp) => tp.status === "registered");
+    const eligible = new Set(eligibleTournamentPlayerStatuses(requireAcceptance));
+    const available = (players ?? []).filter((tp) => eligible.has(tp.status as TournamentPlayerStatus));
     const assigned = new Set(teams.flatMap((t) => t.teamPlayers.map((tp) => tp.player.id)));
-    return registered.filter((tp) => !assigned.has(tp.player.id)).map((tp) => tp.player);
-  }, [players, teams]);
+    return available.filter((tp) => !assigned.has(tp.player.id)).map((tp) => tp.player);
+  }, [players, teams, requireAcceptance]);
 
   async function refresh() {
     await Promise.all([mutate(), mutatePlayers()]);
@@ -182,6 +188,7 @@ export function TeamsTab({
       {creating && (
         <CreateTeamModal
           tournamentId={tournamentId}
+          requireAcceptance={requireAcceptance}
           onClose={() => setCreating(false)}
           onCreated={() => { refresh(); toast.success("Team created"); }}
         />
@@ -200,6 +207,7 @@ export function TeamsTab({
         <GenerateFixturesModal
           tournamentId={tournamentId}
           format={format}
+          requireAcceptance={requireAcceptance}
           onClose={() => setGenMatches(false)}
           onDone={() => toast.success("Matches generated — see the Matches tab")}
         />
@@ -209,7 +217,7 @@ export function TeamsTab({
         <ChangePairModal
           team={pairFor}
           teams={teams}
-          registered={(players ?? []).filter((tp) => tp.status === "registered").map((tp) => tp.player)}
+          registered={(players ?? []).filter((tp) => eligibleTournamentPlayerStatuses(requireAcceptance).includes(tp.status as TournamentPlayerStatus)).map((tp) => tp.player)}
           onClose={() => setPairFor(null)}
           onDone={() => { refresh(); toast.success("Team pair updated"); }}
         />
@@ -524,10 +532,12 @@ function Row({ label, value }: { label: string; value: string }) {
 
 function CreateTeamModal({
   tournamentId,
+  requireAcceptance,
   onClose,
   onCreated,
 }: {
   tournamentId: string;
+  requireAcceptance: boolean;
   onClose: () => void;
   onCreated: () => void;
 }) {
@@ -539,7 +549,10 @@ function CreateTeamModal({
   const [saving, setSaving] = useState(false);
 
   const { data } = useSWR<TournamentPlayerDTO[]>(`/api/tournaments/${tournamentId}/players`, swrFetcher);
-  const players = data ?? [];
+  // Only players eligible to play (pending count only when acceptance isn't
+  // required; declined/removed never do) can be put on a team.
+  const eligible = new Set(eligibleTournamentPlayerStatuses(requireAcceptance));
+  const players = (data ?? []).filter((tp) => eligible.has(tp.status as TournamentPlayerStatus));
   const sameError = p1 && p2 && p1 === p2 ? "Pick two different players" : undefined;
 
   async function save() {
