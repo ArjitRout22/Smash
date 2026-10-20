@@ -24,6 +24,7 @@ export default function CreateTournamentPage() {
     endDate: "",
     format: "singles",
     visibility: "private",
+    requireAcceptance: true,
   });
 
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
@@ -43,6 +44,7 @@ export default function CreateTournamentPage() {
         endDate: form.endDate || undefined,
         format: form.format,
         visibility: form.visibility,
+        requireAcceptance: form.requireAcceptance,
       };
       const t = await api.post<{ id: string }>("/api/tournaments", body);
       toast.success("Tournament created");
@@ -93,6 +95,20 @@ export default function CreateTournamentPage() {
               <Input id="endDate" type="date" value={form.endDate} onChange={set("endDate")} />
             </Field>
           </div>
+          <label className="flex items-start gap-3 rounded-xl border border-[var(--border)] bg-surface-2/40 p-4">
+            <input
+              type="checkbox"
+              checked={!form.requireAcceptance}
+              onChange={(e) => setForm((f) => ({ ...f, requireAcceptance: !e.target.checked }))}
+              className="mt-0.5 h-4 w-4"
+            />
+            <span>
+              <span className="block text-sm font-medium text-foreground">Add players without waiting for acceptance</span>
+              <span className="block text-xs text-muted">
+                Players still get their invite, but you can add them to matches right away. Anyone who declines is left out; those who haven&apos;t replied yet can still play. You can change this later in Settings.
+              </span>
+            </span>
+          </label>
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="ghost" onClick={() => router.back()}>Cancel</Button>
             <Button type="submit" loading={loading} disabled={form.name.trim().length < 2}>Create tournament</Button>

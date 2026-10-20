@@ -70,6 +70,7 @@ export const CreateTournamentSchema = z
     endDate: isoDate.optional(),
     format: z.enum(TOURNAMENT_FORMATS).default("singles"),
     visibility: z.enum(TOURNAMENT_VISIBILITIES).default("private"),
+    requireAcceptance: z.boolean().optional(), // defaults to true in createTournament
     organizerId: z.string().uuid().optional(),
     pointsConfig: PointsConfigSchema.optional(),
   })
@@ -90,6 +91,7 @@ export const UpdateTournamentSchema = z.object({
   status: z.enum(TOURNAMENT_STATUSES).optional(),
   visibility: z.enum(TOURNAMENT_VISIBILITIES).optional(),
   joinRequestsOpen: z.boolean().optional(),
+  requireAcceptance: z.boolean().optional(),
   organizerId: z.string().uuid().optional(),
   pointsConfig: PointsConfigSchema.nullable().optional(),
 });

@@ -193,13 +193,23 @@ export async function listMatches(
   return { items: items.map(serializeMatch), total };
 }
 
+// Which TournamentPlayer statuses may be put into a match. A player who has
+// accepted is "registered"; one the organizer invited but who hasn't replied is
+// "invited" (pending). When the tournament doesn't require acceptance, pending
+// players are eligible too — but a "declined"/"removed"/"requested" player never
+// is, so rejecting an invite always keeps that player out of matches.
+function eligibleTournamentPlayerStatuses(requireAcceptance: boolean): string[] {
+  return requireAcceptance ? ["registered"] : ["registered", "invited"];
+}
+
 async function validateSides(opts: {
   tournamentId: string;
   matchType: string;
+  requireAcceptance: boolean;
   sideA?: SideRef;
   sideB?: SideRef;
 }) {
-  const { tournamentId, matchType, sideA, sideB } = opts;
+  const { tournamentId, matchType, requireAcceptance, sideA, sideB } = opts;
   const sides = [sideA, sideB].filter(Boolean) as SideRef[];
 
   for (const s of sides) {
@@ -227,28 +237,42 @@ async function validateSides(opts: {
     }
   }
 
-  // Eligibility: participants must belong to the tournament.
+  // Eligibility: participants must belong to the tournament and be eligible to
+  // play (see eligibleTournamentPlayerStatuses — a declined/removed player is
+  // never eligible, even when acceptance isn't required).
+  const eligible = eligibleTournamentPlayerStatuses(requireAcceptance);
   for (const s of sides) {
     if (s.playerId) {
       const reg = await prisma.tournamentPlayer.findUnique({
         where: { tournamentId_playerId: { tournamentId, playerId: s.playerId } },
       });
       if (!reg) throw Errors.invalidMatchConfig("Player is not registered in this tournament");
+      if (!eligible.includes(reg.status))
+        throw Errors.invalidMatchConfig(
+          requireAcceptance
+            ? "Player hasn't accepted their invite yet"
+            : "Player has declined their invite and can't be used in matches"
+        );
     }
     if (s.teamId) {
       const team = await prisma.team.findFirst({ where: { id: s.teamId, deletedAt: null } });
       if (!team) throw Errors.invalidMatchConfig("Team not found");
       if (team.tournamentId && team.tournamentId !== tournamentId)
         throw Errors.invalidMatchConfig("Team belongs to a different tournament");
-      const pending = await prisma.teamPlayer.count({ where: { teamId: s.teamId, status: "invited" } });
-      if (pending > 0)
-        throw Errors.invalidMatchConfig("This team has a pending invite — all members must accept before it can play");
+      // A team invite that's been DECLINED deletes the membership row, so a
+      // declined player never reaches here. A still-pending "invited" member only
+      // blocks play when the tournament requires acceptance.
+      if (requireAcceptance) {
+        const pending = await prisma.teamPlayer.count({ where: { teamId: s.teamId, status: "invited" } });
+        if (pending > 0)
+          throw Errors.invalidMatchConfig("This team has a pending invite — all members must accept before it can play");
+      }
     }
   }
 }
 
 export async function createMatch(input: CreateInput, actor: AuthUser) {
-  await loadOwnedTournament(actor, input.tournamentId);
+  const tournament = await loadOwnedTournament(actor, input.tournamentId);
 
   if (input.stageId) {
     const stage = await prisma.stage.findFirst({ where: { id: input.stageId, tournamentId: input.tournamentId } });
@@ -258,6 +282,7 @@ export async function createMatch(input: CreateInput, actor: AuthUser) {
   await validateSides({
     tournamentId: input.tournamentId,
     matchType: input.matchType,
+    requireAcceptance: tournament.requireAcceptance,
     sideA: input.sideA,
     sideB: input.sideB,
   });
@@ -292,6 +317,22 @@ export async function createMatch(input: CreateInput, actor: AuthUser) {
       select: { id: true },
     });
     await attachMatchSnapshots(tx, m.id);
+    // Item 6: committing a still-pending player to a match (only possible when
+    // acceptance isn't required) clears their now-moot invite notification.
+    if (!tournament.requireAcceptance) {
+      const playerIds = participants.map((p) => p.playerId).filter(Boolean) as string[];
+      const teamIdList = participants.map((p) => p.teamId).filter(Boolean) as string[];
+      if (playerIds.length)
+        await tx.tournamentPlayer.updateMany({
+          where: { tournamentId: input.tournamentId, playerId: { in: playerIds }, status: "invited" },
+          data: { status: "registered" },
+        });
+      if (teamIdList.length)
+        await tx.teamPlayer.updateMany({
+          where: { teamId: { in: teamIdList }, status: "invited" },
+          data: { status: "active" },
+        });
+    }
     return tx.match.findUniqueOrThrow({ where: { id: m.id }, include: matchInclude });
   });
   await audit({ actorUserId: actor.id, action: "match.created", entityType: "Match", entityId: match.id, newValue: { tournamentId: match.tournamentId } });
@@ -311,7 +352,8 @@ function groupLabel(i: number): string {
  * (doubles); all must belong to the tournament.
  */
 export async function generateFixtures(tournamentId: string, input: GenerateFixturesInput, actor: AuthUser) {
-  await loadOwnedTournament(actor, tournamentId);
+  const tournament = await loadOwnedTournament(actor, tournamentId);
+  const { requireAcceptance } = tournament;
 
   const usesGroups = input.mode === "groups" || input.mode === "group_stage";
   const allIds = usesGroups ? (input.groups ?? []).flat() : (input.participantIds ?? []);
@@ -339,15 +381,22 @@ export async function generateFixtures(tournamentId: string, input: GenerateFixt
   const teamMembers = new Map<string, Member[]>();
   const teamNameById = new Map<string, string>();
 
-  // Validate every participant belongs to the tournament.
+  // Validate every participant belongs to the tournament and is eligible to play.
+  // When the tournament doesn't require acceptance, still-pending ("invited")
+  // players count; a declined/removed player never does (see
+  // eligibleTournamentPlayerStatuses).
   if (input.matchType === "singles") {
     const regs = await prisma.tournamentPlayer.findMany({
-      where: { tournamentId, status: "registered", playerId: { in: allIds } },
+      where: { tournamentId, status: { in: eligibleTournamentPlayerStatuses(requireAcceptance) }, playerId: { in: allIds } },
       select: { playerId: true },
     });
     const regSet = new Set(regs.map((r) => r.playerId));
     if (allIds.some((id) => !regSet.has(id))) {
-      throw Errors.invalidMatchConfig("Every selected player must be registered in this tournament");
+      throw Errors.invalidMatchConfig(
+        requireAcceptance
+          ? "Every selected player must have accepted their invite. Turn off “require acceptance” in Settings to schedule players who haven't replied."
+          : "Every selected player must belong to this tournament and not have declined their invite."
+      );
     }
   } else {
     const teams = await prisma.team.findMany({
@@ -371,14 +420,19 @@ export async function generateFixtures(tournamentId: string, input: GenerateFixt
       if (!t) throw Errors.invalidMatchConfig("One of the selected teams doesn't exist");
       if (t.tournamentId && t.tournamentId !== tournamentId)
         throw Errors.invalidMatchConfig("A selected team belongs to a different tournament");
-      if (t.teamPlayers.some((m) => m.status === "invited"))
+      // A declined team invite deletes the membership row, so a declined player is
+      // already gone. A still-pending "invited" member only blocks fixtures when
+      // the tournament requires acceptance; otherwise they count toward the pair.
+      if (requireAcceptance && t.teamPlayers.some((m) => m.status === "invited"))
         throw Errors.invalidMatchConfig(`"${t.name}" has a pending invite — all members must accept before fixtures can be generated`);
-      const active = t.teamPlayers.filter((m) => m.status === "active");
-      if (active.length !== 2)
+      const playable = requireAcceptance
+        ? t.teamPlayers.filter((m) => m.status === "active")
+        : t.teamPlayers.filter((m) => m.status === "active" || m.status === "invited");
+      if (playable.length !== 2)
         throw Errors.invalidMatchConfig(
-          `Each doubles team must have exactly 2 active players — "${t.name}" has ${active.length}. Complete every team before generating fixtures.`
+          `Each doubles team must have exactly 2 players — "${t.name}" has ${playable.length}. Complete every team before generating fixtures.`
         );
-      teamMembers.set(id, active.map((m) => ({ playerId: m.playerId, displayName: m.player.displayName, position: m.position })));
+      teamMembers.set(id, playable.map((m) => ({ playerId: m.playerId, displayName: m.player.displayName, position: m.position })));
       teamNameById.set(id, t.name);
     }
   }
@@ -471,6 +525,25 @@ export async function generateFixtures(tournamentId: string, input: GenerateFixt
       await tx.match.createMany({ data: matchRows });
       await tx.matchParticipant.createMany({ data: partRows });
       if (snapRows.length) await tx.matchParticipantPlayer.createMany({ data: snapRows });
+
+      // Item 6: once a still-pending player is committed to a fixture (only
+      // possible when acceptance isn't required), their invite no longer needs a
+      // reply — promote it to a confirmed participant so the stale "pending
+      // invite" notification clears. A declined/removed player was never eligible,
+      // so this only ever touches "invited" rows.
+      if (!requireAcceptance) {
+        if (input.matchType === "singles") {
+          await tx.tournamentPlayer.updateMany({
+            where: { tournamentId, playerId: { in: allIds }, status: "invited" },
+            data: { status: "registered" },
+          });
+        } else {
+          await tx.teamPlayer.updateMany({
+            where: { teamId: { in: allIds }, status: "invited" },
+            data: { status: "active" },
+          });
+        }
+      }
     },
     { timeout: 30000 }
   );
@@ -489,7 +562,7 @@ export async function generateFixtures(tournamentId: string, input: GenerateFixt
 export async function updateMatch(id: string, input: UpdateInput, actor: AuthUser) {
   const existing = await prisma.match.findFirst({
     where: { id, deletedAt: null },
-    include: { participants: true, tournament: { select: { organizationId: true, organizerId: true, createdById: true } } },
+    include: { participants: true, tournament: { select: { organizationId: true, organizerId: true, createdById: true, requireAcceptance: true } } },
   });
   if (!existing) throw Errors.notFound("Match");
   assertOrgAccess(actor, existing.tournament.organizationId);
@@ -538,6 +611,7 @@ export async function updateMatch(id: string, input: UpdateInput, actor: AuthUse
     await validateSides({
       tournamentId: existing.tournamentId,
       matchType: existing.matchType,
+      requireAcceptance: existing.tournament.requireAcceptance,
       sideA: input.sideA,
       sideB: input.sideB,
     });

@@ -44,6 +44,7 @@ export function SettingsTab({ tournament, onChanged }: { tournament: TournamentD
     status: tournament.status,
     visibility: tournament.visibility,
     joinRequestsOpen: tournament.joinRequestsOpen ?? true,
+    requireAcceptance: tournament.requireAcceptance ?? true,
     startDate: toDateInput(tournament.startDate),
     endDate: toDateInput(tournament.endDate),
   });
@@ -71,6 +72,7 @@ export function SettingsTab({ tournament, onChanged }: { tournament: TournamentD
         status: form.status,
         visibility: form.visibility,
         joinRequestsOpen: form.joinRequestsOpen,
+        requireAcceptance: form.requireAcceptance,
         startDate: form.startDate || null,
         endDate: form.endDate || null,
       });
@@ -123,6 +125,20 @@ export function SettingsTab({ tournament, onChanged }: { tournament: TournamentD
                 <Input type="date" min={form.startDate || undefined} value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} />
               </Field>
             </div>
+            <label className="flex items-start gap-3 rounded-xl border border-[var(--border)] bg-surface-2/40 p-4">
+              <input
+                type="checkbox"
+                checked={!form.requireAcceptance}
+                onChange={(e) => setForm({ ...form, requireAcceptance: !e.target.checked })}
+                className="mt-0.5 h-4 w-4"
+              />
+              <span>
+                <span className="block text-sm font-medium text-foreground">Add players without waiting for acceptance</span>
+                <span className="block text-xs text-muted">
+                  Players still receive their invite, but you can add them to matches straight away. Anyone who declines is left out; those who haven&apos;t replied can still play.
+                </span>
+              </span>
+            </label>
             {form.visibility === "public" && (
               <label className="flex items-start gap-3 rounded-xl border border-[var(--border)] bg-surface-2/40 p-4">
                 <input

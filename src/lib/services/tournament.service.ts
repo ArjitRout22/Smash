@@ -165,6 +165,7 @@ export async function createTournament(input: CreateInput, actor: AuthUser) {
       endDate: input.endDate,
       format: input.format,
       visibility: input.visibility,
+      requireAcceptance: input.requireAcceptance ?? true,
       organizerId: input.organizerId ?? actor.id,
       createdById: actor.id,
       organizationId: ownOrgId(actor),
@@ -216,6 +217,7 @@ export async function updateTournament(id: string, input: UpdateInput, actor: Au
       status: input.status ?? undefined,
       visibility: input.visibility ?? undefined,
       joinRequestsOpen: input.joinRequestsOpen ?? undefined,
+      requireAcceptance: input.requireAcceptance ?? undefined,
       organizerId: input.organizerId ?? undefined,
       pointsConfig: input.pointsConfig === undefined ? undefined : input.pointsConfig ?? undefined,
     },
@@ -559,7 +561,7 @@ export async function respondToInvitation(actor: AuthUser, tournamentId: string,
 export async function loadOwnedTournament(actor: AuthUser, tournamentId: string) {
   const t = await prisma.tournament.findFirst({
     where: { id: tournamentId, deletedAt: null },
-    select: { id: true, organizationId: true, format: true, name: true },
+    select: { id: true, organizationId: true, format: true, name: true, requireAcceptance: true },
   });
   if (!t) throw Errors.notFound("Tournament");
   assertOrgAccess(actor, t.organizationId);

@@ -27,10 +27,9 @@ export function TeamsTab({
    *  it, so the tab reads like the others for non-owners. */
   canManage?: boolean;
 }) {
-  const { can, user } = useAuth();
+  const { can } = useAuth();
   const toast = useToast();
   const canManage = canManageTournament && can(PERMS.TEAM_MANAGE);
-  const isAdmin = user?.role === "ADMIN"; // only a platform admin may rename a team
   const [renameFor, setRenameFor] = useState<TeamDTO | null>(null);
   const [creating, setCreating] = useState(false);
   const [randomOpen, setRandomOpen] = useState(false);
@@ -128,16 +127,12 @@ export function TeamsTab({
                   </h3>
                   <div className="flex items-center gap-2">
                     <Badge color="slate">{team.teamType}</Badge>
-                    {/* Edit-name CTA only for managers/admins — joined players see
-                        the Teams tab fully read-only. Admins rename; a non-admin
-                        manager is told to contact support. */}
+                    {/* Edit-name CTA for the organizer/managers — joined players
+                        see the Teams tab fully read-only. A rename relabels the
+                        team everywhere it appears (scheduled and completed). */}
                     {canManage && (
                       <button
-                        onClick={() =>
-                          isAdmin
-                            ? setRenameFor(team)
-                            : toast.error("Only an admin can rename a team. Please contact support@smashhero.app to request a change.")
-                        }
+                        onClick={() => setRenameFor(team)}
                         className="text-muted hover:text-foreground"
                         aria-label="Edit team name"
                       >
@@ -379,7 +374,7 @@ function ChangePairModal({
   );
 }
 
-/** Admin-only: rename a team. Applies to the team and its still-scheduled fixtures. */
+/** Rename a team. The new name takes effect on every match the team appears in. */
 function RenameTeamModal({ team, onClose, onSaved }: { team: TeamDTO; onClose: () => void; onSaved: () => void }) {
   const toast = useToast();
   const [name, setName] = useState(team.name);
@@ -416,7 +411,7 @@ function RenameTeamModal({ team, onClose, onSaved }: { team: TeamDTO; onClose: (
       <Field label="Team name">
         <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={120} autoFocus />
       </Field>
-      <p className="mt-2 text-xs text-muted">Renaming applies to this team and its still-scheduled matches. Completed matches keep the name they were played under.</p>
+      <p className="mt-2 text-xs text-muted">The new name takes effect everywhere this team appears, including matches that have already been played.</p>
     </Modal>
   );
 }

@@ -67,18 +67,27 @@ d("team-rename + scoring permissions (integration)", () => {
     return { tournamentId: t.id, teamId: team.id };
   }
 
-  // --- Task 2: rename is admin-only ----------------------------------------
-  it("a non-admin (organizer) cannot rename a team", async () => {
+  // --- Task 2: the organizer (and platform admin) can rename ----------------
+  it("the tournament's organizer can rename a team", async () => {
     const { teamId } = await teamInOrg();
-    await expect(updateTeam(teamId, { name: "Hacked" }, organizer)).rejects.toMatchObject({ code: "FORBIDDEN" });
-    const row = await prisma.team.findUniqueOrThrow({ where: { id: teamId } });
-    expect(row.name).toBe("Original");
+    const updated = await updateTeam(teamId, { name: "Renamed by Organizer" }, organizer);
+    expect(updated.name).toBe("Renamed by Organizer");
   });
 
   it("a platform admin can rename a team", async () => {
     const { teamId } = await teamInOrg();
     const updated = await updateTeam(teamId, { name: "Renamed by Admin" }, admin);
     expect(updated.name).toBe("Renamed by Admin");
+  });
+
+  it("someone from another org cannot rename a team", async () => {
+    const { teamId } = await teamInOrg();
+    const otherOrg = await prisma.organization.create({ data: { name: `Other Org ${Date.now()}`, slug: `other-org-${Date.now()}-${Math.round(performance.now())}` } });
+    extraOrgIds.push(otherOrg.id);
+    const outsider = await mkUser("ORGANIZER", otherOrg.id);
+    await expect(updateTeam(teamId, { name: "Hacked" }, outsider)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    const row = await prisma.team.findUniqueOrThrow({ where: { id: teamId } });
+    expect(row.name).toBe("Original");
   });
 
   // --- Task 4: canScore is organizer/admin/nominated-scorer only ------------
