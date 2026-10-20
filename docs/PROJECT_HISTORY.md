@@ -1147,6 +1147,18 @@ Two PRs addressing an organizer's feedback list. Both live on prod (Vercel deplo
 - Tests: new `require-acceptance.integration.test.ts` (4 cases) + updated `team-rename` and
   `team-and-score-permissions` suites for the new rename behaviour. Full suite **187** green.
 
+**Follow-up (PR #75)** — `requireAcceptance` was only wired into fixtures generation and
+single-match validation; the **team-building** surfaces still filtered to `registered` only,
+so a pending player was missing from team creation (the "Create random teams" modal showed
+5 available of 6). Hoisted `eligibleTournamentPlayerStatuses(requireAcceptance)` into
+`domain/constants` and applied it on **every** surface that decides who can play:
+`createRandomTeams`, `classifyTeamPlayers` (manual team create/edit), `changeTeamPair`, plus
+the `TeamsTab` / `FixtureModals` / `MatchesTab` player pickers (with `requireAcceptance`
+threaded from the tournament detail through both the in-app and discover pages). A
+declined/removed player is never eligible anywhere. An existing tournament keeps
+`requireAcceptance = true`, so its behaviour is unchanged until the organizer turns the
+option off. Full suite **190** green.
+
 ### Status (2026-08-28) — Smash ACTIVE again; separate apps planned
 Everything through **Phase 44 is live on prod** (https://www.smashhero.app). Smash development is
 active again (see roadmap below). Two SEPARATE apps are planned in their own repos under the same
