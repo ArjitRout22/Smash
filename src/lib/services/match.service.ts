@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db/prisma";
 import { Errors } from "@/lib/errors";
 import { audit } from "@/lib/audit";
 import { skipTake, type Pagination } from "@/lib/api/pagination";
-import { MATCH_TRANSITIONS, type MatchStatus, type Side } from "@/lib/domain/constants";
+import { MATCH_TRANSITIONS, eligibleTournamentPlayerStatuses, type MatchStatus, type Side, type TournamentPlayerStatus } from "@/lib/domain/constants";
 import { buildBracket, type BracketMatchInput } from "@/lib/engines/bracket";
 import { crossGroupSchedule, groupStageSchedule, roundRobinSchedule } from "@/lib/engines/schedule";
 import type { AuthUser } from "@/lib/auth/authorize";
@@ -193,15 +193,6 @@ export async function listMatches(
   return { items: items.map(serializeMatch), total };
 }
 
-// Which TournamentPlayer statuses may be put into a match. A player who has
-// accepted is "registered"; one the organizer invited but who hasn't replied is
-// "invited" (pending). When the tournament doesn't require acceptance, pending
-// players are eligible too — but a "declined"/"removed"/"requested" player never
-// is, so rejecting an invite always keeps that player out of matches.
-function eligibleTournamentPlayerStatuses(requireAcceptance: boolean): string[] {
-  return requireAcceptance ? ["registered"] : ["registered", "invited"];
-}
-
 async function validateSides(opts: {
   tournamentId: string;
   matchType: string;
@@ -247,7 +238,7 @@ async function validateSides(opts: {
         where: { tournamentId_playerId: { tournamentId, playerId: s.playerId } },
       });
       if (!reg) throw Errors.invalidMatchConfig("Player is not registered in this tournament");
-      if (!eligible.includes(reg.status))
+      if (!eligible.includes(reg.status as TournamentPlayerStatus))
         throw Errors.invalidMatchConfig(
           requireAcceptance
             ? "Player hasn't accepted their invite yet"

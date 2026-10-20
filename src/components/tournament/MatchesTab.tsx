@@ -10,7 +10,7 @@ import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { useAuth } from "@/components/AuthProvider";
 import { PERMS } from "@/lib/client/perms";
-import { KNOCKOUT_STAGE_TYPES } from "@/lib/domain/constants";
+import { KNOCKOUT_STAGE_TYPES, eligibleTournamentPlayerStatuses, type TournamentPlayerStatus } from "@/lib/domain/constants";
 import { ScoreEntryModal, type ScorableMatch } from "@/components/ScoreEntryModal";
 import { MatchComments } from "@/components/MatchComments";
 import { BracketTab } from "./BracketTab";
@@ -43,6 +43,7 @@ export function MatchesTab({
   canManage: canManageTournament = false,
   canScore = false,
   canCancel = false,
+  requireAcceptance = true,
 }: {
   tournamentId: string;
   format: string;
@@ -56,6 +57,8 @@ export function MatchesTab({
   /** Whether the VIEWER may CANCEL a match — a platform admin or the tournament's
    *  creator only. Narrower than canManage; server-computed. */
   canCancel?: boolean;
+  /** When false, still-pending (invited) players can be put into the draw. */
+  requireAcceptance?: boolean;
 }) {
   const { can } = useAuth();
   const toast = useToast();
@@ -267,15 +270,16 @@ export function MatchesTab({
         <CreateMatchModal
           tournamentId={tournamentId}
           format={format}
+          requireAcceptance={requireAcceptance}
           onClose={() => setCreating(false)}
           onCreated={() => mutate()}
         />
       )}
       {genFixtures && (
-        <GenerateFixturesModal tournamentId={tournamentId} format={format} onClose={() => setGenFixtures(false)} onDone={() => { mutate(); mutateStages(); }} />
+        <GenerateFixturesModal tournamentId={tournamentId} format={format} requireAcceptance={requireAcceptance} onClose={() => setGenFixtures(false)} onDone={() => { mutate(); mutateStages(); }} />
       )}
       {genBracket && (
-        <GenerateBracketModal tournamentId={tournamentId} format={format} onClose={() => setGenBracket(false)} onDone={() => { mutate(); mutateStages(); }} />
+        <GenerateBracketModal tournamentId={tournamentId} format={format} requireAcceptance={requireAcceptance} onClose={() => setGenBracket(false)} onDone={() => { mutate(); mutateStages(); }} />
       )}
 
       <ScoreEntryModal open={Boolean(scoreMatch)} match={scoreMatch} onClose={() => setScoreMatch(null)} onSaved={() => { mutate(); mutateStages(); }} />
@@ -463,11 +467,13 @@ function LiveSide({ label, score, canScore, onSet }: { label: string; score: num
 function CreateMatchModal({
   tournamentId,
   format,
+  requireAcceptance,
   onClose,
   onCreated,
 }: {
   tournamentId: string;
   format: string;
+  requireAcceptance: boolean;
   onClose: () => void;
   onCreated: () => void;
 }) {
@@ -488,9 +494,14 @@ function CreateMatchModal({
   );
   const { data: teams } = useSWR<TeamDTO[]>(isTeam ? `/api/teams?tournamentId=${tournamentId}` : null, swrFetcher);
 
+  // Singles: only players eligible to play are selectable (pending count only when
+  // acceptance isn't required; declined/removed never do).
+  const eligibleStatuses = new Set(eligibleTournamentPlayerStatuses(requireAcceptance));
   const options: { id: string; label: string }[] = isTeam
     ? (teams ?? []).map((t) => ({ id: t.id, label: t.name }))
-    : (playersResp ?? []).map((tp) => ({ id: tp.player.id, label: tp.player.displayName }));
+    : (playersResp ?? [])
+        .filter((tp) => eligibleStatuses.has(tp.status as TournamentPlayerStatus))
+        .map((tp) => ({ id: tp.player.id, label: tp.player.displayName }));
 
   const sameError = a && b && a === b ? "Choose two different sides" : undefined;
 

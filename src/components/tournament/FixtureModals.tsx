@@ -6,7 +6,7 @@ import { api, ApiClientError, swrFetcher } from "@/lib/client/api";
 import { Button, Select, Input, Field } from "@/components/ui/primitives";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
-import { STAGE_TYPES } from "@/lib/domain/constants";
+import { STAGE_TYPES, eligibleTournamentPlayerStatuses, type TournamentPlayerStatus } from "@/lib/domain/constants";
 import { titleCase } from "@/lib/client/format";
 import type { TournamentPlayerDTO, TeamDTO } from "./types";
 
@@ -63,11 +63,14 @@ function groupLabelUi(i: number): string {
 export function GenerateFixturesModal({
   tournamentId,
   format,
+  requireAcceptance = true,
   onClose,
   onDone,
 }: {
   tournamentId: string;
   format: string;
+  /** When false, still-pending (invited) players can be put into fixtures. */
+  requireAcceptance?: boolean;
   onClose: () => void;
   onDone: () => void;
 }) {
@@ -88,9 +91,15 @@ export function GenerateFixturesModal({
   const { data: playersResp } = useSWR<TournamentPlayerDTO[]>(!isTeam ? `/api/tournaments/${tournamentId}/players` : null, swrFetcher);
   const { data: teams } = useSWR<TeamDTO[]>(isTeam ? `/api/teams?tournamentId=${tournamentId}` : null, swrFetcher);
 
+  // Singles: only players eligible to play are selectable (pending count only when
+  // acceptance isn't required; declined/removed never do). Doubles picks teams,
+  // whose membership eligibility is enforced server-side.
+  const eligibleStatuses = new Set(eligibleTournamentPlayerStatuses(requireAcceptance));
   const options: { id: string; label: string }[] = isTeam
     ? (teams ?? []).map((t) => ({ id: t.id, label: t.name }))
-    : (playersResp ?? []).map((tp) => ({ id: tp.player.id, label: tp.player.displayName }));
+    : (playersResp ?? [])
+        .filter((tp) => eligibleStatuses.has(tp.status as TournamentPlayerStatus))
+        .map((tp) => ({ id: tp.player.id, label: tp.player.displayName }));
 
   function toggle(id: string) {
     if (selected.includes(id)) {
@@ -236,11 +245,14 @@ export function GenerateFixturesModal({
 export function GenerateBracketModal({
   tournamentId,
   format,
+  requireAcceptance = true,
   onClose,
   onDone,
 }: {
   tournamentId: string;
   format: string;
+  /** When false, still-pending (invited) players can be put into the bracket. */
+  requireAcceptance?: boolean;
   onClose: () => void;
   onDone: () => void;
 }) {
@@ -253,9 +265,12 @@ export function GenerateBracketModal({
   const { data: playersResp } = useSWR<TournamentPlayerDTO[]>(!isTeam ? `/api/tournaments/${tournamentId}/players` : null, swrFetcher);
   const { data: teams } = useSWR<TeamDTO[]>(isTeam ? `/api/teams?tournamentId=${tournamentId}` : null, swrFetcher);
 
+  const eligibleStatuses = new Set(eligibleTournamentPlayerStatuses(requireAcceptance));
   const options: { id: string; label: string }[] = isTeam
     ? (teams ?? []).map((t) => ({ id: t.id, label: t.name }))
-    : (playersResp ?? []).map((tp) => ({ id: tp.player.id, label: tp.player.displayName }));
+    : (playersResp ?? [])
+        .filter((tp) => eligibleStatuses.has(tp.status as TournamentPlayerStatus))
+        .map((tp) => ({ id: tp.player.id, label: tp.player.displayName }));
 
   const toggle = (id: string) => setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
 

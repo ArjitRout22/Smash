@@ -5,6 +5,7 @@ import { Errors } from "@/lib/errors";
 import { audit } from "@/lib/audit";
 import type { AuthUser } from "@/lib/auth/authorize";
 import { orgFilter, assertOrgAccess, ownOrgId, isPlatformAdmin } from "@/lib/auth/tenancy";
+import { eligibleTournamentPlayerStatuses } from "@/lib/domain/constants";
 import { loadViewableTournament } from "@/lib/services/tournament.service";
 import { attachMatchSnapshots } from "@/lib/services/match.service";
 import type { CreateTeamSchema, UpdateTeamSchema, ChangeTeamPairInput } from "@/lib/validation/schemas";
@@ -42,13 +43,22 @@ async function classifyTeamPlayers(
   const status = new Map<string, MemberStatus>();
 
   if (tournamentId) {
+    // When the tournament doesn't require acceptance, a still-pending ("invited")
+    // player can be put straight onto a team; a declined/removed player never can.
+    const tournament = await prisma.tournament.findUnique({ where: { id: tournamentId }, select: { requireAcceptance: true } });
+    const eligible = eligibleTournamentPlayerStatuses(tournament?.requireAcceptance ?? true);
     const registered = await prisma.tournamentPlayer.findMany({
-      where: { tournamentId, playerId: { in: playerIds }, status: "registered" },
+      where: { tournamentId, playerId: { in: playerIds }, status: { in: eligible } },
       select: { playerId: true },
     });
     const regSet = new Set(registered.map((r) => r.playerId));
     for (const p of found) {
-      if (!regSet.has(p.id)) throw Errors.validation("All players must be registered in this tournament");
+      if (!regSet.has(p.id))
+        throw Errors.validation(
+          (tournament?.requireAcceptance ?? true)
+            ? "All players must have accepted their invite. Turn off “require acceptance” in Settings to add players who haven't replied."
+            : "All players must belong to this tournament and not have declined their invite."
+        );
       status.set(p.id, "active");
     }
     return status;
@@ -140,14 +150,16 @@ export async function createTeam(input: CreateInput, actor: AuthUser) {
 export async function createRandomTeams(actor: AuthUser, tournamentId: string) {
   const t = await prisma.tournament.findFirst({
     where: { id: tournamentId, deletedAt: null },
-    select: { organizationId: true },
+    select: { organizationId: true, requireAcceptance: true },
   });
   if (!t) throw Errors.notFound("Tournament");
   assertOrgAccess(actor, t.organizationId);
 
   const [registered, assigned, existingCount] = await Promise.all([
     prisma.tournamentPlayer.findMany({
-      where: { tournamentId, status: "registered" },
+      // Include still-pending players when the tournament doesn't require
+      // acceptance, so random pairing matches who's actually available to play.
+      where: { tournamentId, status: { in: eligibleTournamentPlayerStatuses(t.requireAcceptance) } },
       select: { player: { select: { id: true, displayName: true } } },
     }),
     prisma.teamPlayer.findMany({
@@ -173,7 +185,7 @@ export async function createRandomTeams(actor: AuthUser, tournamentId: string) {
   if (pairs.length === 0) {
     throw Errors.validation(
       eligible.length === 0
-        ? "Every registered player is already on a team."
+        ? "Every available player is already on a team."
         : "Need at least 2 unassigned players to form a doubles team."
     );
   }
@@ -254,7 +266,7 @@ export async function changeTeamPair(actor: AuthUser, teamId: string, input: Cha
     where: { id: teamId, deletedAt: null },
     include: {
       teamPlayers: { include: { player: { select: { id: true, displayName: true } } } },
-      tournament: { select: { id: true, organizationId: true, status: true } },
+      tournament: { select: { id: true, organizationId: true, status: true, requireAcceptance: true } },
     },
   });
   if (!team) throw Errors.notFound("Team");
@@ -279,11 +291,16 @@ export async function changeTeamPair(actor: AuthUser, teamId: string, input: Cha
   if (input.inPlayerId === input.outPlayerId) throw Errors.validation("Pick a different replacement player.");
   if (members.some((m) => m.playerId === input.inPlayerId)) throw Errors.validation("That player is already in this team.");
 
-  // Replacement must be registered in this tournament.
+  // Replacement must belong to this tournament and be eligible to play (pending
+  // players count only when acceptance isn't required; declined never do).
   const reg = await prisma.tournamentPlayer.findFirst({
-    where: { tournamentId: team.tournamentId ?? undefined, playerId: input.inPlayerId, status: "registered" },
+    where: {
+      tournamentId: team.tournamentId ?? undefined,
+      playerId: input.inPlayerId,
+      status: { in: eligibleTournamentPlayerStatuses(team.tournament?.requireAcceptance ?? true) },
+    },
   });
-  if (!reg) throw Errors.validation("The replacement must be a player registered in this tournament.");
+  if (!reg) throw Errors.validation("The replacement must be a player in this tournament who hasn't declined their invite.");
 
   // If the replacement is already on ANOTHER team in this tournament, we SWAP —
   // the outgoing player takes their spot — so both teams stay complete pairs

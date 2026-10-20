@@ -55,6 +55,20 @@ export const TOURNAMENT_PLAYER_STATUSES = [
 ] as const;
 export type TournamentPlayerStatus = (typeof TOURNAMENT_PLAYER_STATUSES)[number];
 
+/**
+ * Which tournament-player statuses may be put into a team or match. A player who
+ * accepted their invite is "registered"; one the organizer invited but who
+ * hasn't replied is "invited" (pending). When a tournament doesn't require
+ * acceptance, pending players are eligible too — but a declined/removed/
+ * withdrawn/requested player is NEVER eligible, so rejecting (or being removed)
+ * always keeps a player out of teams and matches. Shared by the fixtures engine,
+ * single-match validation, random/manual team building and pair changes so every
+ * surface agrees on who can play.
+ */
+export function eligibleTournamentPlayerStatuses(requireAcceptance: boolean): TournamentPlayerStatus[] {
+  return requireAcceptance ? ["registered"] : ["registered", "invited"];
+}
+
 export const MATCH_TYPES = ["singles", "doubles"] as const;
 export type MatchType = (typeof MATCH_TYPES)[number];
 

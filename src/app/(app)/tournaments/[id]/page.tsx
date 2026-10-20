@@ -107,8 +107,8 @@ export default function TournamentDetailPage() {
 
       {tab === "Overview" && <OverviewTab tournament={data} />}
       {tab === "Players" && <PlayersTab tournamentId={id} />}
-      {tab === "Teams" && <TeamsTab tournamentId={id} format={data.format} canManage={data.canManage} />}
-      {tab === "Matches" && <MatchesTab tournamentId={id} format={data.format} canManage={data.canManage} canScore={Boolean(data.canScore)} canCancel={Boolean(data.canCancelMatch)} />}
+      {tab === "Teams" && <TeamsTab tournamentId={id} format={data.format} canManage={data.canManage} requireAcceptance={data.requireAcceptance ?? true} />}
+      {tab === "Matches" && <MatchesTab tournamentId={id} format={data.format} canManage={data.canManage} canScore={Boolean(data.canScore)} canCancel={Boolean(data.canCancelMatch)} requireAcceptance={data.requireAcceptance ?? true} />}
       {tab === "Leaderboard" && <LeaderboardTab tournamentId={id} pointsConfig={data.pointsConfig} />}
       {tab === "Settings" && <SettingsTab tournament={data} onChanged={() => mutate()} />}
     </div>

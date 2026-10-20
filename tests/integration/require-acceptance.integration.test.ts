@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db/prisma";
 import { permissionsForRole } from "@/lib/auth/permissions";
 import type { AuthUser } from "@/lib/auth/authorize";
 import { createTournament, addTournamentPlayers } from "@/lib/services/tournament.service";
-import { createTeam } from "@/lib/services/team.service";
+import { createTeam, createRandomTeams } from "@/lib/services/team.service";
 import { generateFixtures } from "@/lib/services/match.service";
 
 /**
@@ -114,5 +114,53 @@ d("require-acceptance opt-out (integration)", () => {
     // Item 6: the pending team member is promoted to active.
     const tp = await prisma.teamPlayer.findFirstOrThrow({ where: { teamId: teamIds[0], playerId: pendingPlayerId } });
     expect(tp.status).toBe("active");
+  });
+
+  it("acceptance off: random teams include a still-pending player; declined excluded", async () => {
+    const t = await createTournament({ name: `RA RT ${Date.now()}-${Math.round(performance.now())}`, format: "doubles", visibility: "private", requireAcceptance: false }, actor);
+    tournamentIds.push(t.id);
+    // 2 registered + 1 pending + 1 declined = 3 eligible → 1 doubles team, 1 unassigned.
+    const reg1 = await mkPlayer("RTreg1");
+    const reg2 = await mkPlayer("RTreg2");
+    const pending = await mkPlayer("RTpend");
+    const declined = await mkPlayer("RTdecl");
+    await addTournamentPlayers(t.id, [reg1, reg2], actor);
+    await prisma.tournamentPlayer.create({ data: { tournamentId: t.id, playerId: pending, status: "invited" } });
+    await prisma.tournamentPlayer.create({ data: { tournamentId: t.id, playerId: declined, status: "declined" } });
+
+    const res = await createRandomTeams(actor, t.id);
+    // 3 eligible players → exactly 1 pair; the declined player is never considered.
+    expect(res.created).toBe(1);
+    const teamed = new Set(res.teams.flatMap((tm) => tm.teamPlayers.map((m) => m.playerId)));
+    expect(teamed.has(declined)).toBe(false);
+    // The leftover is one of the 3 eligible, never the declined player.
+    expect(res.unassigned.every((u) => u.id !== declined)).toBe(true);
+  });
+
+  it("default: a manual team with a still-pending player is rejected", async () => {
+    const t = await createTournament({ name: `RA MT ${Date.now()}-${Math.round(performance.now())}`, format: "doubles", visibility: "private", requireAcceptance: true }, actor);
+    tournamentIds.push(t.id);
+    const reg = await mkPlayer("MTreg");
+    const pending = await mkPlayer("MTpend");
+    await addTournamentPlayers(t.id, [reg], actor);
+    await prisma.tournamentPlayer.create({ data: { tournamentId: t.id, playerId: pending, status: "invited" } });
+
+    await expect(
+      createTeam({ name: "Mixed pending", teamType: "doubles", tournamentId: t.id, playerIds: [reg, pending] }, actor)
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+  });
+
+  it("acceptance off: a manual team with a still-pending player is allowed (member active)", async () => {
+    const t = await createTournament({ name: `RA MT2 ${Date.now()}-${Math.round(performance.now())}`, format: "doubles", visibility: "private", requireAcceptance: false }, actor);
+    tournamentIds.push(t.id);
+    const reg = await mkPlayer("MT2reg");
+    const pending = await mkPlayer("MT2pend");
+    await addTournamentPlayers(t.id, [reg], actor);
+    await prisma.tournamentPlayer.create({ data: { tournamentId: t.id, playerId: pending, status: "invited" } });
+
+    const team = await createTeam({ name: "Pending OK", teamType: "doubles", tournamentId: t.id, playerIds: [reg, pending] }, actor);
+    const members = await prisma.teamPlayer.findMany({ where: { teamId: team.id } });
+    expect(members).toHaveLength(2);
+    expect(members.every((m) => m.status === "active")).toBe(true);
   });
 });
