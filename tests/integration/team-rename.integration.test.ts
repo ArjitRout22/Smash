@@ -8,14 +8,14 @@ import { generateFixtures, getMatch } from "@/lib/services/match.service";
 import { submitScore } from "@/lib/services/score.service";
 
 /**
- * Renaming a team only changes its STILL-SCHEDULED fixtures; matches already
- * played keep the name the team had when they were played (per-match teamName
- * snapshot). DB-gated (RUN_DB_TESTS=1).
+ * Renaming a team relabels it on EVERY match it appears in — scheduled and
+ * completed alike — because a rename keeps the team's identity and its per-match
+ * player snapshots; only the label changes. DB-gated (RUN_DB_TESTS=1).
  */
 const enabled = process.env.RUN_DB_TESTS === "1";
 const d = enabled ? describe : describe.skip;
 
-d("team rename affects scheduled matches only (integration)", () => {
+d("team rename affects all matches (integration)", () => {
   let actor: AuthUser;
   const tournamentIds: string[] = [];
   const playerIds: string[] = [];
@@ -33,7 +33,7 @@ d("team rename affects scheduled matches only (integration)", () => {
     await prisma.$disconnect();
   });
 
-  it("rename shows on scheduled fixtures, frozen on completed ones", async () => {
+  it("rename shows on both completed and scheduled matches", async () => {
     const t = await createTournament({ name: `TR ${Date.now()}`, format: "doubles", visibility: "private" }, actor);
     tournamentIds.push(t.id);
     const teamIds: string[] = [];
@@ -71,8 +71,8 @@ d("team rename affects scheduled matches only (integration)", () => {
     const completedAfter = await getMatch(actor, completed.id);
     const scheduledAfter = await getMatch(actor, stillScheduled.id);
 
-    // Completed match keeps the OLD name; scheduled match shows the NEW name.
-    expect(labelFor(completedAfter, target)).toBe("Original 0");
+    // Both the completed and the scheduled match now show the NEW name.
+    expect(labelFor(completedAfter, target)).toBe("Renamed FC");
     expect(labelFor(scheduledAfter, target)).toBe("Renamed FC");
 
     // The Team record itself is renamed.

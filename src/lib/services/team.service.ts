@@ -209,12 +209,9 @@ export async function createRandomTeams(actor: AuthUser, tournamentId: string) {
 export async function updateTeam(id: string, input: UpdateInput, actor: AuthUser) {
   const existing = await prisma.team.findFirst({ where: { id, deletedAt: null }, include: { teamPlayers: true } });
   if (!existing) throw Errors.notFound("Team");
+  // Org access already limits this to the tournament's organizer (and platform
+  // admins); a player who merely joined belongs to a different org and is rejected.
   assertOrgAccess(actor, existing.organizationId);
-  // Renaming a team is restricted to platform admins; everyone else is told to
-  // contact support (the UI shows the same message before it even calls this).
-  if (input.name !== undefined && input.name !== existing.name && !isPlatformAdmin(actor)) {
-    throw Errors.forbidden("Only an admin can rename a team. Please contact support@smashhero.app to request a change.");
-  }
   const status = input.playerIds ? await classifyTeamPlayers(input.playerIds, actor, existing.tournamentId) : null;
 
   const updated = await prisma.$transaction(async (tx) => {
@@ -229,12 +226,12 @@ export async function updateTeam(id: string, input: UpdateInput, actor: AuthUser
       data: { name: input.name ?? undefined, teamType: input.teamType ?? undefined },
       include: teamInclude,
     });
-    // A rename only reaches STILL-SCHEDULED fixtures: their per-match team-name
-    // snapshot is refreshed, while in-progress/completed matches keep the name
-    // the team had when they were played (immutable history, like pair snapshots).
+    // A rename keeps the team's identity (same id, same per-match player
+    // snapshots recording WHO played) — only its label changes, so the new name
+    // takes effect on EVERY match the team appears in, scheduled or completed.
     if (input.name && input.name !== existing.name) {
       await tx.matchParticipant.updateMany({
-        where: { teamId: id, match: { status: "scheduled", deletedAt: null } },
+        where: { teamId: id, match: { deletedAt: null } },
         data: { teamName: input.name },
       });
     }

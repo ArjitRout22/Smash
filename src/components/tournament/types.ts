@@ -12,6 +12,7 @@ export type TournamentDetail = {
   format: string;
   visibility: string;
   joinRequestsOpen?: boolean; // organizer can pause new join requests while upcoming
+  requireAcceptance?: boolean; // false = organizer may schedule still-pending (invited) players
   canManage?: boolean;
   canScore?: boolean; // may the viewer enter scores for this tournament
   canCancelMatch?: boolean; // may the viewer cancel a match (owners only)
