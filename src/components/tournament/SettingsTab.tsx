@@ -23,6 +23,11 @@ import {
 import { titleCase } from "@/lib/client/format";
 import type { TournamentDetail, TournamentPlayerDTO } from "./types";
 
+/** ISO datetime/date string → yyyy-mm-dd for a <input type="date">; "" when absent. */
+function toDateInput(value: string | null | undefined): string {
+  return value ? value.slice(0, 10) : "";
+}
+
 export function SettingsTab({ tournament, onChanged }: { tournament: TournamentDetail; onChanged: () => void }) {
   const { can } = useAuth();
   const router = useRouter();
@@ -39,6 +44,8 @@ export function SettingsTab({ tournament, onChanged }: { tournament: TournamentD
     status: tournament.status,
     visibility: tournament.visibility,
     joinRequestsOpen: tournament.joinRequestsOpen ?? true,
+    startDate: toDateInput(tournament.startDate),
+    endDate: toDateInput(tournament.endDate),
   });
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -49,6 +56,10 @@ export function SettingsTab({ tournament, onChanged }: { tournament: TournamentD
   }
 
   async function save() {
+    if (form.startDate && form.endDate && form.endDate < form.startDate) {
+      toast.error("End date must be on or after the start date");
+      return;
+    }
     setSaving(true);
     try {
       await api.put(`/api/tournaments/${tournament.id}`, {
@@ -60,6 +71,8 @@ export function SettingsTab({ tournament, onChanged }: { tournament: TournamentD
         status: form.status,
         visibility: form.visibility,
         joinRequestsOpen: form.joinRequestsOpen,
+        startDate: form.startDate || null,
+        endDate: form.endDate || null,
       });
       toast.success("Saved");
       onChanged();
@@ -100,6 +113,14 @@ export function SettingsTab({ tournament, onChanged }: { tournament: TournamentD
                   <option value="private">Private</option>
                   <option value="public">Public</option>
                 </Select>
+              </Field>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="Start date">
+                <Input type="date" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} />
+              </Field>
+              <Field label="End date" hint="Leave blank for a single-day event.">
+                <Input type="date" min={form.startDate || undefined} value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} />
               </Field>
             </div>
             {form.visibility === "public" && (

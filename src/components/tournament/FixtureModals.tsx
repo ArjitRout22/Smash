@@ -80,7 +80,7 @@ export function GenerateFixturesModal({
   const [groupCount, setGroupCount] = useState(2);
   const [groupOf, setGroupOf] = useState<Record<string, number>>({});
   const [qualifiersPerGroup, setQualifiersPerGroup] = useState(2);
-  const [rounds, setRounds] = useState<1 | 2>(1);
+  const [rounds, setRounds] = useState<1 | 2 | 3 | 4>(1);
   const [bestOf, setBestOf] = useState("3");
   const [stageName, setStageName] = useState(isTeam ? "Group Stage" : "Round Robin");
   const [saving, setSaving] = useState(false);
@@ -126,7 +126,7 @@ export function GenerateFixturesModal({
     if (!canSubmit) return;
     setSaving(true);
     try {
-      const body: { matchType: string; bestOf: number; rounds: 1 | 2; mode: string; stageName?: string; groups?: string[][]; participantIds?: string[]; qualifiersPerGroup?: number } = {
+      const body: { matchType: string; bestOf: number; rounds: 1 | 2 | 3 | 4; mode: string; stageName?: string; groups?: string[][]; participantIds?: string[]; qualifiersPerGroup?: number } = {
         matchType,
         bestOf: Number(bestOf),
         rounds,
@@ -165,9 +165,11 @@ export function GenerateFixturesModal({
 
         <div className="grid grid-cols-2 gap-4">
           <Field label="Each pairing">
-            <Select value={String(rounds)} onChange={(e) => setRounds(e.target.value === "2" ? 2 : 1)}>
-              <option value="1">Once</option>
-              <option value="2">Twice (home &amp; away)</option>
+            <Select value={String(rounds)} onChange={(e) => setRounds(Number(e.target.value) as 1 | 2 | 3 | 4)}>
+              <option value="1">Once{pairCount ? ` (${pairCount} matches)` : ""}</option>
+              <option value="2">Twice{pairCount ? ` (${pairCount * 2} matches)` : ""}</option>
+              <option value="3">3 times{pairCount ? ` (${pairCount * 3} matches)` : ""}</option>
+              <option value="4">4 times{pairCount ? ` (${pairCount * 4} matches)` : ""}</option>
             </Select>
           </Field>
           <Field label="Match format">
